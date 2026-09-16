@@ -1,0 +1,24 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.venv/
+venv/
+
+# 工具缓存
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# IDE / 系统文件
+.idea/
+.vscode/
+.DS_Store
+
+#skills
+.agents/
+.claude/
+skills-lock.json
