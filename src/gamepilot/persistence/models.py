@@ -22,6 +22,7 @@ from sqlalchemy import (
     ForeignKey,
     Integer,
     String,
+    Text,
     UniqueConstraint,
     func,
 )
@@ -50,7 +51,11 @@ class GameSessionRow(Base):
     __tablename__ = "game_sessions"
 
     session_id: Mapped[str] = mapped_column(String(32), primary_key=True)
-    seed: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    # 种子以规范十进制文本存储：领域/API 的种子是无界 Python 整数
+    # （例如 2**80），BIGINT 存不下，而 NUMERIC 的精度同样有限。
+    # 种子不参与任何数据库数值计算，只在仓储内与 int 互转，
+    # 因此 Text 既保真又不会在读出时被静默截断。
+    seed: Mapped[str] = mapped_column(Text, nullable=False)
     status: Mapped[str] = mapped_column(String(16), nullable=False)
     turn: Mapped[int] = mapped_column(Integer, nullable=False)
     player_hp: Mapped[int] = mapped_column(Integer, nullable=False)

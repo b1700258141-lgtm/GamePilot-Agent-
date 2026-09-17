@@ -19,6 +19,7 @@ from sqlalchemy import (
     ForeignKey,
     Integer,
     String,
+    Text,
     UniqueConstraint,
 )
 from sqlalchemy.engine import Engine
@@ -118,7 +119,8 @@ def test_game_sessions_primary_key_and_column_types() -> None:
     assert list(table.primary_key.columns.keys()) == ["session_id"]
     assert isinstance(table.c.session_id.type, String)
     assert table.c.session_id.type.length == 32
-    assert isinstance(table.c.seed.type, BigInteger)
+    # 种子以规范十进制文本存储：领域/API 的种子是无界整数，BIGINT 存不下。
+    assert isinstance(table.c.seed.type, Text)
     assert isinstance(table.c.status.type, String)
     assert table.c.status.type.length == 16
     for name in ("turn", "player_hp", "player_max_hp", "potions", "slime_hp", "slime_max_hp"):

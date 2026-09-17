@@ -32,6 +32,9 @@ packages = ["src/gamepilot"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["src"]
+markers = [
+    "postgres: 需要真实 PostgreSQL 的集成测试（需显式设置 TEST_DATABASE_URL）",
+]
 
 [tool.ruff]
 line-length = 100

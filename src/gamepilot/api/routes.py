@@ -4,7 +4,7 @@
 伤害计算、状态转换或随机逻辑。
 """
 
-from typing import Annotated
+from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, Request
 
@@ -15,6 +15,30 @@ from gamepilot.repositories.base import SessionRepository
 from .schemas import ActionRequest, CreateSessionRequest, ErrorResponse
 
 router = APIRouter()
+
+# OpenAPI 错误声明；实际映射见 api/errors.py。
+_NOT_FOUND_RESPONSE: dict[str, Any] = {
+    "model": ErrorResponse,
+    "description": "游戏会话不存在（session_not_found）",
+}
+_STATE_CONFLICT_RESPONSE: dict[str, Any] = {
+    "model": ErrorResponse,
+    "description": "动作与当前战斗状态冲突，或存储历史与本次写入冲突",
+}
+_PERSISTENCE_CONFLICT_RESPONSE: dict[str, Any] = {
+    "model": ErrorResponse,
+    "description": "存储中的历史与本次写入冲突（persistence_conflict）",
+}
+_PERSISTENCE_RESPONSES: dict[int | str, dict[str, Any]] = {
+    500: {
+        "model": ErrorResponse,
+        "description": "存储数据无法确定性恢复，或其他内部错误（persistence_inconsistent）",
+    },
+    503: {
+        "model": ErrorResponse,
+        "description": "数据库暂时不可用（persistence_unavailable）",
+    },
+}
 
 
 def get_repository(request: Request) -> SessionRepository:
@@ -32,6 +56,7 @@ def health() -> dict[str, str]:
     "/api/v1/game-sessions",
     status_code=201,
     response_model=GameSnapshot,
+    responses={409: _PERSISTENCE_CONFLICT_RESPONSE, **_PERSISTENCE_RESPONSES},
     summary="创建游戏会话",
 )
 def create_session(
@@ -47,7 +72,7 @@ def create_session(
 @router.get(
     "/api/v1/game-sessions/{session_id}",
     response_model=GameSnapshot,
-    responses={404: {"model": ErrorResponse, "description": "游戏会话不存在"}},
+    responses={404: _NOT_FOUND_RESPONSE, **_PERSISTENCE_RESPONSES},
     summary="查询会话状态",
 )
 def get_session(
@@ -62,8 +87,9 @@ def get_session(
     "/api/v1/game-sessions/{session_id}/actions",
     response_model=GameSnapshot,
     responses={
-        404: {"model": ErrorResponse, "description": "游戏会话不存在"},
-        409: {"model": ErrorResponse, "description": "动作与当前战斗状态冲突"},
+        404: _NOT_FOUND_RESPONSE,
+        409: _STATE_CONFLICT_RESPONSE,
+        **_PERSISTENCE_RESPONSES,
     },
     summary="执行动作",
 )

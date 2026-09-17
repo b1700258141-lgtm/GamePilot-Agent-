@@ -1,7 +1,8 @@
 """Alembic 迁移环境。
 
-连接 URL 的唯一来源是项目配置模块 `gamepilot.config.Settings`
+连接 URL 的唯一来源是项目配置模块 `gamepilot.config`
 （环境变量 `DATABASE_URL`，或本地 `.env`），`alembic.ini` 中不保存凭据。
+URL 缺失或协议不符时立即报错，不会退回任何隐式默认值。
 
 迁移必须由开发者显式执行；应用启动时不会自动运行迁移，
 也不会用 `metadata.create_all()` 代替迁移。
@@ -11,7 +12,7 @@ from logging.config import fileConfig
 
 from alembic import context
 
-from gamepilot.config import get_settings
+from gamepilot.config import require_database_url
 
 # 导入 models 以注册所有表到 Base.metadata。
 from gamepilot.persistence import models  # noqa: F401
@@ -27,8 +28,13 @@ target_metadata = Base.metadata
 
 
 def _database_url() -> str:
-    """从项目配置读取数据库 URL；缺失时立即报错，不使用任何隐式默认值。"""
-    return get_settings().database_url
+    """从项目配置读取数据库 URL；缺失时立即报错，不使用任何隐式默认值。
+
+    这里不经过仓储后端选择：无论应用跑在内存后端还是 PostgreSQL 后端，
+    迁移都必须拿到显式的 postgresql+psycopg URL，
+    否则 memory 默认值会让迁移拿到空连接串。
+    """
+    return require_database_url()
 
 
 def run_migrations_offline() -> None:

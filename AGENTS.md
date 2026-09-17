@@ -165,7 +165,7 @@ docs/
 
 **状态日期：2026-09-17**
 
-**当前阶段：第一阶段待学习复盘；第二阶段 TASK-002A 已完成并通过独立验收，待规划和执行 TASK-002B。**
+**当前阶段：第一阶段待学习复盘；TASK-002A 与 TASK-002B 均已通过独立验收。**
 
 已经完成：
 
@@ -186,21 +186,23 @@ docs/
 - 已生成 `docs/PHASE_2_PLAN.md` 和 `docs/claude-tasks/TASK-002A-database-foundation.md`。
 - Claude Code 已完成 TASK-002A：数据库配置、SQLAlchemy ORM、Alembic 初始迁移和 PostgreSQL 16 Compose 服务；
 - Codex 已完成独立验收：Compose 服务健康，空库升级、降级和重复升级通过，实际表/约束/索引符合设计，`50 passed`，Ruff 检查和格式检查通过。
+- 已生成 `docs/claude-tasks/TASK-002B-postgres-repository.md`，明确仓储接入、事务、确定性恢复和集成测试；种子兼容修正及接入边界记录在 `docs/DECISIONS.md`。
+- Claude Code 已完成 TASK-002B 实施（PostgreSQL 仓储与事务边界、确定性重放恢复、0002 种子文本迁移、后端选择与生命周期、真实数据库集成测试）。
+- Codex 已完成 TASK-002B 首轮审查与返工修复：未分类 SQLAlchemy 异常不再把原始 SQL 和参数抛给服务器，追加保存前会重放验证现存状态与事件，启动探测失败也会释放 Engine；文档偏差已同步修正。
+- TASK-002B 最终独立验收通过：`70 passed` 普通测试、`29 passed` PostgreSQL 测试，Ruff 检查与格式检查通过，Alembic 位于 `0002_session_seed_text (head)` 且无模型漂移，测试数据已精确清理。
 
 尚未完成：
 
 - 完成本阶段对应的原理学习和代码复盘；
-- 生成并由 Claude Code 实施 TASK-002B，并由 Codex 独立审查；
 - 最终确认项目公开名称、许可证和完整 README 展示策略。
 
 ## 11. 下一决策点
 
-当前第一阶段不再增加功能范围，TASK-002A 已完成，后续需要依次确认：
+当前第一阶段不再增加功能范围，TASK-002A/TASK-002B 已完成，后续需要依次确认：
 
-1. TASK-002B 的 PostgreSQL 仓储、事务边界和确定性恢复细节；
-2. 首批预植入缺陷及其验收指标；
-3. Agent 首次接入采用 LangGraph 工具调用还是先实现 MCP 工具层；
-4. 项目公开名称、许可证和仓库展示策略。
+1. 首批预植入缺陷及其验收指标；
+2. Agent 首次接入采用 LangGraph 工具调用还是先实现 MCP 工具层；
+3. 项目公开名称、许可证和仓库展示策略。
 
 ## 12. 更新规则
 
@@ -218,3 +220,6 @@ docs/
 - **2026-09-16**：TASK-001 实现、独立审查和收尾修正完成；30 个测试及 Ruff 质量检查通过，第一阶段进入学习复盘。
 - **2026-09-16**：确定第二阶段数据库持久化路线，拆分 TASK-002A/TASK-002B，并生成 PHASE_2 方案和 TASK-002A 任务单。
 - **2026-09-17**：TASK-002A 实现与独立验收完成；PostgreSQL Compose、Alembic 迁移、真实表结构、50 个测试和 Ruff 质量检查全部通过。
+- **2026-09-17**：生成 TASK-002B 实施任务单，明确 PostgreSQL 仓储、原子写入、动作重放、种子兼容迁移和独立测试库要求。
+- **2026-09-17**：TASK-002B 首轮独立审查发现三处失败路径缺陷，已生成 TASK-002B-R1 返工单；阶段暂未验收通过。
+- **2026-09-17**：Codex 完成 TASK-002B-R1 修复与复验；99 项分组测试、Ruff、Alembic 与测试数据清理检查全部通过，TASK-002B 正式验收完成。
