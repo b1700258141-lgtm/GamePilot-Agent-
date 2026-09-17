@@ -49,6 +49,10 @@ TASK-002A 验收前不得开始 TASK-002B。
 - `slime_hp`、`slime_max_hp`；
 - `created_at`、`updated_at`。
 
+TASK-002B 接入修正：现有 API 的 seed 为 Python 整数，可能超出 BIGINT。
+通过新增迁移将 seed 列改为 Text，保存规范十进制文本，读取时还原 int；
+保留现有 API 行为与已存值，不改写已应用的初始迁移。详见 `docs/DECISIONS.md`。
+
 ### 4.2 `combat_events`
 
 保存结构化战斗事件：
@@ -66,6 +70,8 @@ TASK-002A 验收前不得开始 TASK-002B。
 不得将 Python `random.Random` 或其他领域对象通过 Pickle 保存进数据库。
 
 TASK-002B 读取会话时，应从持久化事件中提取玩家动作，使用相同 `seed` 和公开领域方法重新执行动作，并将重放结果与数据库保存的状态、事件进行一致性校验。这样既恢复随机数生成器位置，也避免由仓储直接修改领域对象私有字段。
+
+保存状态与新增事件必须共用事务；使用状态行锁和完整事件前缀校验，拒绝过期或分叉历史覆盖。默认保留内存仓储，通过 `REPOSITORY_BACKEND=postgres` 显式启用数据库。实施与验收见 `docs/claude-tasks/TASK-002B-postgres-repository.md`。
 
 ## 6. Docker 边界
 
