@@ -9,8 +9,12 @@ description = "GamePilot：面向游戏测试 Agent 的确定性回合制战斗�
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
+    "alembic>=1.13",
     "fastapi>=0.115",
+    "psycopg[binary]>=3.2",
     "pydantic>=2.7",
+    "pydantic-settings>=2.4",
+    "sqlalchemy>=2.0",
     "uvicorn>=0.30",
 ]
 
@@ -39,3 +43,6 @@ select = ["E", "F", "I"]
 
 [tool.ruff.lint.isort]
 known-first-party = ["gamepilot"]
+# 项目根目录存在同名的 alembic/ 迁移目录，会被自动判定为本地包；
+# 这里显式声明 alembic 是第三方依赖，保证导入分组稳定。
+known-third-party = ["alembic"]

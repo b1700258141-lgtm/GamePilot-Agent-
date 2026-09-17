@@ -1,0 +1,36 @@
+# 第二阶段开发环境：只启动 PostgreSQL。
+#
+# 边界说明：
+# - FastAPI 仍在本机虚拟环境中运行（见 README），不在此 Compose 中；
+# - 应用镜像与应用 Dockerfile 属于后续阶段，这里刻意不添加；
+# - 不执行 `docker compose down -v`，避免删除已存在的数据库数据卷。
+#
+# 变量来自同目录的 .env（可从 .env.example 复制），未提供时使用本地开发默认值。
+
+name: gamepilot
+
+services:
+  db:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-gamepilot}
+      POSTGRES_USER: ${POSTGRES_USER:-gamepilot}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-gamepilot}
+    ports:
+      # 只绑定本机回环地址，数据库端口不对外网暴露。
+      - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      # 命名数据卷：容器重建后数据仍然保留。
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-gamepilot} -d ${POSTGRES_DB:-gamepilot}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+volumes:
+  # 显式固定卷名，避免因 Compose 项目名变化而产生第二份卷。
+  pgdata:
+    name: gamepilot-pgdata
