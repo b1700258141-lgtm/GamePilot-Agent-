@@ -16,6 +16,7 @@
 - 内存仓储（默认）与 PostgreSQL 仓储，二者实现同一仓储协议，可由配置切换
 - PostgreSQL 16 表结构、SQLAlchemy ORM 映射、Alembic 迁移与 Docker Compose 开发服务
 - 持久化数据可确定性恢复：读取时按事件历史重放校验，损坏会显式报错而不是给出猜测结果
+- 确定性测试执行器 `gamepilot.testing`：固定场景 + 独立规则判定 + 可重跑的 JSON 证据报告
 - 完整的领域单元测试、API 集成测试与真实 PostgreSQL 集成测试
 
 ## 当前未实现（属于后续阶段）
@@ -86,6 +87,43 @@ curl -s -X POST http://127.0.0.1:8000/api/v1/game-sessions/<SESSION_ID>/actions 
 # 查询当前完整状态（含事件历史）
 curl -s http://127.0.0.1:8000/api/v1/game-sessions/<SESSION_ID>
 ```
+
+## 确定性测试执行器（`gamepilot.testing`）
+
+服务启动后，一条本地命令即可：按固定场景顺序发动作请求、用独立判定器核对规则、
+输出可重跑的 JSON 证据报告。
+
+```powershell
+python -m gamepilot.testing run --base-url http://127.0.0.1:8000 --suite baseline --output-dir artifacts/test-runs
+python -m gamepilot.testing replay --base-url http://127.0.0.1:8000 --report artifacts/test-runs/<报告文件>.json --output-dir artifacts/test-runs
+```
+
+- 内置 `baseline` 套件共 8 个场景：创建并查询初始状态、满血喝药被拒、攻击后喝药、
+  药水耗尽（第三次 `no_potions`）、获胜/阵亡后动作被拒，以及两个对照场景
+  （被拒绝的动作不影响后续随机结果、同 seed 同动作完全可复现）。
+- 判定器只读请求、预期、快照与事件：不调用 `CombatSession`、不读仓储或数据库；
+  规则数值独立来自 `docs/PHASE_1_PLAN.md` 第 5 节，不从被测实现导入常量。
+- 结果分三类：`pass` / `fail`（规则或接口预期不符，带稳定 `rule_id` 与步骤位置）/
+  `error`（连不上、超时、5xx、响应不可解析或执行故障）。基础设施故障不会被写成游戏缺陷。
+- 每条主轨迹及对照轨迹最多 20 次动作尝试（被拒绝的动作也计数），达到上限记为 `error`；
+  首个 `fail`/`error` 后停止该场景，其余场景继续执行；预期 409 之后必须再用 GET
+  证明状态与完整事件未变。
+- 报告文件名由生成的 `run_id` 决定，已存在的报告不会被覆盖；报告不含环境变量、
+  凭据或完整请求头，写入的地址已去除凭据。
+- `replay` 校验 seed、计划和实际执行前缀，在新会话中只重跑实际发生的动作尝试，
+  包括被拒绝的动作；不会执行原运行早停后剩余的计划或尚未开始的对照会话。
+  新执行的完整证据保存在重跑报告的 `cases[].execution`。
+- 同一会话内严格检查 `session_id`、请求 seed 和 GET 状态码；跨会话比较只规范化
+  与各自会话身份匹配的 ID，其他业务字段参与比较。目标地址只取本次命令的 `--base-url`。
+- 报告格式为 `schema_version=1.1`，判定规则为 `rules_version=1.1.0`。
+  读取报告时拒绝缺失字段、嵌套未知字段、错误类型及自相矛盾的轨迹，
+  不自动补齐旧证据。旧版 1.0 报告需要重新运行生成，原文件保留，不原地迁移。
+- 动作解析失败、核对 GET 失败等场景仍保留动作响应、GET 观测和最后已知快照。
+  存储冲突（如 `409 persistence_conflict`）属于执行错误。错误运行可重新检查，
+  但 replay 标记为 `not_comparable`，不声称复现了原来的网络或服务故障。
+- 退出码：`run` 的 `0` 表示测试通过；`replay` 的 `0` 表示复现一致，可能一致地复现缺陷，
+  不能单独作为游戏质量通过的门禁。`1` 表示规则失败或重跑差异，`2` 表示输入或执行错误
+  （包括报告写入失败；同时出现时以 2 为准）。报告使用排他创建，不覆盖已有文件。
 
 ## 数据库与后端选择
 
@@ -253,12 +291,17 @@ API 层（FastAPI 路由 + Pydantic 请求 Schema）
 - **生命周期**：应用自建的 Engine 由 lifespan 管理，关闭时 release；
   外部注入的仓储/Engine 归调用方所有，应用不会释放它。
   连接探测发生在启动阶段，此时不可用会明确失败。
+- **测试执行器是外部观察者**：`gamepilot.testing` 把被测服务当成外部 HTTP 服务，
+  只通过线上响应取证，不导入 `gamepilot.domain`、仓储、恢复模块或数据库。
+  这条边界由 `tests/unit/test_testing_independence.py` 强制检查
+  （源码导入的静态检查 + 干净解释器里的 `sys.modules` 运行时检查）。
 
 ## 后续计划
 
 TASK-002A 完成数据库骨架与迁移，TASK-002B 完成 PostgreSQL 仓储、
-事务边界与确定性恢复；下一步进入 Agent 工具层与评测体系。
-详见 `docs/PHASE_2_PLAN.md` 与 `AGENTS.md`。
+事务边界与确定性恢复，TASK-003A 完成确定性测试执行器与规则判定基线
+（实施完成，待 Codex 独立验收）；下一步是 Agent 工具层与评测体系。
+详见 `docs/PHASE_2_PLAN.md`、`docs/PHASE_3_PLAN.md` 与 `AGENTS.md`。
 
 ## 已知限制
 
@@ -268,4 +311,7 @@ TASK-002A 完成数据库骨架与迁移，TASK-002B 完成 PostgreSQL 仓储、
 - 确定性恢复依赖当前战斗规则与兼容的 Python 运行时，
   规则变更后旧存档不承诺继续兼容；
 - 目前只有玩家与史莱姆一种战斗，没有商店、背包、存档等内容；
-- 没有删除会话的 API，也没有数据保留/清理策略。
+- 没有删除会话的 API，也没有数据保留/清理策略；
+- 测试执行器顺序执行、单进程，不做并发，也不自动重试动作；
+  超时后结果未知，重跑只重新检查而不承诺复现原错误；
+- 尚未接入 LLM/规划、MCP，也没有缺陷开关与轨迹自动最小化（属于后续任务）。
