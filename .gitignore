@@ -16,6 +16,9 @@ venv/
 .coverage
 htmlcov/
 
+# 测试执行器产物（每次运行生成新的 run_id 报告，不入库）
+artifacts/
+
 # IDE / 系统文件
 .idea/
 .vscode/

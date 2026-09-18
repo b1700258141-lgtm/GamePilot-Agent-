@@ -11,6 +11,9 @@ requires-python = ">=3.12"
 dependencies = [
     "alembic>=1.13",
     "fastapi>=0.115",
+    # 测试执行器（gamepilot.testing）用 httpx 作为运行期 HTTP 客户端，
+    # 因此它是运行依赖而不是 dev 依赖：装上包就能跑 run/replay。
+    "httpx>=0.27",
     "psycopg[binary]>=3.2",
     "pydantic>=2.7",
     "pydantic-settings>=2.4",
@@ -21,7 +24,6 @@ dependencies = [
 [project.optional-dependencies]
 dev = [
     "anyio>=4.4",
-    "httpx>=0.27",
     "pytest>=8.4",
     "ruff>=0.6",
 ]
@@ -39,7 +41,9 @@ markers = [
 [tool.ruff]
 line-length = 100
 target-version = "py312"
-extend-exclude = [".agents", ".claude", ".venv"]
+# .codex-temp 是另一个 Agent 工具链留下的临时目录，本机权限不可读：
+# ruff format 扫描到它会直接 panic（ruff 的已知行为），排除后与源码无关。
+extend-exclude = [".agents", ".claude", ".venv", ".codex-temp"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I"]
