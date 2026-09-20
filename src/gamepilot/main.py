@@ -26,6 +26,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from .api.errors import register_exception_handlers
 from .api.routes import router
 from .config import RepositoryBackend, get_settings, require_database_url
+from .domain.combat import create_combat_session
 from .persistence.database import create_db_engine, create_session_factory
 from .persistence.errors import PersistenceUnavailableError
 from .repositories.base import SessionRepository
@@ -67,6 +68,8 @@ def create_app(repository: SessionRepository | None = None) -> FastAPI:
         lifespan=lifespan,
     )
     app.state.repository = resolved
+    # 正常服务固定使用领域层的会话工厂；缺陷靶场由自己的装配覆盖它。
+    app.state.session_factory = create_combat_session
     register_exception_handlers(app)
     app.include_router(router)
     return app

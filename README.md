@@ -17,6 +17,9 @@
 - PostgreSQL 16 表结构、SQLAlchemy ORM 映射、Alembic 迁移与 Docker Compose 开发服务
 - 持久化数据可确定性恢复：读取时按事件历史重放校验，损坏会显式报错而不是给出猜测结果
 - 确定性测试执行器 `gamepilot.testing`：固定场景 + 独立规则判定 + 可重跑的 JSON 证据报告
+- 可控缺陷靶场 `gamepilot.lab`：三个真实状态缺陷、独立内存入口，正常服务与公开 API 不受影响
+- 固定评测集 `gamepilot.benchmark`：4 个 profile × 8 个基线场景 = 32 个组合、同 profile 重跑、
+  负向验证与 7 项带分子/分母的指标，退出码区分「符合预期 / 存在偏差 / 执行错误」
 - 完整的领域单元测试、API 集成测试与真实 PostgreSQL 集成测试
 
 ## 当前未实现（属于后续阶段）
@@ -124,6 +127,90 @@ python -m gamepilot.testing replay --base-url http://127.0.0.1:8000 --report art
 - 退出码：`run` 的 `0` 表示测试通过；`replay` 的 `0` 表示复现一致，可能一致地复现缺陷，
   不能单独作为游戏质量通过的门禁。`1` 表示规则失败或重跑差异，`2` 表示输入或执行错误
   （包括报告写入失败；同时出现时以 2 为准）。报告使用排他创建，不覆盖已有文件。
+
+## 缺陷靶场与固定评测集（`gamepilot.lab` / `gamepilot.benchmark`）
+
+执行器回答「实现是否符合规则」；这一节回答「执行器能不能稳定地发现缺陷」。
+做法是先植入三个**真实改变游戏状态**的缺陷，再用同一套执行器、判定器和重跑去测：
+如果判定器看不出植入的缺陷，评测就失败。
+
+三个缺陷都只在独立靶场里生效，正常服务的战斗规则、公开 API、仓储与数据库结构均未改动：
+
+| profile | 植入的缺陷 | 真实状态变异 | 目标规则 |
+| --- | --- | --- | --- |
+| `normal` | 无（与正常实现逐字段一致） | — | — |
+| `potion_overheal` | 喝药固定治疗 25 点，不按缺失生命值截断 | 生命值可以越过上限，后续反击从越界值继续扣 | `R-POTION-CAP` |
+| `potion_not_consumed` | 喝药后药水数量不减少 | 药水可以反复使用，数量始终不变 | `R-POTION-DECREMENTS` |
+| `retaliate_after_death` | 击杀敌人后仍执行一次反击 | 敌人已死亡却真实造成伤害 | `R-NO-RETALIATE-ON-KILL` |
+
+靶场是独立的内存入口：不导入 `main.py`、不读 `.env`/Settings、只使用内存仓储，
+即使 `REPOSITORY_BACKEND=postgres` 也不会创建数据库 Engine；非法 profile 直接拒绝启动；
+游戏 API 上不存在任何读取或切换 profile 的参数、字段或环境开关。
+
+### 手动演示（PowerShell）
+
+```powershell
+# 1. 启动一个独立内存靶场（默认只监听 127.0.0.1:8765，Ctrl+C 关闭）
+.venv\Scripts\python.exe -m gamepilot.lab serve --profile potion_overheal --port 8765
+
+# 2. 另一个终端：用既有执行器跑基线套件，缺陷被检出 -> exit 1
+.venv\Scripts\python.exe -m gamepilot.testing run --base-url http://127.0.0.1:8765 `
+  --suite baseline --output-dir artifacts/fault-runs
+
+# 3. 同 profile 重跑：缺陷稳定复现，逐字段一致 -> exit 0
+.venv\Scripts\python.exe -m gamepilot.testing replay --base-url http://127.0.0.1:8765 `
+  --report artifacts/fault-runs/<报告文件>.json --output-dir artifacts/fault-runs
+
+# 4. 批量评测：自动组装四个隔离应用（不依赖手动开启的服务）
+.venv\Scripts\python.exe -m gamepilot.benchmark run --output-dir artifacts/benchmarks
+```
+
+`gamepilot.lab serve` 只监听本机、随终端关闭而退出，不启动也不清理任何数据库或会话。
+把第 1 步的 profile 换成另外三个可以逐个复现；`normal` 上同一套件应当 exit 0。
+
+### 评测口径
+
+- **矩阵**：4 个 profile × 8 个基线场景 = 32 个组合，先于运行写死在
+  `gamepilot/benchmark/manifest.py` 里（含版本号）。预期结果 9 个 fail
+  （`potion_overheal` 4 个、`potion_not_consumed` 4 个、`retaliate_after_death` 1 个）与 23 个 pass。
+- **实际触发与预期分离**：靶场在**真的发生偏离**时按 `session_id + fault_id` 记录一条最小触发记录
+  （缺失值等于治疗量时不记录，因为那种情况下行为与正常实现完全一致）。
+  「触发了」和「判定器命中了目标规则」是两件事，分别记入不同指标。
+- **同一次运行内完成**：32 个组合各自同 profile 重跑一次（共 32 次），重跑走的是既有
+  `replay`；另有 1 次负向验证——把 `potion_overheal × attack-then-potion` 的缺陷轨迹放到
+  `normal` 上重放，动作序列相同但结论必须是 `mismatch`，否则说明判定器分辨不出缺陷。
+  这 1 次不计入 32 次重跑。
+- **指标**（分子/分母都写进报告，分母来自固定清单，没跑到不会让分母变小）：
+
+  | 指标 | 分子 / 分母 | 目标 |
+  | --- | --- | --- |
+  | `defect_coverage` | 有指定触发轨迹的缺陷数 / 3 | 3/3 |
+  | `trigger_accuracy` | 预期失败组合中靶场真实触发数 / 9 | 9/9 |
+  | `target_detection` | 命中目标规则的预期失败组合数 / 9（同一缺陷命中多条规则只计一次） | 9/9 |
+  | `normal_false_positive` | normal 上被判失败的场景数 / 8 | 0/8 |
+  | `variant_false_positive` | 预期通过的变体组合中失败或意外触发数 / 15 | 0/15 |
+  | `execution_errors` | 原始运行的执行错误组合数 / 32（不含额外重放，不记为发现缺陷） | 0/32 |
+  | `replay_consistency` | 重跑一致的组合数 / 32（另列 9/9 缺陷组合复现） | 32/32 |
+
+- **判定器不读标准答案**：目标规则只用于评测摘要里的核对与统计；执行器报告里只有
+  HTTP 观测、场景结论与占位地址，不含 profile、缺陷标签或触发说明。
+- **退出码**：`0` 表示 32 个组合全部符合清单（**包含成功发现预植入缺陷**——这是预期结果）；
+  `1` 表示漏检、误报、触发不符或重跑差异；`2` 表示输入/配置、执行或报告 I/O 错误，
+  与其他情况同时出现时以 `2` 为准。评测自身跑不出结论时绝不返回 `0`。
+- **分阶段错误证据**（benchmark 1.1.0）：组合证据保留 `case_status/case_error` 和
+  `replay_status/replay_error`，负向验证保留 `execution_status/execution_error`，
+  各自关联原始报告路径。摘要中的 `execution_errors` 只统计 32 次原始运行，
+  `replay_execution_errors` 统计 32 次同 profile 重放，`negative_execution_errors`
+  统计 1 次负向验证；三个阶段任何一个执行失败，总退出码都为 `2`。
+  原运行 error 而新执行成功时，replay 虽为 `not_comparable`，也不重复计为重放执行错误。
+  同 profile 真正的 `mismatch` 和负向验证意外 `match` 仍退出 `1`。
+  原始 `RunReport/ReplayReport` 的 schema 保持 1.1，原有七项指标及分母不变。
+- **报告布局**：`<output-dir>/<run_id>/benchmark.json` 为评测摘要，
+  `runs/<profile>/<case_id>/<run_id>.json` 与 `replays/<profile>/<case_id>/<run_id>.json`
+  为原始运行与重跑报告，`replays/negative/<case_id>/<run_id>.json` 为负向验证报告。
+  全部排他创建，不覆盖已有产物，也不会自动清理任何目录或会话。
+- 这套评测是**固定脚本基线**：它证明「缺陷可被稳定检出、指标可复算」，
+  不代表 Agent 具备自主发现缺陷的能力——自主探索留给后续阶段。
 
 ## 数据库与后端选择
 
@@ -295,12 +382,21 @@ API 层（FastAPI 路由 + Pydantic 请求 Schema）
   只通过线上响应取证，不导入 `gamepilot.domain`、仓储、恢复模块或数据库。
   这条边界由 `tests/unit/test_testing_independence.py` 强制检查
   （源码导入的静态检查 + 干净解释器里的 `sys.modules` 运行时检查）。
+- **缺陷靶场的接入面很窄**：`gamepilot.lab` 只做三件事——用三个窄扩展点
+  （`_heal_amount` / `_potions_after_use` / `_should_retaliate`）派生一个缺陷会话子类、
+  给路由注入一个自己的会话工厂、用独立的内存应用组装靶场。
+  它不复制战斗引擎，也不改写任何 HTTP 响应；靶场应用与正常应用走同一份路由与异常处理，
+  区别只在于新会话由哪个工厂创建。`normal` profile 与正常实现在同一轨迹上逐字段一致。
+- **评测与执行器解耦**：`gamepilot.benchmark` 只编排「跑哪一格、重跑哪一格、怎么核对清单」，
+  判定本身仍然由 `gamepilot.testing` 的 runner、oracle 与 replay 完成；
+  normal 与变体使用同一个 `GameClient`、runner、oracle 与 replay。
 
 ## 后续计划
 
 TASK-002A 完成数据库骨架与迁移，TASK-002B 完成 PostgreSQL 仓储、
-事务边界与确定性恢复，TASK-003A 完成确定性测试执行器与规则判定基线
-（实施完成，待 Codex 独立验收）；下一步是 Agent 工具层与评测体系。
+事务边界与确定性恢复，TASK-003A 完成确定性测试执行器与规则判定基线，
+TASK-003B 完成可控缺陷靶场与固定评测集（实施完成，待 Codex 独立验收）；
+下一步是 Agent 工具层：由 Agent 自主探索而不是照脚本执行。
 详见 `docs/PHASE_2_PLAN.md`、`docs/PHASE_3_PLAN.md` 与 `AGENTS.md`。
 
 ## 已知限制
@@ -314,4 +410,10 @@ TASK-002A 完成数据库骨架与迁移，TASK-002B 完成 PostgreSQL 仓储、
 - 没有删除会话的 API，也没有数据保留/清理策略；
 - 测试执行器顺序执行、单进程，不做并发，也不自动重试动作；
   超时后结果未知，重跑只重新检查而不承诺复现原错误；
+- 缺陷靶场与固定评测集同样是单进程顺序执行，不做并发评测；profile 由启动参数决定，
+  不存在运行期开关（这是刻意的隔离边界，不是待补的开关）；
+- 评测报告里的地址是进程内 ASGI 应用的占位地址（`benchmark.invalid`），
+  只用于说明「不是真实网络请求」；真实 localhost HTTP 的验证由 `gamepilot.lab serve`
+  加 `gamepilot.testing run/replay` 手动完成；
+- 评测是固定脚本基线，不是 Agent 自主发现能力；
 - 尚未接入 LLM/规划、MCP，也没有缺陷开关与轨迹自动最小化（属于后续任务）。

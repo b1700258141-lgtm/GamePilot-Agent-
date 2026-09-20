@@ -63,10 +63,11 @@ class CombatSession:
                 potions=self._player.potions,
             )
         )
-        if self._slime.hp == 0:
-            # 史莱姆死亡：战斗胜利，本回合不再反击
+        # 先按规则判定敌人是否死亡，再由扩展点决定本回合是否反击。
+        enemy_defeated = self._slime.hp == 0
+        if enemy_defeated:
             self._status = BattleStatus.WON
-        else:
+        if self._should_retaliate(enemy_defeated):
             self._retaliate(turn)
         self._turn = turn
 
@@ -78,9 +79,9 @@ class CombatSession:
         if self._player.potions == 0:
             raise InvalidCombatAction("no_potions", "no potions left")
         turn = self._next_turn()
-        healed = min(POTION_HEAL, self._player.max_hp - self._player.hp)
+        healed = self._heal_amount(self._player.max_hp - self._player.hp)
         self._player.hp += healed
-        self._player.potions -= 1
+        self._player.potions = self._potions_after_use()
         self._append_event(
             CombatEvent(
                 turn=turn,
@@ -119,6 +120,25 @@ class CombatSession:
         """成功动作后的新回合号（每个玩家动作 +1）。"""
         return self._turn + 1
 
+    # ------------------------------------------------------------ 规则扩展点
+    #
+    # 下面三个方法就是正常规则本身，默认实现保持既有数值行为不变。
+    # 它们存在的意义是给「可控缺陷靶场」（gamepilot.lab）一个窄的覆盖点：
+    # 缺陷会话只替换其中一条规则，完整动作流程、随机数推进、事件生成
+    # 与快照仍然只有 CombatSession 这一份实现。
+
+    def _heal_amount(self, missing_hp: int) -> int:
+        """喝药的实际治疗量；默认不超过缺失的生命值。"""
+        return min(POTION_HEAL, missing_hp)
+
+    def _potions_after_use(self) -> int:
+        """成功喝药后的剩余药水数量；默认消耗 1 瓶。"""
+        return self._player.potions - 1
+
+    def _should_retaliate(self, enemy_defeated: bool) -> bool:
+        """本回合敌人是否反击；默认只在敌人存活时反击。"""
+        return not enemy_defeated
+
     def _retaliate(self, turn: int) -> None:
         """史莱姆反击；玩家生命降至 0 则战斗失败。"""
         damage = self._rng.randint(*SLIME_DAMAGE_RANGE)
@@ -140,12 +160,17 @@ class CombatSession:
         self._events.append(event)
 
 
-def create_combat_session(seed: int | None = None) -> CombatSession:
-    """创建新战斗会话。
+def new_session_identity(seed: int | None) -> tuple[str, int]:
+    """生成新会话的标识与随机种子。
 
-    未提供种子时生成一个随机种子；种子随快照返回，
-    因此无论是否显式指定，任何一场战斗都可回放。
+    未提供种子时生成一个随机种子；种子随快照返回，因此无论是否显式指定，
+    任何一场战斗都可回放。标识与种子的生成只有这一处实现，
+    应用装配与缺陷靶场都从这里取，避免两处各写一份而逐渐不一致。
     """
-    if seed is None:
-        seed = secrets.randbits(31)
-    return CombatSession(session_id=uuid.uuid4().hex, seed=seed)
+    return uuid.uuid4().hex, secrets.randbits(31) if seed is None else seed
+
+
+def create_combat_session(seed: int | None = None) -> CombatSession:
+    """创建新战斗会话（正常规则）。"""
+    session_id, resolved_seed = new_session_identity(seed)
+    return CombatSession(session_id=session_id, seed=resolved_seed)

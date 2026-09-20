@@ -4,17 +4,23 @@
 伤害计算、状态转换或随机逻辑。
 """
 
+from collections.abc import Callable
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, Request
 
-from gamepilot.domain.combat import create_combat_session
+from gamepilot.domain.combat import CombatSession
 from gamepilot.domain.models import GameSnapshot
 from gamepilot.repositories.base import SessionRepository
 
 from .schemas import ActionRequest, CreateSessionRequest, ErrorResponse
 
 router = APIRouter()
+
+# 创建会话的工厂：按种子返回一个战斗会话。
+# 正常装配注入领域层的 create_combat_session；缺陷靶场注入自己的实现，
+# 从而在不改动路由逻辑的前提下让新会话继承靶场 profile。
+SessionFactory = Callable[[int | None], CombatSession]
 
 # OpenAPI 错误声明；实际映射见 api/errors.py。
 _NOT_FOUND_RESPONSE: dict[str, Any] = {
@@ -46,6 +52,14 @@ def get_repository(request: Request) -> SessionRepository:
     return request.app.state.repository
 
 
+def get_session_factory(request: Request) -> SessionFactory:
+    """从应用状态取出创建会话的工厂（由应用装配注入，默认是正常实现）。
+
+    这是一个注入点，不是 HTTP 参数：客户端无法通过请求体或查询串选择它。
+    """
+    return request.app.state.session_factory  # type: ignore[no-any-return]
+
+
 @router.get("/health", summary="健康检查")
 def health() -> dict[str, str]:
     """存活探针：服务是否可用。"""
@@ -62,9 +76,10 @@ def health() -> dict[str, str]:
 def create_session(
     payload: CreateSessionRequest,
     repository: Annotated[SessionRepository, Depends(get_repository)],
+    session_factory: Annotated[SessionFactory, Depends(get_session_factory)],
 ) -> GameSnapshot:
     """创建一场玩家对史莱姆的战斗，返回完整初始快照。"""
-    session = create_combat_session(seed=payload.seed)
+    session = session_factory(payload.seed)
     repository.save(session)
     return session.snapshot()
 
