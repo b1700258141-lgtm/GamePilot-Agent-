@@ -163,10 +163,10 @@ docs/
 
 ## 10. 当前项目进度
 
-**状态日期：2026-09-18**
+**状态日期：2026-09-20**
 
-**当前阶段：第三阶段开始；TASK-002A 与 TASK-002B 已通过独立验收，
-TASK-003A「确定性测试执行器与规则判定基线」已由 Codex 按所有者授权完成 R1 修复与复验；学习复盘仍待完成。**
+**当前阶段：第三阶段；TASK-002A、TASK-002B 与 TASK-003A 已通过独立验收。
+TASK-003B「可控缺陷靶场与固定评测集」已完成 R1 修复与复验，验收通过；学习复盘仍待完成。**
 
 已经完成：
 
@@ -196,6 +196,21 @@ TASK-003A「确定性测试执行器与规则判定基线」已由 Codex 按所�
 
 - 项目所有者授权 Codex 直接完成 TASK-003A-R1：修复状态约束、会话与请求校验、错误证据保存、实际轨迹重跑、严格报告读取和报告 I/O 错误；报告版本升级到 1.1、规则版本升级到 1.1.0。
 - TASK-003A-R1 复验通过：`171 passed` 非 PostgreSQL 测试（`29 deselected`），Ruff 检查及 60 个文件格式检查通过；真实本地 HTTP 的独立 CLI 进程 run/replay 均 exit 0，8 个场景通过、8 个场景重跑一致。数据库相关代码未改动，本轮未复验 PostgreSQL，未提交或推送。
+- Claude Code 已完成 TASK-003B 首轮实施（审查结论见下文）：新增 `gamepilot.lab`
+  （三个真实状态缺陷 + 独立内存靶场）与 `gamepilot.benchmark`（32 组合固定矩阵、同 profile 重跑、
+  负向验证与 7 项带分子/分母的指标），并在领域层新增三个窄扩展点、路由支持注入会话工厂。
+  正常入口增加默认会话工厂装配，公开 API 契约、仓储与数据库结构未改动；未接入 LLM/MCP，未提交或推送。
+- TASK-003B 首轮实施自测结果（当时尚未独立验收）：`322 passed`（含 `29 passed` PostgreSQL 集成测试；
+  非 PostgreSQL 为 `293 passed`、`29 deselected`），`ruff check .` 与
+  `ruff format --check .`（84 个文件）通过；`gamepilot.benchmark run` 退出码 0，
+  32/32 组合符合清单、9/9 触发与目标规则命中、7/7 指标达标（含 `replay_consistency 32/32`）、
+  负向验证 mismatch；四个 profile 均完成真实 localhost HTTP 的 CLI 验证
+  （normal exit 0，三个缺陷 profile exit 1，同 profile replay 均 8/8 一致）。
+
+- Codex 已完成 TASK-003B 首轮独立审查：293 项非 PostgreSQL 和 29 项真实 PostgreSQL 回归、Ruff（84 个文件）、32 组合 benchmark 和四个 profile 的真实 HTTP run/replay 均通过；与 Git HEAD 正常领域实现的 21 条轨迹、140 次动作前缀对比一致。
+- 首轮独立异常探针发现一项 P2：同 profile replay 或负向验证执行失败时，benchmark 误返回 1 而非 2，摘要漏报该阶段执行错误。当时已生成 `docs/claude-tasks/TASK-003B-R1-review-fixes.md` 并暂缓验收。
+- 经所有者授权，Codex 已完成 TASK-003B-R1：保留各阶段执行状态与错误证据，执行错误主导退出 2，同 profile 与负向验证错误分别统计；benchmark 版本为 1.1.0，testing 契约和规则不变。
+- R1 复验通过：302 项非 PostgreSQL 测试（含新增 9 项异常路径集成测试）、Ruff（86 个文件）、独立 CLI 固定矩阵通过；首轮两个 503 反例均正确退出 2。本轮未修改数据库相关路径、未重复上一轮已通过的 29 项 PostgreSQL 回归，未提交或推送；TASK-003B 验收完成。
 
 尚未完成：
 
@@ -204,14 +219,17 @@ TASK-003A「确定性测试执行器与规则判定基线」已由 Codex 按所�
 
 ## 11. 下一决策点
 
-2026-09-18 项目所有者授权 Codex 直接修复 TASK-003A。TASK-003A-R1 的六组问题及存储冲突分类问题已修复，并完成反例回归、全量非 PostgreSQL 测试、Ruff 和真实 HTTP 的 CLI run/replay 验证。详细范围与证据见 `docs/claude-tasks/TASK-003A-R1-review-fixes.md`。TASK-003A 已验收；原理学习与代码复盘仍待所有者完成。
+TASK-003B 已完成首轮独立审查和 R1 修复复验，重放执行错误已正确主导退出码。
+最终验证记录见 `docs/claude-tasks/TASK-003B-R1-review-fixes.md` 第 5 节。
+原任务单和 README 保留范围及矩阵说明；原理学习与代码复盘仍待所有者完成。
 
-`docs/PHASE_3_PLAN.md` 的后续次序仍是：先有确定性执行器与判定基线，再接入可控缺陷，最后接入 Agent；尚未冻结 Agent 技术选型。
+`docs/PHASE_3_PLAN.md` 的后续次序仍是：先有确定性执行器与判定基线，再接入可控缺陷，最后接入 Agent；
+TASK-003C（首次 Agent 工作流）与 Agent 技术选型尚未冻结。
 
-当前第一阶段不再增加功能范围，TASK-002A/TASK-002B 已完成，后续需要依次确认：
+后续需要依次确认：
 
-1. TASK-003A 学习复盘；
-2. 首批预植入缺陷及其验收指标；
+1. TASK-003A / TASK-003B 学习复盘；
+2. TASK-003C 的最小闭环范围、模型供应商与费用/步数预算；
 3. Agent 首次接入采用 LangGraph 工具调用还是先实现 MCP 工具层；
 4. 项目公开名称、许可证和仓库展示策略。
 
@@ -225,6 +243,14 @@ TASK-003A「确定性测试执行器与规则判定基线」已由 Codex 按所�
 - 若代码现状与本文档不一致，应明确指出差异，不能默默假设文档或代码其中一方正确。
 
 ## 13. 更新记录
+
+- **2026-09-20**：经所有者授权，Codex 完成 TASK-003B-R1 修复与复验；新增分阶段错误证据与计数，benchmark 1.1.0 正确执行 error 主导退出码。302 项非 PostgreSQL 测试、Ruff、固定矩阵及两个原始反例复验通过；本轮未重复数据库测试，TASK-003B 验收完成，学习复盘待完成，未提交或推送。
+
+- **2026-09-20**：TASK-003B 首轮独立审查完成。322 项分组回归、Ruff、固定矩阵、真实 HTTP 与旧实现轨迹对比通过；新增异常探针复现重放执行错误被误归为 exit 1，生成一项 P2 返工单，暂不验收通过；未修改功能代码或提交推送。
+
+- **2026-09-20**：TASK-003B 实施完成，待 Codex 独立验收；新增 `gamepilot.lab`（三个真实状态缺陷与独立内存靶场）与 `gamepilot.benchmark`（32 组合清单、同 profile 重跑、负向验证与 7 项指标），领域层新增三个窄扩展点、路由支持注入会话工厂；全量测试 322 项（含 29 项 PostgreSQL）、Ruff 与真实 HTTP CLI 验证通过，未提交或推送。
+
+- **2026-09-18**：生成 TASK-003B 可控缺陷靶场与评测集草案，细化三个缺陷、独立内存入口、32 个评测组合与真实数据库回归要求；待确认实施，未修改功能代码。
 
 - **2026-09-18**：经所有者授权，Codex 完成 TASK-003A-R1 修复与复验；171 项非 PostgreSQL 测试、Ruff、真实 HTTP run/replay 通过，TASK-003A 验收完成；本轮未复验数据库，学习复盘仍待完成。
 
