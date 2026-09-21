@@ -22,13 +22,13 @@
   负向验证与 7 项带分子/分母的指标，退出码区分「符合预期 / 存在偏差 / 执行错误」
 - LangGraph 游戏测试 Agent `gamepilot.agent`：一条完整闭环（模型选动作 → 程序判定 → 收口 → 出报告），
   产物与脚本执行器同构、可用既有 `replay` 无模型重跑；4 profile × 3 目标的 12 格配对试验
-  （离线工程链路已交付，**真实模型验收待完成**，见「游戏测试 Agent」一节）
+  （离线工程链路已交付，真实 Gate A/B 已通过，Gate C 待执行，见「游戏测试 Agent」一节）
 - 完整的领域单元测试、API 集成测试与真实 PostgreSQL 集成测试
 
 ## 当前未实现（属于后续阶段）
 
-- **真实模型的能力验收**：Agent 闭环的工程链路已交付，但本机没有配置模型密钥、
-  也没有确认付费预算，因此 12 格试验仍是离线测试替身的结果，不代表 Agent 的能力成绩；
+- **完整真实模型能力验收**：单格 Gate A 与 normal 三目标 Gate B 已通过；固定 12 格 Gate C
+  尚未执行。当前 12 格仍是离线测试替身结果，不代表真实能力；
 - MCP 接入、应用容器化与线上部署、前端与视觉测试。
 
 这些不会提前引入。
@@ -239,12 +239,15 @@ python -m gamepilot.testing replay --base-url http://127.0.0.1:8000 --report art
 模型只看公开观测决定下一步，程序负责判定与收口；跑完的游戏事实与脚本执行器
 同构，因此能用**既有的** `replay` 在没有模型的情况下逐字段重跑。
 
-> **当前状态：离线工程链路已交付，真实模型验收待完成。**
-> 本机没有配置模型密钥、也没有确认付费预算，因此一次真实模型调用都没有发生
-> （费用为 0）。下面 12 格试验的数字由离线测试替身产生，只证明图、预算、判定、
-> 重跑这四条工程链路正确，**不是 Agent 的能力成绩**。
+> **当前状态：离线工程链路已交付，真实 Gate A/B 已通过，完整真实模型验收仍在进行中。**
+> 首次 Gate A 暴露输出预算耗尽而无 `tool_use`；补齐 stop reason 诊断并增加协议级
+> `tool_choice=any` 后，`deepseek-v4-flash` 用两次原生工具调用完成 healing，exit 0，
+> 无模型 replay match。随后 Gate B 的 normal 三目标全部 exit 0、replay match；Gate C 没有执行。
+> 下面 12 格试验的数字仍由离线
+> 测试替身产生，只证明图、预算、判定、重跑工程链路正确，**不是 Agent 的能力成绩**。
 > 首轮独立审查发现的评测错误传播、Token 累计、总时限请求边界和多工具协议问题
-> 已在 TASK-003C-R1 修复；443 项非 PostgreSQL 回归与异常注入复验通过。
+> 已在 TASK-003C-R1 修复。TASK-003C-V2 又补齐 12 格 benchmark 的显式预算、价格输入和
+> 整批 usage/费用证据；466 项非 PostgreSQL 回归与异常注入复验通过。
 
 ### 工作流
 
@@ -300,7 +303,7 @@ START → initialize → decide → validate → execute → check → route ─
 
 - **两份报告**，用同一个 `run_id` 关联：
   - `<run_id>.json`：既有的 `RunReport`（schema 1.1），就是 `gamepilot.testing replay` 能读的那一份；
-  - `<run_id>-agent.json`：独立版本的 `AgentRunReport`，记目标覆盖、每一次模型决策与用量、
+  - `<run_id>-agent.json`：独立的 `AgentRunReport`（schema 1.2），记目标覆盖、每一次模型决策与用量、
     预算消耗、停止原因，并指向上面那份运行报告。
   两份都是排他创建，不覆盖已有证据。
 
@@ -322,13 +325,22 @@ $env:GAMEPILOT_AGENT_API_KEY = "<在会话里设置，不要写进任何文件>"
 
 # 4. 12 格配对试验（默认离线替身，不发起任何付费调用）
 .venv\Scripts\python.exe -m gamepilot.benchmark agent --output-dir artifacts/agent-benchmarks
+
+# 5. 显式收紧同一批 12 格的逐格预算；价格仅用于报告复算，不会开启付费调用
+.venv\Scripts\python.exe -m gamepilot.benchmark agent --provider offline `
+  --max-actions 6 --max-model-calls 6 --max-format-retries 1 `
+  --model-timeout 30 --http-timeout 5 --total-timeout 60 --max-output-tokens 512 `
+  --input-price 1 --output-price 2 --currency TEST `
+  --output-dir artifacts/agent-benchmarks
 ```
 
 - 未给 `--paid` 时**不会发出任何模型请求**，缺少密钥时只报**变量名**、
   不回显也不记录它的值；这两种情况都退出 `2`，也不会留下任何产物。
-- 上面的第 3 条在本机当前**跑不通**（没有配置密钥）——这本身就是待完成的验收项。
-- 想估算费用须显式给出单价（`--input-price` / `--output-price` / `--currency`）；
-  没给单价时报告里的费用是 `unknown`，不是 `0`。
+- 上面的真实链路已经以收紧预算完成 Gate A：2 次原生工具调用、0 次格式纠正、exit 0，
+  并通过无模型 replay；证据见 `docs/validation/TASK-003C-real-model-acceptance.md`。
+- 三项计价参数（`--input-price` / `--output-price` / `--currency`）必须同时给出或全部省略；
+  项目不内置供应商价格。任一计划格的 Token 未知时，整批 Token 与费用均为 `unknown`，
+  不会把未知值按 `0` 或只合计已知格。
 
 ### 12 格配对试验
 
@@ -351,6 +363,9 @@ Agent 报告、运行报告、同 profile 无模型重跑、以及同一 profile
 执行错误按 Agent 原始运行、同 profile 重跑、脚本对照和报告 I/O 分阶段保存；任一阶段错误
 都会让总评测退出 `2`。重跑的“可比”只包含 `match` 与 `mismatch`，`not_comparable` 和
 `not_executed` 分别计数，不会被算进可比分母。
+
+Agent benchmark 1.2.0 在摘要中保存本次七项 `BudgetSpec`、可选价格、usage 已知/未知格数、
+整批 Token 与费用。每格使用独立计数器，但共享同一份预算规格和价格配置。
 
 报告布局：`<output-dir>/<run_id>/agent-benchmark.json` 为摘要，
 `cells/<profile>/<goal_id>/` 下为 `<run_id>-agent.json` 与 `run/`、`replay/`、`control/` 三个子目录。
@@ -553,8 +568,9 @@ API 层（FastAPI 路由 + Pydantic 请求 Schema）
 TASK-002A 完成数据库骨架与迁移，TASK-002B 完成 PostgreSQL 仓储、
 事务边界与确定性恢复，TASK-003A 完成确定性测试执行器与规则判定基线，
 TASK-003B 完成可控缺陷靶场与固定评测集，TASK-003C 完成第一条 LangGraph
-Agent 闭环与 12 格配对试验（离线工程部分实施完成，真实模型验收待完成）；
-下一步是在确认密钥与付费预算后做真实模型验收，再谈 MCP 与更自主的探索策略。
+Agent 闭环与 12 格配对试验（离线工程部分实施完成）；真实单格 Gate A 已在协议修复后通过。
+Agent benchmark 的显式预算与整批 usage/费用汇总已完成，真实 normal 三目标 Gate B 已通过；
+下一步根据 Gate A/B 的实际 Token 证据决定是否执行完整 12 格 Gate C。
 详见 `docs/PHASE_2_PLAN.md`、`docs/PHASE_3_PLAN.md` 与 `AGENTS.md`。
 
 ## 已知限制
@@ -574,10 +590,10 @@ Agent 闭环与 12 格配对试验（离线工程部分实施完成，真实模�
   只用于说明「不是真实网络请求」；真实 localhost HTTP 的验证由 `gamepilot.lab serve`
   加 `gamepilot.testing run/replay` 手动完成；
 - 评测是固定脚本基线，不是 Agent 自主发现能力；
-- Agent 闭环的**真实模型验收待完成**：本机没有配置密钥、也没有确认付费预算，
-  12 格试验的数字来自离线测试替身，只说明工程链路正确；
-- Agent 一次只跑一个会话、一条闭环，顺序执行不做并发；动作与模型调用上限固定
-  （默认 10 / 12），没有自适应预算，也不自动重试失败的模型调用；
+- Agent 闭环的**完整真实模型验收待完成**：Gate A/B 已通过，Gate C 未执行；12 格数字仍来自
+  离线测试替身，只说明工程链路正确；
+- Agent 一次只跑一个会话、一条闭环，顺序执行不做并发；动作与模型调用默认上限为
+  10 / 12，可在运行前显式收紧，没有自适应预算，也不自动重试失败的模型调用；
 - Agent 只有两个工具（`perform_action` / `finish`），一次只能调用一个；
   没有轨迹最小化、缺陷复现脚本生成，也没有跨会话的长期记忆；
 - 尚未接入 MCP，也没有缺陷开关（属于后续任务）。

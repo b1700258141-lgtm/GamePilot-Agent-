@@ -559,6 +559,11 @@ async def test_anthropic_retry_returns_results_for_every_rejected_tool_use(
     assert normal.action_requests == 0
     second_conversation = messages.requests[1]["messages"]
     assert isinstance(second_conversation, list)
+    for request in messages.requests:
+        assert request["tool_choice"] == {
+            "type": "any",
+            "disable_parallel_tool_use": True,
+        }
     result_message = second_conversation[-1]
     assert result_message["role"] == "user"
     blocks = result_message["content"]
@@ -570,6 +575,37 @@ async def test_anthropic_retry_returns_results_for_every_rejected_tool_use(
         "multi-a",
         "multi-b",
     ]
+    assert [record.provider_stop_reason for record in context.model_call_records] == [
+        "tool_use",
+        "tool_use",
+    ]
+    assert all(record.response_text is None for record in context.model_call_records)
+
+
+@pytest.mark.anyio
+async def test_model_call_record_preserves_text_and_provider_stop_reason(
+    normal: Server,
+) -> None:
+    """纯文本或截断响应必须留下诊断证据，不能只压成 no_tool_call。"""
+    responder = Responder(
+        lambda messages, step: ModelReply(  # noqa: ARG005
+            text="正在分析，尚未形成工具调用",
+            stop_reason="max_tokens",
+        )
+    )
+    outcome = await run_agent_once(
+        normal.client,
+        responder,
+        GOAL_FULL_HEALTH,
+        spec=BudgetSpec(max_format_retries=0),
+    )
+
+    record = outcome.context.model_call_records[0]
+    assert record.outcome == "no_tool_call"
+    assert record.response_text == "正在分析，尚未形成工具调用"
+    assert record.provider_stop_reason == "max_tokens"
+    assert outcome.report.model_calls[0] == record
+    assert outcome.report.summary.stop_reason == "model_format_error"
 
 
 @pytest.mark.anyio

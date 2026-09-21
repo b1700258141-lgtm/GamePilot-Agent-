@@ -32,9 +32,10 @@ from .models import BenchmarkReport, CombinationEvidence
 from .runner import EXIT_EXECUTION_ERROR, BenchmarkExecutionError, run_benchmark
 
 if TYPE_CHECKING:  # 只在类型检查时需要：运行期不导入 agent extra（也不导入 langgraph）
+    from gamepilot.agent.models import BudgetSpec
     from gamepilot.agent.provider import ModelProvider
 
-    from .agent_models import AgentCellEvidence, AgentEvalReport
+    from .agent_models import AgentCellEvidence, AgentEvalReport, AgentPricing
 
 DEFAULT_OUTPUT_DIR = "artifacts/benchmarks"
 DEFAULT_AGENT_OUTPUT_DIR = "artifacts/agent-benchmarks"
@@ -50,6 +51,8 @@ _STATUS_LABEL = {
 
 
 def build_parser() -> argparse.ArgumentParser:
+    from .agent_manifest import AGENT_EVAL_BUDGET
+
     parser = argparse.ArgumentParser(
         prog="python -m gamepilot.benchmark",
         description="固定缺陷矩阵评测：组装隔离靶场、跑 baseline 组合并同 profile 重跑。",
@@ -102,10 +105,60 @@ def build_parser() -> argparse.ArgumentParser:
         help="存放密钥的**环境变量名**；不接受密钥本身，输出中只出现变量名",
     )
     agent_parser.add_argument(
+        "--http-timeout",
         "--timeout",
+        dest="http_timeout",
         type=float,
-        default=DEFAULT_TIMEOUT_SECONDS,
-        help=f"单次请求超时秒数（默认 {DEFAULT_TIMEOUT_SECONDS}）",
+        default=AGENT_EVAL_BUDGET.http_timeout_seconds,
+        help=(
+            "单次游戏 HTTP 请求超时秒数"
+            f"（默认 {AGENT_EVAL_BUDGET.http_timeout_seconds}；--timeout 为兼容别名）"
+        ),
+    )
+    agent_parser.add_argument(
+        "--max-actions",
+        type=int,
+        default=AGENT_EVAL_BUDGET.max_action_attempts,
+        help="每格动作尝试上限",
+    )
+    agent_parser.add_argument(
+        "--max-model-calls",
+        type=int,
+        default=AGENT_EVAL_BUDGET.max_model_calls,
+        help="每格模型调用上限",
+    )
+    agent_parser.add_argument(
+        "--max-format-retries",
+        type=int,
+        default=AGENT_EVAL_BUDGET.max_format_retries,
+        help="每格格式纠正上限",
+    )
+    agent_parser.add_argument(
+        "--model-timeout",
+        type=float,
+        default=AGENT_EVAL_BUDGET.model_timeout_seconds,
+        help="单次模型调用超时秒数",
+    )
+    agent_parser.add_argument(
+        "--total-timeout",
+        type=float,
+        default=AGENT_EVAL_BUDGET.total_timeout_seconds,
+        help="每格 Agent 总时限秒数",
+    )
+    agent_parser.add_argument(
+        "--max-output-tokens",
+        type=int,
+        default=AGENT_EVAL_BUDGET.max_output_tokens,
+        help="每次模型调用的输出 Token 上限",
+    )
+    agent_parser.add_argument(
+        "--input-price", type=float, default=None, help="每百万输入 Token 的显式单价"
+    )
+    agent_parser.add_argument(
+        "--output-price", type=float, default=None, help="每百万输出 Token 的显式单价"
+    )
+    agent_parser.add_argument(
+        "--currency", default=None, help="计价币种；与输入、输出单价必须同时给出"
     )
     return parser
 
@@ -199,6 +252,35 @@ async def _run_command(args: argparse.Namespace) -> int:
 # ------------------------------------------------------------- agent 子命令
 
 
+def _agent_budget(args: argparse.Namespace) -> BudgetSpec:
+    from gamepilot.agent.models import BudgetSpec
+
+    return BudgetSpec(
+        max_action_attempts=args.max_actions,
+        max_model_calls=args.max_model_calls,
+        max_format_retries=args.max_format_retries,
+        model_timeout_seconds=args.model_timeout,
+        http_timeout_seconds=args.http_timeout,
+        total_timeout_seconds=args.total_timeout,
+        max_output_tokens=args.max_output_tokens,
+    )
+
+
+def _agent_pricing(args: argparse.Namespace) -> AgentPricing | None:
+    from .agent_models import AgentPricing
+
+    values = (args.input_price, args.output_price, args.currency)
+    if all(value is None for value in values):
+        return None
+    if any(value is None for value in values):
+        raise ValueError("--input-price、--output-price 与 --currency 必须同时给出")
+    return AgentPricing(
+        input_price_per_million=args.input_price,
+        output_price_per_million=args.output_price,
+        currency=args.currency,
+    )
+
+
 def _make_agent_provider_factory(args: argparse.Namespace) -> Callable[[str], ModelProvider]:
     """构造 `goal_id -> ModelProvider` 的工厂。
 
@@ -287,6 +369,17 @@ def _render_agent(report: AgentEvalReport, output_dir: str) -> None:
         f"（测试替身={provider.get('is_test_double')}）"
     )
     print(f"清单来源：{report.manifest_source}")
+    budget = report.budget
+    print(
+        "预算："
+        f"动作 {budget.get('max_action_attempts')}，"
+        f"模型调用 {budget.get('max_model_calls')}，"
+        f"格式纠正 {budget.get('max_format_retries')}，"
+        f"模型超时 {budget.get('model_timeout_seconds')}s，"
+        f"HTTP 超时 {budget.get('http_timeout_seconds')}s，"
+        f"总时限 {budget.get('total_timeout_seconds')}s，"
+        f"输出 {budget.get('max_output_tokens')} Token"
+    )
     print(
         f"格数：计划 {summary.cells_planned}，执行 {summary.cells_executed}，"
         f"目标达成 {summary.goals_met}，目标未完成 {summary.goals_incomplete}，"
@@ -305,6 +398,12 @@ def _render_agent(report: AgentEvalReport, output_dir: str) -> None:
         f"差异 {summary.replay_mismatches}，不可比 {summary.replay_not_comparable}，"
         f"未执行 {summary.replay_not_executed}"
     )
+    print(
+        f"用量：已知 {summary.usage_known_cells}/{summary.cells_planned}，"
+        f"未知 {summary.usage_unknown_cells}/{summary.cells_planned}，"
+        f"Token {summary.usage.label}"
+    )
+    print(f"总费用：{summary.cost.label}（{summary.cost.note}）")
     print("逐格结果（T=真实触发，D=清单内检出，+=清单外额外检出）：")
     current = None
     for cell in report.cells:
@@ -324,9 +423,14 @@ def _render_agent(report: AgentEvalReport, output_dir: str) -> None:
 async def _run_agent_command(args: argparse.Namespace) -> int:
     from .agent_eval import run_agent_eval
 
+    budget = _agent_budget(args)
+    pricing = _agent_pricing(args)
     factory = _make_agent_provider_factory(args)
     report, path = await run_agent_eval(
-        args.output_dir, provider_factory=factory, timeout=args.timeout
+        args.output_dir,
+        provider_factory=factory,
+        budget=budget,
+        pricing=pricing,
     )
     _render_agent(report, args.output_dir)
     print(f"摘要：{path}")
@@ -347,6 +451,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         return EXIT_EXECUTION_ERROR
     except BenchmarkExecutionError as exc:
         print(f"评测执行失败：{exc}", file=sys.stderr)
+        return EXIT_EXECUTION_ERROR
+    except ValueError as exc:
+        print(f"输入错误：{exc}", file=sys.stderr)
         return EXIT_EXECUTION_ERROR
     except KeyboardInterrupt:
         print("已中断", file=sys.stderr)

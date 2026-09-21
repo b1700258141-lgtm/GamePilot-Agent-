@@ -166,7 +166,7 @@ docs/
 **状态日期：2026-09-21**
 
 **当前阶段：第三阶段；TASK-002A、TASK-002B、TASK-003A 与 TASK-003B 已通过独立验收。
-TASK-003C-R1 已完成修复与独立复验，离线工程链路通过；真实模型验收与学习复盘仍待完成。**
+TASK-003C-R1 离线工程链路与 V2 预算/费用工程准备通过，DeepSeek Flash 真实 Gate A 与 normal 三目标 Gate B 已通过；Gate C 与学习复盘仍待完成。**
 
 已经完成：
 
@@ -214,10 +214,19 @@ TASK-003C-R1 已完成修复与独立复验，离线工程链路通过；真实�
 - Claude Code 已完成 TASK-003C 首轮实施：新增 LangGraph 单 Agent 闭环、两个工具、动作/模型/格式/总时限预算、独立 Agent 报告与 12 格配对评测；真实模型默认关闭。
 - Codex 首轮审查发现四项阻塞问题，并经所有者授权完成 TASK-003C-R1：评测按 Agent、重跑、对照与报告 I/O 分阶段传播错误，可靠累计 Token/费用，逐请求执行总时限检查，多工具纠正一次回传全部 `tool_result`；Agent schema 升级到 1.1，agent benchmark 升级到 1.1.0。
 - TASK-003C-R1 独立复验通过：`443 passed, 29 deselected` 非 PostgreSQL 回归，Ruff 检查与 114 个文件格式检查通过；原 32 组合脚本 benchmark exit 0，离线 12 格 Agent benchmark exit 0、12/12 重跑一致；模型 timeout/429/5xx、重跑 503、对照 503 和各阶段报告写入失败均正确主导 exit 2，普通 mismatch 保持 exit 1。未调用真实模型，未复验 PostgreSQL，未提交或推送。
+- 已生成 `TASK-003C-V1-real-model-acceptance.md`，把真实验收拆为单格、normal 三目标和完整 12 格三道独立付费关卡，并先补齐 benchmark 预算、费用汇总与模型响应诊断证据。
+- 所有者授权执行一次最小 Gate A。真实 `deepseek-v4-flash` 接口与 usage 链路连通，但两次回复均无 `tool_use`，最终 `model_format_error` / exit 2；实际 2 次调用、0 动作、1,654 Token，费用因无单价为 unknown。Gate B/C 未执行，证据见 `docs/validation/TASK-003C-real-model-acceptance.md`。
+- 所有者授权 Codex 直接使用密钥修复真实链路。Agent 报告升级到 schema 1.2，模型调用记录新增供应商 stop reason 与文本响应；诊断确认未指定工具选择时首轮恰好耗尽 1,024 输出 Token、`stop_reason=max_tokens` 且无工具块。
+- Anthropic 兼容请求现显式使用 `tool_choice=any` 并禁止并行工具调用，与本地“每轮恰好一个工具”协议一致。修复后真实 Gate A 在 512 输出 Token、0 次格式纠正下以 `attack`、`use_potion` 两次工具调用完成，exit 0、2/2 覆盖满足、replay 1/1 match；用量 772 Token、耗时 3.19 s。完整非 PostgreSQL 回归 `445 passed, 29 deselected`，Ruff 检查与 116 个文件格式检查通过；未复验 PostgreSQL，未提交或推送。
+- 已生成下一实施任务 `TASK-003C-V2-benchmark-budget-cost.md`：在不调用真实模型的前提下，让 12 格 Agent benchmark 接受显式 `BudgetSpec` 与价格配置，并以严格 unknown 语义汇总整批 Token/费用；Gate B/C 仍需后续独立决策。
+- 经所有者授权，Codex 已完成 TASK-003C-V2：Agent benchmark 接受七项显式预算和严格 all-or-none 价格配置，同一规格贯穿每格独立计数器；摘要按计划格数汇总 usage 已知/未知数，并在任一格未知时保守保持整批 Token/费用 unknown。agent benchmark 升级到 1.2.0，Agent/testing 报告版本不变。
+- TASK-003C-V2 验收通过：`466 passed, 29 deselected` 非 PostgreSQL 回归，Ruff 检查与 118 个文件格式检查通过；离线 12 格 exit 0、12/12 重跑一致，原 32 组合 exit 0、7/7 指标达标。未调用真实模型，未复验 PostgreSQL，未提交或推送。
+- 所有者随后明确授权直接使用旧密钥执行 Gate B。normal profile 的 full-health、healing、victory 三目标均 goal_met / exit 0、规则失败 0、无模型 replay 3/3 match；共 7 个动作、8 次模型调用、1 次受控格式纠正，prompt 1,998、completion 1,630、total 3,628 Token。没有可靠单价，费用保持 unknown；Gate C 未执行。
+- 已生成 `TASK-003C-V3-real-gate-c-benchmark.md`：下一任务只执行真实固定 12 格，不再修改 Agent；统一逐格预算为 6 动作、6 次调用、1 次格式纠正和 512 输出 Token，整批上限 72 次调用与 36,864 输出 Token。Gate A/B 共 10 次有效调用、4,400 Token，为 Gate C 提供 14,512 Token 的矩阵外推与 31,680 Token 的满调用经验估算；执行仍需单独授权并确认价格/金额口径。
 
 尚未完成：
 
-- 在所有者确认付费预算后完成 DeepSeek Flash 真实模型验收；
+- 根据 Gate A/B 实际 Token 证据决定并执行 Gate C 固定 12 格；
 - 完成本阶段对应的原理学习和代码复盘；
 - 最终确认项目公开名称、许可证和完整 README 展示策略。
 
@@ -230,14 +239,20 @@ TASK-003B 已完成首轮独立审查和 R1 修复复验，重放执行错误已
 `docs/PHASE_3_PLAN.md` 的次序已落实为：确定性执行器与判定基线 → 可控缺陷 → 首次 Agent。
 TASK-003C-R1 已修复首轮审查发现的错误传播、usage、总时限与多工具协议问题，离线工程链路
 通过独立复验；记录见 `docs/claude-tasks/TASK-003C-R1-review-fixes.md`。模型仍为 DeepSeek
-`deepseek-v4-flash`，真实模型调用和能力验收尚未进行，因此不能把离线测试替身成绩称作
-真实 Agent 能力成绩。
+`deepseek-v4-flash`。首次真实 Gate A 的失败证据已定位为 `max_tokens`；协议级强制单工具选择
+修复后，真实模型用两次工具调用完成 healing，exit 0 且无模型 replay match，Gate A 已通过。
+Gate B 三目标也已全部 exit 0 且 replay 3/3 match；Gate C 未执行，记录见
+`docs/validation/TASK-003C-real-model-acceptance.md`。
+TASK-003C-V2 已完成无付费工程准备：真实 Gate C 可以在显式逐格预算下运行，报告会记录
+价格、已知/未知 usage 与整批费用；项目不内置或猜测供应商价格。
 
 后续需要依次确认：
 
-1. TASK-003A / TASK-003B 学习复盘；
-2. 确认费用预算并完成 DeepSeek Flash 真实模型验收；
-3. 项目公开名称、许可证和仓库展示策略。
+1. TASK-003A / TASK-003B / TASK-003C 学习复盘；
+2. 轮换已进入聊天上下文的密钥，并确认显式单价与 Gate C 金额预算；
+3. 根据 Gate A/B 的 4,400 个已知 Token 与 Gate C 技术上限，单独决定 Gate C；
+4. 完成 Gate C 后给出 TASK-003C 的最终真实模型结论；
+5. 项目公开名称、许可证和仓库展示策略。
 
 ## 12. 更新规则
 
@@ -249,6 +264,18 @@ TASK-003C-R1 已修复首轮审查发现的错误传播、usage、总时限与�
 - 若代码现状与本文档不一致，应明确指出差异，不能默默假设文档或代码其中一方正确。
 
 ## 13. 更新记录
+
+- **2026-09-21**：规划下一任务 TASK-003C-V3，范围冻结为 DeepSeek Flash 真实 Gate C 固定 12 格验收。复用现有 agent benchmark，不新增 Agent 功能；记录 72 次调用和 36,864 输出 Token 技术上限、Gate A/B 经验估算、独立授权、密钥注入、单次执行与不自动重跑规则。Gate C 尚未执行，未调用模型、未提交或推送。
+
+- **2026-09-21**：经所有者明确授权，Codex 使用旧密钥完成真实 Gate B。normal 三目标均 goal_met / exit 0、规则失败 0、replay 3/3 match；合计 8 次模型调用、3,628 Token，其中 healing 使用 1 次预算内格式纠正。密钥未写入报告或工作区，进程环境变量已清除，本地服务已停止；费用因无可靠单价保持 unknown，Gate C 未执行，未提交或推送。
+
+- **2026-09-21**：经所有者授权，Codex 完成 TASK-003C-V2。Agent benchmark 新增七项显式预算、严格 all-or-none 价格配置、逐格预算/费用传递和保守的整批 usage/费用汇总，版本升到 1.2.0。`466 passed, 29 deselected`、Ruff（118 个文件）、离线 12 格与原 32 组合均通过；未调用真实模型、未复验 PostgreSQL、未提交或推送。Gate B/C 仍待独立决策。
+
+- **2026-09-21**：规划下一任务 TASK-003C-V2。范围冻结为 Agent benchmark 的七项显式预算、严格价格输入、12 格 usage/费用汇总和 agent benchmark 1.2.0；默认离线成绩与原 32 组合必须保持不变。本任务禁止真实模型调用，Gate B/C 继续作为后续独立决策，未修改功能代码、未提交或推送。
+
+- **2026-09-21**：经所有者授权，Codex 修复真实 Agent 工具链路。Agent schema 1.2 新增 stop reason/文本诊断，确认首轮失败为 `max_tokens`；Anthropic 兼容请求增加 `tool_choice=any` 与禁止并行工具调用。修复后 Gate A 以 2 次工具调用、0 次格式纠正完成 healing，exit 0、replay match，用量 772 Token。`445 passed, 29 deselected`、Ruff 与 116 文件格式检查通过；Gate B/C 未执行，未复验 PostgreSQL，未提交或推送。
+
+- **2026-09-21**：规划 TASK-003C-V1 真实模型分级验收，并经所有者授权执行一次最小 Gate A。真实 DeepSeek Flash 接口、认证与 usage 链路成功，2 次回复均无 tool_use，格式纠正耗尽后 exit 2；0 个游戏动作，1,654 Token，费用 unknown。未自动重跑，Gate B/C 未执行；报告未发现密钥文本。本次密钥曾进入聊天上下文，后续应轮换。下一步先补 stop reason/文本响应诊断和 benchmark 预算/费用汇总，再决定是否重新授权。
 
 - **2026-09-21**：经所有者授权，Codex 完成 TASK-003C-R1 修复与复验。Agent 评测现按原始运行、重跑、对照与报告 I/O 分阶段传播错误，Token/费用可靠累计，总时限在每次 HTTP 请求前检查，多工具纠正闭合全部 tool_use。443 项非 PostgreSQL 回归、Ruff、原 32 组合和离线 12 格评测通过；异常回归均正确 exit 2。未调用真实模型或复验 PostgreSQL，TASK-003C 的离线工程链路通过，最终真实模型验收仍待费用确认，未提交或推送。
 

@@ -7,9 +7,11 @@ from fastapi.responses import JSONResponse
 
 pytest.importorskip("langgraph", reason='未安装 agent extra：pip install -e ".[dev,agent]"')
 
+from gamepilot.agent.models import AgentRunReport, BudgetSpec
 from gamepilot.agent.provider import FakeProvider, ModelReply
 from gamepilot.benchmark import agent_eval
 from gamepilot.benchmark.agent_eval import EXIT_DEVIATION, EXIT_EXECUTION_ERROR, run_agent_eval
+from gamepilot.benchmark.agent_models import AgentPricing
 from gamepilot.testing.models import ReplayDifference, ReplaySummary
 from gamepilot.testing.reporting import ReportWriteError
 
@@ -46,6 +48,40 @@ async def test_model_error_is_an_agent_stage_execution_error(
     assert report.summary.replay_execution_errors == 0
     assert report.cells[0].stop_reason == "model_error"
     assert report.cells[0].exit_code == EXIT_EXECUTION_ERROR
+
+
+@pytest.mark.anyio
+async def test_custom_budget_and_pricing_reach_the_cell_report(
+    tmp_path: Path,
+    one_cell: None,  # noqa: ARG001
+) -> None:
+    budget = BudgetSpec(
+        max_action_attempts=7,
+        max_model_calls=9,
+        max_format_retries=1,
+        model_timeout_seconds=17.0,
+        http_timeout_seconds=3.0,
+        total_timeout_seconds=99.0,
+        max_output_tokens=321,
+    )
+    pricing = AgentPricing(
+        currency="TEST",
+        input_price_per_million=1.0,
+        output_price_per_million=2.0,
+    )
+
+    report, summary_path = await run_agent_eval(tmp_path, budget=budget, pricing=pricing)
+
+    assert report.budget == budget.model_dump()
+    assert report.budget_seconds == 99.0
+    assert report.pricing == pricing
+    assert (report.summary.usage_known_cells, report.summary.usage_unknown_cells) == (0, 1)
+    assert report.summary.cost.amount is None
+    agent_path = summary_path.parent / report.cells[0].agent_report_path
+    agent = AgentRunReport.model_validate_json(agent_path.read_text(encoding="utf-8"))
+    assert agent.budget == budget
+    assert agent.summary.cost.currency == "TEST"
+    assert agent.summary.cost.amount is None
 
 
 def _fail_nth_create(monkeypatch: pytest.MonkeyPatch, call_number: int) -> None:

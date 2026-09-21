@@ -1,6 +1,6 @@
 # 第三阶段建议：游戏测试闭环与首次 Agent 接入
 
-状态：2026-09-21；TASK-003A、TASK-003B（含 R1）已验收；TASK-003C-R1 已完成修复与独立复验，离线工程链路通过，真实模型验收待完成。
+状态：2026-09-21；TASK-003A、TASK-003B（含 R1）已验收；TASK-003C-R1 离线工程链路和 V2 预算/费用工程准备通过。DeepSeek Flash 真实 Gate A 与 normal 三目标 Gate B 已通过；Gate C 未执行，完整真实模型验收仍在进行中。
 
 ## 1. 目标与依据
 
@@ -53,8 +53,24 @@ TASK-003C 任务单见 `docs/claude-tasks/TASK-003C-langgraph-test-agent.md`：�
 离线工程验收与真实模型效果分开记录；DeepSeek Flash 已选定，付费预算待确认。
 独立审查发现的评测错误传播、usage 累计、总时限与多工具协议问题已在 R1 修复。
 R1 以 443 项非 PostgreSQL 回归、原 32 组合脚本评测、离线 12 格 Agent 评测及异常注入复验通过；
-返工与验证记录见 `docs/claude-tasks/TASK-003C-R1-review-fixes.md`。真实模型尚未调用，
-因此离线结果只证明工程链路，不能作为 Agent 能力成绩。
+返工与验证记录见 `docs/claude-tasks/TASK-003C-R1-review-fixes.md`。这些离线结果只证明
+工程链路，不能作为 Agent 能力成绩。
+
+真实模型验收按 `docs/claude-tasks/TASK-003C-V1-real-model-acceptance.md` 分级执行。
+首次 Gate A 因输出预算耗尽而连续没有 `tool_use`；Agent schema 1.2 补齐 stop reason/文本证据后，
+诊断确认 `max_tokens`。供应商现用 `tool_choice=any` 且禁止并行工具调用，修复后以 2 次原生工具
+调用、0 次格式纠正完成 `normal × healing`，exit 0，replay match。其后 Gate B 三目标均 exit 0、
+规则失败 0、无模型 replay match，共 8 次模型调用、3,628 Token；Gate C 没有执行；
+benchmark 可配置预算与整批费用汇总已在 V2 完成。
+
+`docs/claude-tasks/TASK-003C-V2-benchmark-budget-cost.md` 已完成：显式 `BudgetSpec` 和价格配置
+贯穿 12 格，严格汇总 usage/费用，agent benchmark 升级到 1.2.0。离线 12 格、原 32 组合、
+466 项非 PostgreSQL 回归和 Ruff 均通过；V2 本身未调用真实模型。其后 Gate B 已通过，Gate C
+仍待独立决定。
+
+下一任务为 `docs/claude-tasks/TASK-003C-V3-real-gate-c-benchmark.md`：复用现有评测器执行真实固定
+12 格，不再增加 Agent 功能。Gate A/B 已累计 10 次有效调用、4,400 Token；Gate C 的整批技术
+上限为 72 次调用与 36,864 输出 Token，仍需所有者单独授权并确认单价/金额口径后才能执行。
 
 ## 5. 学习与范围
 

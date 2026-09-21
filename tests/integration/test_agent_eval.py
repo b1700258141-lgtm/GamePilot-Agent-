@@ -157,6 +157,17 @@ def test_the_eval_runs_on_the_default_budget(agent_eval: EvalRun) -> None:
     assert (len(NORMAL_CELLS), len(VARIANT_CELLS)) == (3, CELL_COUNT - 3)
 
 
+def test_default_offline_usage_is_unknown_instead_of_zero(agent_eval: EvalRun) -> None:
+    summary = agent_eval.report.summary
+
+    assert (summary.usage_known_cells, summary.usage_unknown_cells) == (0, CELL_COUNT)
+    assert summary.usage.available is False
+    assert summary.usage.total_tokens is None
+    assert summary.cost.amount is None
+    assert agent_eval.report.pricing is None
+    assert f"未知 {CELL_COUNT}/{CELL_COUNT}" in agent_eval.output
+
+
 # -------------------------------------------------------------------- 门槛指标
 
 
@@ -478,6 +489,51 @@ def test_the_cli_reports_only_the_variable_name(
     assert code == EXIT_EXECUTION_ERROR
     assert DEFAULT_API_KEY_ENV in captured.err
     assert list(tmp_path.iterdir()) == [], "找不到密钥时同样不产生任何产物"
+
+
+@pytest.mark.parametrize(
+    "extra",
+    [
+        ["--input-price", "1"],
+        ["--output-price", "2"],
+        ["--currency", "TEST"],
+        ["--input-price", "1", "--output-price", "2"],
+        ["--input-price", "-1", "--output-price", "2", "--currency", "TEST"],
+        ["--input-price", "1", "--output-price", "2", "--currency", "   "],
+    ],
+)
+def test_invalid_pricing_is_rejected_before_any_artifact(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture,
+    extra: list[str],
+) -> None:
+    output_dir = tmp_path / "out"
+    code = cli.main(["agent", "--output-dir", str(output_dir), *extra])
+    captured = capsys.readouterr()
+
+    assert code == EXIT_EXECUTION_ERROR
+    assert "输入错误" in captured.err
+    assert not output_dir.exists()
+
+
+def test_invalid_budget_is_rejected_before_any_artifact(
+    tmp_path: Path, capsys: pytest.CaptureFixture
+) -> None:
+    output_dir = tmp_path / "out"
+    code = cli.main(["agent", "--max-actions", "0", "--output-dir", str(output_dir)])
+    captured = capsys.readouterr()
+
+    assert code == EXIT_EXECUTION_ERROR
+    assert "输入错误" in captured.err
+    assert "max_action_attempts" in captured.err
+    assert not output_dir.exists()
+
+
+def test_timeout_alias_targets_the_http_budget_field() -> None:
+    parser = cli.build_parser()
+
+    assert parser.parse_args(["agent", "--timeout", "7"]).http_timeout == 7
+    assert parser.parse_args(["agent", "--http-timeout", "8"]).http_timeout == 8
 
 
 def test_the_acceptance_note_is_derived_from_the_provider_not_pasted() -> None:

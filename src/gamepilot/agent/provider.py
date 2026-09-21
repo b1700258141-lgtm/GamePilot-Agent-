@@ -258,7 +258,11 @@ class AnthropicCompatibleProvider:
 
     @property
     def sampling(self) -> dict[str, object]:
-        sampling: dict[str, object] = {"max_retries": 0}
+        sampling: dict[str, object] = {
+            "max_retries": 0,
+            "tool_choice": "any",
+            "disable_parallel_tool_use": True,
+        }
         if self._temperature is not None:
             sampling["temperature"] = self._temperature
         return sampling
@@ -282,6 +286,9 @@ class AnthropicCompatibleProvider:
             "max_tokens": max_output_tokens,
             "messages": conversation,
             "tools": list(tools),
+            # 工作流协议要求每轮恰好选择一个工具；在供应商层同步约束，
+            # 避免推理模型把整个输出预算耗在不可见思考上却不产生 tool_use。
+            "tool_choice": {"type": "any", "disable_parallel_tool_use": True},
             "timeout": timeout,
         }
         if system:
