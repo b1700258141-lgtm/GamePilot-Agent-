@@ -20,11 +20,17 @@
 - 可控缺陷靶场 `gamepilot.lab`：三个真实状态缺陷、独立内存入口，正常服务与公开 API 不受影响
 - 固定评测集 `gamepilot.benchmark`：4 个 profile × 8 个基线场景 = 32 个组合、同 profile 重跑、
   负向验证与 7 项带分子/分母的指标，退出码区分「符合预期 / 存在偏差 / 执行错误」
+- LangGraph 游戏测试 Agent `gamepilot.agent`：一条完整闭环（模型选动作 → 程序判定 → 收口 → 出报告），
+  产物与脚本执行器同构、可用既有 `replay` 无模型重跑；4 profile × 3 目标的 12 格配对试验
+  （离线工程链路已交付，**真实模型验收待完成**，见「游戏测试 Agent」一节）
 - 完整的领域单元测试、API 集成测试与真实 PostgreSQL 集成测试
 
 ## 当前未实现（属于后续阶段）
 
-Agent 接入（LLM/规划）、应用容器化与线上部署、前端与视觉测试、MCP。
+- **真实模型的能力验收**：Agent 闭环的工程链路已交付，但本机没有配置模型密钥、
+  也没有确认付费预算，因此 12 格试验仍是离线测试替身的结果，不代表 Agent 的能力成绩；
+- MCP 接入、应用容器化与线上部署、前端与视觉测试。
+
 这些不会提前引入。
 
 ## 环境要求
@@ -41,6 +47,17 @@ python -m venv .venv
 .venv\Scripts\Activate.ps1
 python -m pip install -e ".[dev]"
 ```
+
+Agent 闭环（`gamepilot.agent`）的依赖是**可选**的 `agent` extra（`langgraph` 与 `anthropic`）：
+靶场、脚本执行器与评测层都不需要它们，只跑前几节的内容不必安装。
+要跑 Agent 或它的测试时用：
+
+```powershell
+python -m pip install -e ".[dev,agent]"
+```
+
+已验证版本：`langgraph 1.2.11`、`anthropic 1.7.0`（Python 3.14.6）。
+没装 extra 时 Agent 相关测试会**明确跳过**（而不是收集阶段报导入错误）。
 
 ## 启动服务
 
@@ -65,6 +82,10 @@ python -m ruff format --check .
 
 真实 PostgreSQL 集成测试需要显式提供专用测试库，见
 「[PostgreSQL 集成测试](#postgresql-集成测试)」。
+
+Agent 相关测试需要 `agent` extra（`pip install -e ".[dev,agent]"`）；没装时这组测试按
+「未安装 agent extra」明确跳过，不会以导入错误的形式失败。默认测试**不发出任何真实模型
+调用**：真实模型路径要么要求显式的 `--paid`，要么只能由测试注入替身。
 
 ## 最小调用示例
 
@@ -211,6 +232,138 @@ python -m gamepilot.testing replay --base-url http://127.0.0.1:8000 --report art
   全部排他创建，不覆盖已有产物，也不会自动清理任何目录或会话。
 - 这套评测是**固定脚本基线**：它证明「缺陷可被稳定检出、指标可复算」，
   不代表 Agent 具备自主发现缺陷的能力——自主探索留给后续阶段。
+
+## 游戏测试 Agent（`gamepilot.agent`）
+
+上一节是脚本按固定剧本跑；这一节交付第一条**由模型选动作**的闭环：
+模型只看公开观测决定下一步，程序负责判定与收口；跑完的游戏事实与脚本执行器
+同构，因此能用**既有的** `replay` 在没有模型的情况下逐字段重跑。
+
+> **当前状态：离线工程链路已交付，真实模型验收待完成。**
+> 本机没有配置模型密钥、也没有确认付费预算，因此一次真实模型调用都没有发生
+> （费用为 0）。下面 12 格试验的数字由离线测试替身产生，只证明图、预算、判定、
+> 重跑这四条工程链路正确，**不是 Agent 的能力成绩**。
+> 首轮独立审查发现的评测错误传播、Token 累计、总时限请求边界和多工具协议问题
+> 已在 TASK-003C-R1 修复；443 项非 PostgreSQL 回归与异常注入复验通过。
+
+### 工作流
+
+```text
+START → initialize → decide → validate → execute → check → route ─┬→ decide
+                                                                  └→ finalize → END
+```
+
+| 节点 | 职责 |
+| --- | --- |
+| `initialize` | 创建会话、初始查询与初始校验（全部由节点确定性地完成） |
+| `decide` | 预算检查 → 组装输入 → 调用模型 → 记录用量与**实际发出的输入**（报告里可事后核对模型看到了什么） |
+| `validate` | 校验工具选择（一次一个、工具已知、参数合法）；被拒绝的请求**不会产生任何游戏请求** |
+| `execute` | 把动作追加到本次场景后执行并做确定性校验；预期结果由公开规则与已验证快照**在请求之前**算出，模型不能填写 |
+| `check` | 按确定性覆盖条件求值 |
+| `route` | 决定回到 `decide` 还是进入 `finalize` |
+| `finalize` | 收尾：把已落下的证据封成可重跑的 `CaseReport` |
+
+- **State / Node / Edge 各管一段**：
+  - `AgentState` 只装「任务进展」这类数据（目标、会话、快照、动作、决策记录、
+    预算消耗的快照、停止原因），不装 HTTP 客户端、执行器、预算对象或供应商——
+    这些运行时对象由宿主的 `AgentContext` 持有，不参与序列化，也不随节点重入而重建。
+  - 节点只读 State、返回要合并进去的增量；判定与收敛的**控制流**写在边上而不是
+    藏在节点内部的 `while` 里：`route` 用条件边决定「再去问一次模型」还是「收尾」。
+  - 预算是**权威计数**（在 `Budget` 对象里），State 里的 `model_calls` / `actions_attempted`
+    只是给报告用的镜像；因此重新进入某个节点不会把计数清零。
+- **完成由程序判定**：模型的 `finish` 只是申请结束，能否算「达成」由覆盖条件与规则检查
+  两条确定性证据决定；模型提前结束而覆盖未满足时记为**未完成**，不是通过。
+- **任何错误、超限和取消都收口到报告保存**：每个节点都不抛异常出去，
+  停止原因先到先得，最终统一由 `finalize` 落盘。
+- **预算在调用之前检查**，超过上限不会再发出任何模型或游戏请求：
+
+  | 预算 | 默认值 |
+  | --- | --- |
+  | 游戏会话数 | **1 个**（不是可调参数：闭环只在 `initialize` 创建一次会话，不会新建第二个） |
+  | 动作尝试数（含被拒绝的） | 10（不超过脚本执行器的 20） |
+  | 模型调用数 | 12 |
+  | 格式纠正次数（全任务累计） | 2 |
+  | 单次模型调用超时 | 30 s |
+  | 单次游戏 HTTP 超时 | 5 s |
+  | 整任务时限 | 120 s |
+  | 单次输出 Token 上限 | 512 |
+  | 付费调用 | **默认关闭** |
+
+- **退出码**（对外契约，`2` 优先于其他结论）：
+
+  | 码 | 含义 |
+  | --- | --- |
+  | `0` | 目标达成，且所观察到的规则全部通过 |
+  | `1` | 独立规则证据确认了游戏违规 |
+  | `2` | 模型 / 工具 / 输入 / 报告错误（与其他结论同时出现时以 `2` 为准） |
+  | `3` | 请求正常结束，但目标未达成（提前结束、预算耗尽） |
+
+- **两份报告**，用同一个 `run_id` 关联：
+  - `<run_id>.json`：既有的 `RunReport`（schema 1.1），就是 `gamepilot.testing replay` 能读的那一份；
+  - `<run_id>-agent.json`：独立版本的 `AgentRunReport`，记目标覆盖、每一次模型决策与用量、
+    预算消耗、停止原因，并指向上面那份运行报告。
+  两份都是排他创建，不覆盖已有证据。
+
+### 运行命令（PowerShell）
+
+```powershell
+# 1. 离线闭环：测试替身按给定的动作序列逐轮作答（每个动作仍走完整的校验、执行与判定）
+.venv\Scripts\python.exe -m gamepilot.agent run --base-url http://127.0.0.1:8765 `
+  --goal healing --seed 42 --provider fake --script attack,use_potion
+
+# 2. 用既有重跑器复核：完全不需要模型，逐字段比对
+.venv\Scripts\python.exe -m gamepilot.testing replay --base-url http://127.0.0.1:8765 `
+  --report artifacts/agent-runs/<run_id>.json --output-dir artifacts/agent-runs
+
+# 3. 真实模型：必须同时给出 --paid，密钥只从环境变量读
+$env:GAMEPILOT_AGENT_API_KEY = "<在会话里设置，不要写进任何文件>"
+.venv\Scripts\python.exe -m gamepilot.agent run --base-url http://127.0.0.1:8765 `
+  --goal healing --seed 42 --paid
+
+# 4. 12 格配对试验（默认离线替身，不发起任何付费调用）
+.venv\Scripts\python.exe -m gamepilot.benchmark agent --output-dir artifacts/agent-benchmarks
+```
+
+- 未给 `--paid` 时**不会发出任何模型请求**，缺少密钥时只报**变量名**、
+  不回显也不记录它的值；这两种情况都退出 `2`，也不会留下任何产物。
+- 上面的第 3 条在本机当前**跑不通**（没有配置密钥）——这本身就是待完成的验收项。
+- 想估算费用须显式给出单价（`--input-price` / `--output-price` / `--currency`）；
+  没给单价时报告里的费用是 `unknown`，不是 `0`。
+
+### 12 格配对试验
+
+4 个 profile × 3 个目标 = 12 格，每格留下四份证据：
+Agent 报告、运行报告、同 profile 无模型重跑、以及同一 profile 上的**脚本对照组**。
+
+| 门槛指标 | 分子 / 分母 | 目标 | 本次（离线替身） |
+| --- | --- | --- | --- |
+| `designated_opportunities` | 真实触发且命中目标规则的预定机会 / 3 | 3/3 | 3/3 |
+| `distinct_defect_coverage` | 去重后检出的缺陷数 / 3 | 3/3 | 3/3 |
+| `normal_false_positive` | normal 上判失败的格数 / 3 | 0/3 | 0/3 |
+| `variant_untriggered_false_positive` | 未触发的变体格里判失败的格数 / 6 | 0/6 | 0/6 |
+| `execution_errors` | 执行错误格数 / 12（不缩小分母） | 0/12 | 0/12 |
+| `replay_mismatch` | 重跑出现差异的格数 / 12 | 0/12 | 0/12 |
+
+另有三个**信息项**（`beyond_designated`、`goal_coverage`、`goal_incomplete`）如实列出但不参与门槛。
+退出码含义与脚本评测一致（`0` 全部达标 / `1` 存在偏差 / `2` 执行错误）；
+本次离线结果是 `0`，全部门槛指标 `6/6`。
+
+执行错误按 Agent 原始运行、同 profile 重跑、脚本对照和报告 I/O 分阶段保存；任一阶段错误
+都会让总评测退出 `2`。重跑的“可比”只包含 `match` 与 `mismatch`，`not_comparable` 和
+`not_executed` 分别计数，不会被算进可比分母。
+
+报告布局：`<output-dir>/<run_id>/agent-benchmark.json` 为摘要，
+`cells/<profile>/<goal_id>/` 下为 `<run_id>-agent.json` 与 `run/`、`replay/`、`control/` 三个子目录。
+全部排他创建，不覆盖也不自动清理。
+
+### 边界
+
+- **Agent 看不到答案**：`gamepilot.agent` 不导入 `lab`、`benchmark` 或 `testing.scenarios`
+  （也不导入 `domain` / 仓储 / 持久化）。这条边界由 `tests/unit/test_agent_boundary.py`
+  强制检查：静态扫描 + 干净解释器里的 `sys.modules` 运行时检查 + 实际发给模型的输入里
+  不含 profile 名、缺陷编号、脚本场景编号或密钥。
+- **观测是数据，不是指令**：被测服务的响应文本无法扩展工具白名单、改变地址或预算。
+- **本任务未触及**领域 / API / 仓储 / 数据库路径；原有的报告契约与规则不变。
 
 ## 数据库与后端选择
 
@@ -390,13 +543,18 @@ API 层（FastAPI 路由 + Pydantic 请求 Schema）
 - **评测与执行器解耦**：`gamepilot.benchmark` 只编排「跑哪一格、重跑哪一格、怎么核对清单」，
   判定本身仍然由 `gamepilot.testing` 的 runner、oracle 与 replay 完成；
   normal 与变体使用同一个 `GameClient`、runner、oracle 与 replay。
+- **脚本执行器与 Agent 共用一层增量执行**：`gamepilot.testing.execution.CaseExecution`
+  只做三件事——开始会话、执行一步、收尾封报告；脚本按固定剧本驱动它，Agent 由模型逐轮
+  选动作驱动它。因此两者的客户端行为、判定与报告完全同构，Agent 的轨迹天然可以被既有
+  `replay` 重跑。Agent 不导入靶场、评测清单或脚本场景，判定始终由 oracle 完成。
 
 ## 后续计划
 
 TASK-002A 完成数据库骨架与迁移，TASK-002B 完成 PostgreSQL 仓储、
 事务边界与确定性恢复，TASK-003A 完成确定性测试执行器与规则判定基线，
-TASK-003B 完成可控缺陷靶场与固定评测集（实施完成，待 Codex 独立验收）；
-下一步是 Agent 工具层：由 Agent 自主探索而不是照脚本执行。
+TASK-003B 完成可控缺陷靶场与固定评测集，TASK-003C 完成第一条 LangGraph
+Agent 闭环与 12 格配对试验（离线工程部分实施完成，真实模型验收待完成）；
+下一步是在确认密钥与付费预算后做真实模型验收，再谈 MCP 与更自主的探索策略。
 详见 `docs/PHASE_2_PLAN.md`、`docs/PHASE_3_PLAN.md` 与 `AGENTS.md`。
 
 ## 已知限制
@@ -416,4 +574,10 @@ TASK-003B 完成可控缺陷靶场与固定评测集（实施完成，待 Codex 
   只用于说明「不是真实网络请求」；真实 localhost HTTP 的验证由 `gamepilot.lab serve`
   加 `gamepilot.testing run/replay` 手动完成；
 - 评测是固定脚本基线，不是 Agent 自主发现能力；
-- 尚未接入 LLM/规划、MCP，也没有缺陷开关与轨迹自动最小化（属于后续任务）。
+- Agent 闭环的**真实模型验收待完成**：本机没有配置密钥、也没有确认付费预算，
+  12 格试验的数字来自离线测试替身，只说明工程链路正确；
+- Agent 一次只跑一个会话、一条闭环，顺序执行不做并发；动作与模型调用上限固定
+  （默认 10 / 12），没有自适应预算，也不自动重试失败的模型调用；
+- Agent 只有两个工具（`perform_action` / `finish`），一次只能调用一个；
+  没有轨迹最小化、缺陷复现脚本生成，也没有跨会话的长期记忆；
+- 尚未接入 MCP，也没有缺陷开关（属于后续任务）。

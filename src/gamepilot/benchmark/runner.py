@@ -35,7 +35,6 @@ from gamepilot.testing.models import (
     ReplayCaseReport,
     ReplayReport,
     RunReport,
-    RunSummary,
 )
 from gamepilot.testing.replay import ReplayInputError, load_report, replay_report
 from gamepilot.testing.rules import (
@@ -49,6 +48,7 @@ from gamepilot.testing.runner import (
     current_environment,
     new_run_id,
     run_case,
+    single_case_report,
     utc_now_iso,
     write_report,
 )
@@ -87,26 +87,7 @@ class BenchmarkExecutionError(Exception):
 
 def _single_case_report(case: CaseReport, client: GameClient, run_id: str) -> RunReport:
     """把单个场景的证据包成一份可重跑的运行报告。"""
-    return RunReport(
-        schema_version=SCHEMA_VERSION,
-        rules_version=RULES_VERSION,
-        rules_source=RULES_SOURCE,
-        mode="run",
-        run_id=run_id,
-        suite=SUITE,
-        base_url=client.base_url,
-        started_at=case.started_at,
-        finished_at=case.finished_at,
-        duration_ms=case.duration_ms,
-        timeout_seconds=client.timeout,
-        environment=current_environment(),
-        summary=RunSummary(
-            passed=int(case.status == "pass"),
-            failed=int(case.status == "fail"),
-            errored=int(case.status == "error"),
-        ),
-        cases=[case],
-    )
+    return single_case_report(case, client, run_id, SUITE)
 
 
 def _failing_rules(case: CaseReport) -> list[str]:
