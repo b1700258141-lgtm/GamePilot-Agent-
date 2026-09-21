@@ -30,6 +30,15 @@ POTION_HEAL = 25
 DEFAULT_TIMEOUT_SECONDS = 5.0
 MAX_ACTION_ATTEMPTS = 20
 
+# 接口层常量：公开规则文档「无效动作返回明确的领域错误，并由 API 映射为 HTTP 409」。
+# 动作预期推导（`planning.derive_expectation`）用它们描述「服务应该返回什么」，
+# 因此这些值同样来自公开规则，而不是从被测实现导入。
+HTTP_OK = 200
+HTTP_CONFLICT = 409
+CODE_BATTLE_NOT_ACTIVE = "battle_not_active"
+CODE_PLAYER_FULL_HP = "player_full_hp"
+CODE_NO_POTIONS = "no_potions"
+
 # 报告 schema 版本；重跑只接受明确支持的版本。
 SCHEMA_VERSION = "1.1"
 SUPPORTED_SCHEMA_VERSIONS = ("1.1",)

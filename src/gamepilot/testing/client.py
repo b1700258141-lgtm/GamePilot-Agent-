@@ -64,20 +64,27 @@ class GameClient:
     def timeout(self) -> float:
         return self._timeout
 
-    async def create_session(self, seed: int) -> HttpObservation:
+    async def create_session(self, seed: int, *, timeout: float | None = None) -> HttpObservation:
         """POST /api/v1/game-sessions"""
-        return await self._send("POST", "/api/v1/game-sessions", json_body={"seed": seed})
+        return await self._send(
+            "POST", "/api/v1/game-sessions", json_body={"seed": seed}, timeout=timeout
+        )
 
-    async def get_session(self, session_id: str) -> HttpObservation:
+    async def get_session(
+        self, session_id: str, *, timeout: float | None = None
+    ) -> HttpObservation:
         """GET /api/v1/game-sessions/{session_id}"""
-        return await self._send("GET", f"/api/v1/game-sessions/{session_id}")
+        return await self._send("GET", f"/api/v1/game-sessions/{session_id}", timeout=timeout)
 
-    async def perform_action(self, session_id: str, action: ActionName) -> HttpObservation:
+    async def perform_action(
+        self, session_id: str, action: ActionName, *, timeout: float | None = None
+    ) -> HttpObservation:
         """POST /api/v1/game-sessions/{session_id}/actions"""
         return await self._send(
             "POST",
             f"/api/v1/game-sessions/{session_id}/actions",
             json_body={"action": action},
+            timeout=timeout,
         )
 
     async def _send(
@@ -86,14 +93,16 @@ class GameClient:
         path: str,
         *,
         json_body: dict[str, object] | None = None,
+        timeout: float | None = None,
     ) -> HttpObservation:
+        # `timeout=None` 时用客户端默认值；调用方可以在整体时限快到时收紧单次超时。
         started = time.perf_counter()
         try:
             response = await self._http.request(
                 method,
                 f"{self._request_base}{path}",
                 json=json_body,
-                timeout=self._timeout,
+                timeout=self._timeout if timeout is None else timeout,
             )
         except httpx.TimeoutException as exc:
             return self._transport_failure(method, path, "timeout", exc, started)

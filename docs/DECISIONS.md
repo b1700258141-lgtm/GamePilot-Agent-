@@ -1,5 +1,20 @@
 # 关键设计决策
 
+## 2026-09-20：TASK-003C 模型选择（已确认）
+
+所有者要求首次 Agent 复用当前 Claude Code 的 DeepSeek Flash 模型配置。
+已核对项目本地配置中的模型标识为 `deepseek-v4-flash`，当前进程的接口地址为
+`https://api.deepseek.com/anthropic`。新 Agent 应显式选择该模型和兼容入口，
+不把本地 Claude Code 设置文件作为产品运行依赖，也不复制其权限或工具配置。
+
+当前进程的 `ANTHROPIC_MODEL` 为 `deepseek-v4-pro[1m]`，与项目覆盖值不同；
+不能直接继承该值导致实际调用 Pro。凭据由环境变量注入，不进入代码、报告或文档。
+本轮只核对非密钥配置，没有请求模型接口；协议兼容性和实际费用仍需实施验证。
+
+LangGraph 优先、MCP 后置、单任务预算及 12 组合配对子集评测仍是待确认建议，
+不是本条模型决策自动批准的内容。详细草案见
+`docs/claude-tasks/TASK-003C-langgraph-test-agent.md`。
+
 ## 2026-09-20：TASK-003B 缺陷靶场与评测口径
 
 背景：执行器已能判定规则是否符合，但「判定器能不能发现缺陷」还没有证据。TASK-003B 需要植入

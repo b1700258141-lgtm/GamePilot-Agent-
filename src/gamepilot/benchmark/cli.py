@@ -8,12 +8,21 @@
 
 评测在进程内组装四个隔离的靶场应用，不连接也不依赖任何外部服务，
 不会启动、连接或清理开发数据库，也不会删除任何会话。
+
+**注意 `agent` 子命令的退出码含义不同**：Agent 的一条闭环有自己的对外契约
+（0 目标达成 / 1 确认游戏违规 / 2 执行错误 / 3 目标未完成，见
+`gamepilot.agent.report.derive_exit_code`）。本入口一律返回**评测层**的含义：
+0 = 12 格无偏差，1 = 出现偏差，2 = 执行错误，不转发单格的退出码。
 """
+
+from __future__ import annotations
 
 import argparse
 import asyncio
+import os
 import sys
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
+from typing import TYPE_CHECKING
 
 from gamepilot.testing.replay import ReplayInputError
 from gamepilot.testing.rules import DEFAULT_TIMEOUT_SECONDS
@@ -22,7 +31,16 @@ from gamepilot.testing.runner import ReportWriteError
 from .models import BenchmarkReport, CombinationEvidence
 from .runner import EXIT_EXECUTION_ERROR, BenchmarkExecutionError, run_benchmark
 
+if TYPE_CHECKING:  # 只在类型检查时需要：运行期不导入 agent extra（也不导入 langgraph）
+    from gamepilot.agent.provider import ModelProvider
+
+    from .agent_models import AgentCellEvidence, AgentEvalReport
+
 DEFAULT_OUTPUT_DIR = "artifacts/benchmarks"
+DEFAULT_AGENT_OUTPUT_DIR = "artifacts/agent-benchmarks"
+
+AGENT_PROVIDER_OFFLINE = "offline"
+AGENT_PROVIDER_REAL = "anthropic-compatible"
 
 _STATUS_LABEL = {
     "ok": "符合预期",
@@ -45,6 +63,45 @@ def build_parser() -> argparse.ArgumentParser:
         help=f"评测输出目录（默认 {DEFAULT_OUTPUT_DIR}）",
     )
     run_parser.add_argument(
+        "--timeout",
+        type=float,
+        default=DEFAULT_TIMEOUT_SECONDS,
+        help=f"单次请求超时秒数（默认 {DEFAULT_TIMEOUT_SECONDS}）",
+    )
+
+    agent_parser = subparsers.add_parser(
+        "agent",
+        help="运行 4 profile × 3 目标的 12 格 Agent 配对试验（退出码含义与 run 不同，见模块说明）",
+    )
+    agent_parser.add_argument(
+        "--output-dir",
+        default=DEFAULT_AGENT_OUTPUT_DIR,
+        help=f"评测输出目录（默认 {DEFAULT_AGENT_OUTPUT_DIR}）",
+    )
+    agent_parser.add_argument(
+        "--provider",
+        default=AGENT_PROVIDER_OFFLINE,
+        choices=sorted((AGENT_PROVIDER_OFFLINE, AGENT_PROVIDER_REAL)),
+        help=(
+            f"供应商（默认 {AGENT_PROVIDER_OFFLINE} 测试替身）；"
+            f"{AGENT_PROVIDER_REAL} 需要 --paid 且从环境变量读密钥"
+        ),
+    )
+    agent_parser.add_argument(
+        "--paid",
+        action="store_true",
+        help="确认允许付费的真实模型调用；不给出时不会发出任何模型请求",
+    )
+    agent_parser.add_argument("--model", default=None, help="模型名（仅真实供应商使用）")
+    agent_parser.add_argument(
+        "--model-base-url", default=None, help="模型入口地址（仅真实供应商使用）"
+    )
+    agent_parser.add_argument(
+        "--api-key-env",
+        default=None,
+        help="存放密钥的**环境变量名**；不接受密钥本身，输出中只出现变量名",
+    )
+    agent_parser.add_argument(
         "--timeout",
         type=float,
         default=DEFAULT_TIMEOUT_SECONDS,
@@ -139,9 +196,148 @@ async def _run_command(args: argparse.Namespace) -> int:
     return report.summary.exit_code
 
 
+# ------------------------------------------------------------- agent 子命令
+
+
+def _make_agent_provider_factory(args: argparse.Namespace) -> Callable[[str], ModelProvider]:
+    """构造 `goal_id -> ModelProvider` 的工厂。
+
+    默认给出**离线测试替身**：本入口不会隐式发起付费调用。真实模型需要
+    `--paid` 与一个已导出的密钥环境变量；这里只读环境变量名，不读密钥本身。
+    """
+    from gamepilot.agent.provider import (
+        DEFAULT_API_KEY_ENV,
+        DEFAULT_BASE_URL,
+        DEFAULT_MODEL,
+        AnthropicCompatibleProvider,
+    )
+
+    from .agent_eval import offline_provider_factory
+
+    if args.provider == AGENT_PROVIDER_OFFLINE:
+        return offline_provider_factory
+
+    if not args.paid:
+        raise ValueError(
+            f"付费运行默认关闭：--provider {AGENT_PROVIDER_REAL} 需要同时给出 --paid；"
+            "本次不会发出任何模型请求"
+        )
+    api_key_env = args.api_key_env or DEFAULT_API_KEY_ENV
+    api_key = os.environ.get(api_key_env)
+    if not api_key:
+        # 只报变量名：不回显值，也不描述它的内容。
+        raise ValueError(
+            f"环境变量 {api_key_env} 未设置，无法调用真实模型；"
+            "请先导出它（本次不会显示或记录它的值）"
+        )
+    # 4 profile 共用同一个供应商实例：12 格的模型配置必须完全一致。
+    provider = AnthropicCompatibleProvider(
+        api_key=api_key,
+        model=args.model or DEFAULT_MODEL,
+        base_url=args.model_base_url or DEFAULT_BASE_URL,
+        api_key_env=api_key_env,
+    )
+    return lambda _goal_id: provider
+
+
+def _print_agent_cell(cell: AgentCellEvidence) -> None:
+    marks = "".join(
+        (
+            "T" if cell.triggered else "-",
+            "D" if cell.detected else "-",
+            "+" if cell.beyond_designated else "-",
+        )
+    )
+    print(
+        f"  [{marks}] {cell.profile} × {cell.goal_id}：停止 {cell.stop_reason}"
+        f"（退出码 {cell.exit_code}），覆盖{'达到' if cell.goal_met else '未达到'}，"
+        f"判定 {cell.case_status}，动作 {cell.spend.actions_attempted}，"
+        f"模型调用 {cell.spend.model_calls}，重跑 {cell.replay_outcome}"
+    )
+    if cell.target_rules_missed:
+        print(
+            f"      未命中目标规则：{'、'.join(cell.target_rules_missed)}"
+            f"（触发={cell.triggered}，停止原因={cell.stop_reason}）"
+        )
+
+
+def _print_agent_metrics(report: AgentEvalReport) -> None:
+    print("指标（门槛项与信息项分开）：")
+    for metric in report.metrics:
+        mark = "达标" if metric.passed else "未达标"
+        gate = "门槛" if metric.required else "信息"
+        print(
+            f"  [{gate}] {metric.metric_id}：{metric.ratio}"
+            f"（目标 {metric.target}）{mark} - {metric.description}"
+        )
+        for line in metric.details:
+            print(f"      {line}")
+
+
+def _render_agent(report: AgentEvalReport, output_dir: str) -> None:
+    summary = report.summary
+    provider = report.provider
+    print(
+        f"Agent 评测运行 {report.run_id}（agent-benchmark {report.agent_benchmark_version}，"
+        f"seed={report.seed}）"
+    )
+    print(f"输出目录：{output_dir}")
+    print(
+        f"供应商：{provider.get('provider_id')} / {provider.get('model')}"
+        f"（测试替身={provider.get('is_test_double')}）"
+    )
+    print(f"清单来源：{report.manifest_source}")
+    print(
+        f"格数：计划 {summary.cells_planned}，执行 {summary.cells_executed}，"
+        f"目标达成 {summary.goals_met}，目标未完成 {summary.goals_incomplete}，"
+        f"执行错误 {summary.execution_errors}"
+    )
+    print(
+        f"分阶段执行错误：Agent {summary.agent_execution_errors}/{summary.cells_planned}，"
+        f"重跑 {summary.replay_execution_errors}/{summary.cells_planned}，"
+        f"对照 {summary.control_execution_errors}/{summary.cells_planned}"
+    )
+    print(
+        f"预定机会：{summary.designated_detected}/{summary.designated_opportunities}，"
+        f"去重缺陷 {summary.distinct_defects_detected}，"
+        f"normal 误报 {summary.normal_false_positives}，"
+        f"重跑一致 {summary.replay_matches}/{summary.replay_comparable} 可比，"
+        f"差异 {summary.replay_mismatches}，不可比 {summary.replay_not_comparable}，"
+        f"未执行 {summary.replay_not_executed}"
+    )
+    print("逐格结果（T=真实触发，D=清单内检出，+=清单外额外检出）：")
+    current = None
+    for cell in report.cells:
+        if cell.profile != current:
+            current = cell.profile
+            print(f"[{current}] 靶场：{report.profile_map.get(current, '未记录该 profile')}")
+        _print_agent_cell(cell)
+    _print_agent_metrics(report)
+    print(
+        f"Agent 评测结论：{_STATUS_LABEL[summary.status]}"
+        f"（门槛指标 {summary.metrics_passed}/{summary.metrics_total}，"
+        f"退出码 {summary.exit_code}）"
+    )
+    print(f"说明：{summary.acceptance_note}")
+
+
+async def _run_agent_command(args: argparse.Namespace) -> int:
+    from .agent_eval import run_agent_eval
+
+    factory = _make_agent_provider_factory(args)
+    report, path = await run_agent_eval(
+        args.output_dir, provider_factory=factory, timeout=args.timeout
+    )
+    _render_agent(report, args.output_dir)
+    print(f"摘要：{path}")
+    return report.summary.exit_code
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     try:
+        if args.command == "agent":
+            return asyncio.run(_run_agent_command(args))
         return asyncio.run(_run_command(args))
     except ReplayInputError as exc:
         print(f"输入错误：{exc}", file=sys.stderr)

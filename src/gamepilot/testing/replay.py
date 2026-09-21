@@ -32,8 +32,9 @@ from .models import (
     SnapshotView,
     StepReport,
 )
+from .reporting import current_environment, new_run_id, utc_now_iso
 from .rules import MAX_ACTION_ATTEMPTS, RULES_VERSION, SCHEMA_VERSION, SUPPORTED_SCHEMA_VERSIONS
-from .runner import current_environment, new_run_id, run_case, utc_now_iso
+from .runner import run_case
 
 # 单条差异的渲染上限：报告要能读，不能把整份快照塞进一行。
 _MAX_RENDER = 300
