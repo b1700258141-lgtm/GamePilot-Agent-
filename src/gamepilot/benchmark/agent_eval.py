@@ -32,9 +32,16 @@ import httpx
 from gamepilot.agent.budget import Budget
 from gamepilot.agent.goals import GOAL_FULL_HEALTH, GOAL_HEALING, GOAL_VICTORY, resolve_goal
 from gamepilot.agent.graph import run_agent
-from gamepilot.agent.models import AgentRunReportRef, ChatMessage, ToolCallRequest
+from gamepilot.agent.models import (
+    AgentRunReportRef,
+    BudgetSpec,
+    ChatMessage,
+    CostEstimate,
+    TokenUsage,
+    ToolCallRequest,
+)
 from gamepilot.agent.provider import FakeProvider, ModelProvider, ModelReply
-from gamepilot.agent.report import build_agent_report, write_agent_report
+from gamepilot.agent.report import build_agent_report, estimate_cost, write_agent_report
 from gamepilot.agent.tools import TOOL_FINISH, TOOL_PERFORM_ACTION
 from gamepilot.lab import PROFILE_CATALOG, PROFILES, TriggerRecorder, create_lab_app
 from gamepilot.testing.client import GameClient
@@ -47,12 +54,7 @@ from gamepilot.testing.reporting import (
     utc_now_iso,
     write_report,
 )
-from gamepilot.testing.rules import (
-    DEFAULT_TIMEOUT_SECONDS,
-    RULES_SOURCE,
-    RULES_VERSION,
-    SCHEMA_VERSION,
-)
+from gamepilot.testing.rules import RULES_SOURCE, RULES_VERSION, SCHEMA_VERSION
 from gamepilot.testing.runner import run_case, single_case_report
 from gamepilot.testing.scenarios import BASELINE_SCENARIOS
 
@@ -71,6 +73,7 @@ from .agent_models import (
     AgentEvalReport,
     AgentEvalSummary,
     AgentMetricResult,
+    AgentPricing,
     AgentUsageCell,
 )
 
@@ -462,6 +465,32 @@ def acceptance_note(provider: ModelProvider) -> str:
     return "本次使用真实模型调用，结论可作为首轮 12 格小样本冒烟结果。"
 
 
+def summarize_spend(
+    spend: Sequence[AgentUsageCell],
+    *,
+    cells_planned: int,
+    pricing: AgentPricing | None,
+) -> tuple[int, int, TokenUsage, CostEstimate]:
+    """汇总整批用量；任一计划格未知时，不输出伪造的部分总量。"""
+    known = sum(1 for item in spend if item.usage.available)
+    unknown = max(cells_planned - known, 0)
+    if len(spend) == cells_planned and unknown == 0:
+        prompt = sum(item.usage.prompt_tokens or 0 for item in spend)
+        completion = sum(item.usage.completion_tokens or 0 for item in spend)
+        total = sum(item.usage.total_tokens or 0 for item in spend)
+        usage = TokenUsage.of(prompt, completion, total)
+    else:
+        usage = TokenUsage.unknown()
+
+    cost = estimate_cost(
+        usage,
+        input_price_per_million=(pricing.input_price_per_million if pricing else None),
+        output_price_per_million=(pricing.output_price_per_million if pricing else None),
+        currency=pricing.currency if pricing else None,
+    )
+    return known, unknown, usage, cost
+
+
 # ------------------------------------------------------------------- 单格
 
 
@@ -488,10 +517,12 @@ async def _run_cell(
     client: GameClient,
     recorder: TriggerRecorder,
     root: Path,
+    budget_spec: BudgetSpec,
+    pricing: AgentPricing | None,
 ) -> AgentCellEvidence:
     cell_dir = root / "cells" / combination.profile / combination.goal_id
     goal = resolve_goal(combination.goal_id)
-    budget = Budget(AGENT_EVAL_BUDGET)
+    budget = Budget(budget_spec)
     run_id = new_run_id()
     started_at = utc_now_iso()
     started = time.perf_counter()
@@ -503,7 +534,7 @@ async def _run_cell(
         goal=goal,
         seed=AGENT_SEED,
         description=f"Agent 评测 {combination.goal_id}（{combination.profile}，seed={AGENT_SEED}）",
-        timeout_provider=lambda: budget.request_timeout(AGENT_EVAL_BUDGET.http_timeout_seconds),
+        timeout_provider=lambda: budget.request_timeout(budget_spec.http_timeout_seconds),
     )
     duration_ms = (time.perf_counter() - started) * 1000
 
@@ -535,6 +566,9 @@ async def _run_cell(
             if run_report_path is not None
             else None
         ),
+        input_price_per_million=(pricing.input_price_per_million if pricing else None),
+        output_price_per_million=(pricing.output_price_per_million if pricing else None),
+        currency=pricing.currency if pricing else None,
     )
     agent_report_path: Path | None = None
     agent_report_error: str | None = None
@@ -559,6 +593,9 @@ async def _run_cell(
                 if run_report_path is not None
                 else None
             ),
+            input_price_per_million=(pricing.input_price_per_million if pricing else None),
+            output_price_per_million=(pricing.output_price_per_million if pricing else None),
+            currency=pricing.currency if pricing else None,
         )
 
     # 同 profile 无模型重跑：只重放实际动作，不再请求模型。
@@ -670,7 +707,8 @@ async def run_agent_eval(
     output_dir: str | Path,
     *,
     provider_factory: Callable[[str], ModelProvider] | None = None,
-    timeout: float = DEFAULT_TIMEOUT_SECONDS,
+    budget: BudgetSpec = AGENT_EVAL_BUDGET,
+    pricing: AgentPricing | None = None,
 ) -> tuple[AgentEvalReport, Path]:
     """跑完 12 格配对试验，返回摘要与摘要文件路径。
 
@@ -696,7 +734,9 @@ async def run_agent_eval(
                     transport=httpx.ASGITransport(app=app), base_url=AGENT_EVAL_BASE_URL
                 )
             )
-            clients[profile] = GameClient(http, base_url=AGENT_EVAL_BASE_URL, timeout=timeout)
+            clients[profile] = GameClient(
+                http, base_url=AGENT_EVAL_BASE_URL, timeout=budget.http_timeout_seconds
+            )
             recorders[profile] = recorder
 
         for combination in AGENT_COMBINATIONS:
@@ -709,6 +749,8 @@ async def run_agent_eval(
                     client=clients[combination.profile],
                     recorder=recorders[combination.profile],
                     root=root,
+                    budget_spec=budget,
+                    pricing=pricing,
                 )
             )
 
@@ -721,6 +763,11 @@ async def run_agent_eval(
     agent_errors = sum(1 for row in cells if "agent" in _cell_error_stages(row))
     replay_errors = sum(1 for row in cells if "replay" in _cell_error_stages(row))
     control_errors = sum(1 for row in cells if "control" in _cell_error_stages(row))
+    usage_known, usage_unknown, total_usage, total_cost = summarize_spend(
+        [row.spend for row in cells],
+        cells_planned=len(AGENT_COMBINATIONS),
+        pricing=pricing,
+    )
     summary = AgentEvalSummary(
         cells_planned=len(AGENT_COMBINATIONS),
         cells_executed=len(cells),
@@ -746,6 +793,10 @@ async def run_agent_eval(
         metrics_total=sum(1 for metric in metrics if metric.required),
         status=status,  # type: ignore[arg-type]
         exit_code=_exit_code(status),
+        usage_known_cells=usage_known,
+        usage_unknown_cells=usage_unknown,
+        usage=total_usage,
+        cost=total_cost,
         acceptance_note=acceptance_note(probe),
     )
 
@@ -762,8 +813,9 @@ async def run_agent_eval(
         profile_map={profile: PROFILE_CATALOG[profile].summary for profile in PROFILES},
         goal_ids=list(AGENT_GOAL_IDS),
         goal_texts={goal_id: resolve_goal(goal_id).goal for goal_id in AGENT_GOAL_IDS},
-        budget_seconds=AGENT_EVAL_BUDGET.total_timeout_seconds,
-        budget=AGENT_EVAL_BUDGET.model_dump(),
+        budget_seconds=budget.total_timeout_seconds,
+        budget=budget.model_dump(),
+        pricing=pricing,
         provider={
             "provider_id": probe.provider_id,
             "model": probe.model,
@@ -795,4 +847,5 @@ __all__ = [
     "offline_provider_factory",
     "read_observation",
     "run_agent_eval",
+    "summarize_spend",
 ]

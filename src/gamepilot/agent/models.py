@@ -23,7 +23,7 @@ from gamepilot.testing.models import ActionName
 from gamepilot.testing.rules import MAX_ACTION_ATTEMPTS
 
 # Agent 报告自己的 schema 版本，与 testing 的 1.1 无关，各自独立演进。
-AGENT_SCHEMA_VERSION = "1.1"
+AGENT_SCHEMA_VERSION = "1.2"
 
 # 停止原因：每种都有唯一的判定位置，收尾时只保留最先发生的那一个。
 AgentStopReason = Literal[
@@ -226,6 +226,8 @@ class ModelCallRecord(AgentModel):
     elapsed_ms: float
     usage: TokenUsage
     messages: list[ChatMessage] = Field(default_factory=list)
+    response_text: str | None = None
+    provider_stop_reason: str | None = None
     error_kind: str | None = None
     error_detail: str | None = None
     tool_calls: list[ToolCallRequest] = Field(default_factory=list)
@@ -324,7 +326,7 @@ class AgentRunReport(AgentModel):
     报告只有 Agent 的错误结论。
     """
 
-    schema_version: str = AGENT_SCHEMA_VERSION
+    schema_version: Literal["1.2"] = AGENT_SCHEMA_VERSION
     mode: Literal["agent-run"] = "agent-run"
     run_id: str
     goal_id: str

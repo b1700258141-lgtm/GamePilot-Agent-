@@ -34,7 +34,7 @@ from gamepilot.testing.rules import (
     R_POTION_DECREMENTS,
 )
 
-AGENT_BENCHMARK_VERSION = "1.1.0"
+AGENT_BENCHMARK_VERSION = "1.2.0"
 AGENT_MANIFEST_SOURCE = (
     "docs/claude-tasks/TASK-003C-langgraph-test-agent.md#7-最小评测12-组合配对试验"
 )

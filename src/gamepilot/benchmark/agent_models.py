@@ -15,7 +15,7 @@
 
 from typing import Literal
 
-from pydantic import Field
+from pydantic import ConfigDict, Field, field_validator
 
 from gamepilot.agent.models import CostEstimate, TokenUsage
 from gamepilot.testing.models import CaseStatus, RunEnvironment
@@ -26,6 +26,24 @@ from .models import BenchmarkModel
 AgentReplayOutcome = Literal["match", "mismatch", "not_comparable", "not_executed"]
 
 AgentMetricStatus = Literal["ok", "deviation", "execution_error", "not_applicable"]
+
+
+class AgentPricing(BenchmarkModel):
+    """一次 Agent 评测显式采用的计价；项目不内置供应商价格表。"""
+
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    currency: str
+    input_price_per_million: float = Field(ge=0, allow_inf_nan=False)
+    output_price_per_million: float = Field(ge=0, allow_inf_nan=False)
+
+    @field_validator("currency")
+    @classmethod
+    def _currency_must_not_be_blank(cls, value: str) -> str:
+        cleaned = value.strip()
+        if not cleaned:
+            raise ValueError("currency 不能为空")
+        return cleaned
 
 
 class AgentUsageCell(BenchmarkModel):
@@ -160,6 +178,10 @@ class AgentEvalSummary(BenchmarkModel):
     metrics_total: int
     status: AgentMetricStatus
     exit_code: int
+    usage_known_cells: int
+    usage_unknown_cells: int
+    usage: TokenUsage = Field(default_factory=TokenUsage.unknown)
+    cost: CostEstimate = Field(default_factory=CostEstimate)
     # 真实模型的验收门槛与工程门槛分开表达，不混成一个通过/失败。
     acceptance_note: str = ""
 
@@ -182,6 +204,7 @@ class AgentEvalReport(BenchmarkModel):
     goal_texts: dict[str, str]
     budget_seconds: float
     budget: dict[str, object] = Field(default_factory=dict)
+    pricing: AgentPricing | None = None
     provider: dict[str, object] = Field(default_factory=dict)
     rules_version: str
     schema_version: str
@@ -198,6 +221,7 @@ __all__ = [
     "AgentEvalSummary",
     "AgentMetricResult",
     "AgentMetricStatus",
+    "AgentPricing",
     "AgentReplayOutcome",
     "AgentUsageCell",
 ]
