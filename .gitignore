@@ -19,6 +19,10 @@ htmlcov/
 # 测试执行器产物（每次运行生成新的 run_id 报告，不入库）
 artifacts/
 
+# 本地任务单与验收证据，不上传到公开仓库
+/docs/claude-tasks/
+/docs/validation/
+
 # IDE / 系统文件
 .idea/
 .vscode/
