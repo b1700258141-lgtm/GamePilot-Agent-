@@ -7,8 +7,8 @@ from fastapi.responses import JSONResponse
 
 pytest.importorskip("langgraph", reason='未安装 agent extra：pip install -e ".[dev,agent]"')
 
-from gamepilot.agent.models import AgentRunReport, BudgetSpec
-from gamepilot.agent.provider import FakeProvider, ModelReply
+from gamepilot.agent.models import AgentRunReport, BudgetSpec, TokenUsage
+from gamepilot.agent.provider import FakeProvider, ModelReply, ScriptedProvider
 from gamepilot.benchmark import agent_eval
 from gamepilot.benchmark.agent_eval import EXIT_DEVIATION, EXIT_EXECUTION_ERROR, run_agent_eval
 from gamepilot.benchmark.agent_models import AgentPricing
@@ -48,6 +48,120 @@ async def test_model_error_is_an_agent_stage_execution_error(
     assert report.summary.replay_execution_errors == 0
     assert report.cells[0].stop_reason == "model_error"
     assert report.cells[0].exit_code == EXIT_EXECUTION_ERROR
+
+
+@pytest.mark.anyio
+async def test_fail_fast_stops_paid_cells_but_keeps_auditable_fixed_denominators(
+    tmp_path: Path,
+) -> None:
+    factory_calls: list[str] = []
+
+    def factory(goal_id: str) -> FakeProvider:
+        factory_calls.append(goal_id)
+        return FakeProvider(
+            lambda _messages: ModelReply(
+                error_kind="rate_limit",
+                error_detail="测试注入的首格限流",
+            )
+        )
+
+    report, summary_path = await run_agent_eval(
+        tmp_path,
+        provider_factory=factory,
+        fail_fast=True,
+    )
+
+    summary = report.summary
+    assert len(factory_calls) == 1, "首格执行错误后不得再创建后续付费供应商调用"
+    assert (summary.cells_planned, summary.cells_executed, summary.cells_skipped) == (12, 1, 11)
+    assert summary.aborted_early is True
+    assert summary.abort_after_cell == "normal × full-health"
+    assert "rate_limit" in (summary.abort_reason or "")
+    assert summary.goals_incomplete == 12
+    assert summary.usage_unknown_cells == 12
+    assert summary.replay_not_executed >= 11
+    assert (summary.status, summary.exit_code) == ("execution_error", EXIT_EXECUTION_ERROR)
+
+    metrics = {metric.metric_id: metric for metric in report.metrics}
+    assert metrics["normal_false_positive"].denominator == 3
+    assert metrics["variant_untriggered_false_positive"].denominator == 6
+    assert metrics["execution_errors"].denominator == 12
+    assert metrics["replay_mismatch"].denominator == 12
+    assert metrics["goal_coverage"].denominator == 12
+    assert AgentRunReport.model_validate_json(
+        (summary_path.parent / report.cells[0].agent_report_path).read_text(encoding="utf-8")
+    )
+
+
+@pytest.mark.anyio
+async def test_fail_fast_does_not_abort_on_a_valid_game_defect(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    designated = next(row for row in agent_eval.AGENT_COMBINATIONS if row.is_designated)
+    normal = next(row for row in agent_eval.AGENT_COMBINATIONS if row.fault_id is None)
+    monkeypatch.setattr(agent_eval, "AGENT_COMBINATIONS", (designated, normal))
+
+    report, _ = await run_agent_eval(tmp_path, fail_fast=True)
+
+    assert (report.summary.cells_planned, report.summary.cells_executed) == (2, 2)
+    assert report.summary.cells_skipped == 0
+    assert report.summary.aborted_early is False
+    assert report.summary.abort_after_cell is None
+    assert report.cells[0].stop_reason == "rule_failure"
+    assert report.cells[0].exit_code == EXIT_DEVIATION
+
+
+@pytest.mark.anyio
+async def test_eighth_cell_format_exhaustion_preserves_usage_and_stops_matrix(
+    tmp_path: Path,
+) -> None:
+    """复现 Gate C 的第 8 格耗尽；保持清单不变，验证落盘证据及固定分母。"""
+    factory_calls: list[str] = []
+
+    def factory(goal_id: str) -> FakeProvider:
+        factory_calls.append(goal_id)
+        if len(factory_calls) == 8:
+            return ScriptedProvider(
+                [
+                    ModelReply(
+                        usage=TokenUsage.of(prompt, 512),
+                        stop_reason="max_tokens",
+                        response_block_types=["thinking"],
+                    )
+                    for prompt in (158, 216)
+                ]
+            )
+        return agent_eval.offline_provider_factory(goal_id)
+
+    report, path = await run_agent_eval(
+        tmp_path,
+        provider_factory=factory,
+        budget=BudgetSpec(max_model_calls=6, max_action_attempts=6, max_format_retries=1),
+        fail_fast=True,
+    )
+    summary = report.summary
+    assert len(factory_calls) == 8
+    assert (summary.cells_planned, summary.cells_executed, summary.cells_skipped) == (12, 8, 4)
+    assert summary.exit_code == EXIT_EXECUTION_ERROR
+    assert summary.abort_after_cell == "potion_not_consumed × healing"
+    assert "agent" in summary.abort_reason
+    assert summary.usage.available is False
+    assert summary.cost.amount is None
+    cell = report.cells[-1]
+    assert cell.replay_outcome == "match"
+    saved = AgentRunReport.model_validate_json(
+        (path.parent / cell.agent_report_path).read_text(encoding="utf-8")
+    )
+    assert saved.schema_version == "1.3"
+    assert saved.summary.stop_reason == "model_format_error"
+    assert saved.summary.stop_detail in summary.abort_reason
+    assert saved.summary.exit_code == EXIT_EXECUTION_ERROR
+    assert saved.summary.actions_attempted == 0
+    assert (saved.summary.model_calls, saved.summary.format_retries) == (2, 1)
+    assert saved.summary.usage == TokenUsage.of(374, 1024)
+    assert [c.response_block_types for c in saved.model_calls] == [["thinking"], ["thinking"]]
+    assert all(c.response_text is None and not c.tool_calls for c in saved.model_calls)
 
 
 @pytest.mark.anyio

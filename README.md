@@ -22,13 +22,13 @@
   负向验证与 7 项带分子/分母的指标，退出码区分「符合预期 / 存在偏差 / 执行错误」
 - LangGraph 游戏测试 Agent `gamepilot.agent`：一条完整闭环（模型选动作 → 程序判定 → 收口 → 出报告），
   产物与脚本执行器同构、可用既有 `replay` 无模型重跑；4 profile × 3 目标的 12 格配对试验
-  （离线工程链路已交付，真实 Gate A/B 已通过，Gate C 待执行，见「游戏测试 Agent」一节）
+  （离线工程链路与真实 Gate A/B 已通过；首轮 Gate C 止损后，V6 固定 12 格真实小样本通过，见「游戏测试 Agent」一节）
 - 完整的领域单元测试、API 集成测试与真实 PostgreSQL 集成测试
 
 ## 当前未实现（属于后续阶段）
 
-- **完整真实模型能力验收**：单格 Gate A 与 normal 三目标 Gate B 已通过；固定 12 格 Gate C
-  尚未执行。当前 12 格仍是离线测试替身结果，不代表真实能力；
+- **跨种子与长期稳定性评测**：现有真实模型证据是固定 seed 42、12 格的一次小样本；
+  金额验收尚未完成，实际费用仍为 unknown。
 - MCP 接入、应用容器化与线上部署、前端与视觉测试。
 
 这些不会提前引入。
@@ -239,12 +239,16 @@ python -m gamepilot.testing replay --base-url http://127.0.0.1:8000 --report art
 模型只看公开观测决定下一步，程序负责判定与收口；跑完的游戏事实与脚本执行器
 同构，因此能用**既有的** `replay` 在没有模型的情况下逐字段重跑。
 
-> **当前状态：离线工程链路已交付，真实 Gate A/B 已通过，完整真实模型验收仍在进行中。**
+> **当前状态：离线工程链路、真实 Gate A/B 与 V6 固定 12 格小样本均已通过。**
 > 首次 Gate A 暴露输出预算耗尽而无 `tool_use`；补齐 stop reason 诊断并增加协议级
 > `tool_choice=any` 后，`deepseek-v4-flash` 用两次原生工具调用完成 healing，exit 0，
-> 无模型 replay match。随后 Gate B 的 normal 三目标全部 exit 0、replay match；Gate C 没有执行。
-> 下面 12 格试验的数字仍由离线
-> 测试替身产生，只证明图、预算、判定、重跑工程链路正确，**不是 Agent 的能力成绩**。
+> 无模型 replay match。随后 Gate B 的 normal 三目标全部 exit 0、replay match。Gate C 首轮在
+> 第 8 格连续两次耗尽输出预算且未返回工具调用，按 `--fail-fast` 跳过后续 4 格、exit 2；
+> 8 格 replay 均 match，累计 8,543 Token。随后 V6 在 `thinking=disabled` 下完成真实固定
+> 12 格：预定缺陷检出 3/3、normal 误报 0/3、replay 12/12 match，整批 exit 0；
+> 这是 seed 42 的一次小样本，费用 unknown，见验证记录。
+> 下文离线 12 格试验的数字由测试替身产生，只证明图、预算、判定、重跑工程链路正确，
+> **不是上述真实模型能力成绩**。
 > 首轮独立审查发现的评测错误传播、Token 累计、总时限请求边界和多工具协议问题
 > 已在 TASK-003C-R1 修复。TASK-003C-V2 又补齐 12 格 benchmark 的显式预算、价格输入和
 > 整批 usage/费用证据；466 项非 PostgreSQL 回归与异常注入复验通过。
@@ -292,6 +296,11 @@ START → initialize → decide → validate → execute → check → route ─
   | 单次输出 Token 上限 | 512 |
   | 付费调用 | **默认关闭** |
 
+真实模型可使用 `--thinking disabled` 显式关闭思考模式；Agent 单次运行与 Agent benchmark
+均支持。默认 `--thinking provider-default` 不发送该参数，沿用供应商设置。
+选择记录在 `provider.sampling.thinking`，不代表已证明供应商实际执行；
+fake/offline 不接受显式 disabled。关闭思考模式对真实模型效果的影响仍待单独验收。
+
 - **退出码**（对外契约，`2` 优先于其他结论）：
 
   | 码 | 含义 |
@@ -303,7 +312,7 @@ START → initialize → decide → validate → execute → check → route ─
 
 - **两份报告**，用同一个 `run_id` 关联：
   - `<run_id>.json`：既有的 `RunReport`（schema 1.1），就是 `gamepilot.testing replay` 能读的那一份；
-  - `<run_id>-agent.json`：独立的 `AgentRunReport`（schema 1.2），记目标覆盖、每一次模型决策与用量、
+  - `<run_id>-agent.json`：独立的 `AgentRunReport`（schema 1.3），记目标覆盖、每一次模型决策与用量、
     预算消耗、停止原因，并指向上面那份运行报告。
   两份都是排他创建，不覆盖已有证据。
 
@@ -326,8 +335,8 @@ $env:GAMEPILOT_AGENT_API_KEY = "<在会话里设置，不要写进任何文件>"
 # 4. 12 格配对试验（默认离线替身，不发起任何付费调用）
 .venv\Scripts\python.exe -m gamepilot.benchmark agent --output-dir artifacts/agent-benchmarks
 
-# 5. 显式收紧同一批 12 格的逐格预算；价格仅用于报告复算，不会开启付费调用
-.venv\Scripts\python.exe -m gamepilot.benchmark agent --provider offline `
+# 5. 显式收紧同一批 12 格的逐格预算；执行错误后停止后续格
+.venv\Scripts\python.exe -m gamepilot.benchmark agent --provider offline --fail-fast `
   --max-actions 6 --max-model-calls 6 --max-format-retries 1 `
   --model-timeout 30 --http-timeout 5 --total-timeout 60 --max-output-tokens 512 `
   --input-price 1 --output-price 2 --currency TEST `
@@ -364,8 +373,10 @@ Agent 报告、运行报告、同 profile 无模型重跑、以及同一 profile
 都会让总评测退出 `2`。重跑的“可比”只包含 `match` 与 `mismatch`，`not_comparable` 和
 `not_executed` 分别计数，不会被算进可比分母。
 
-Agent benchmark 1.2.0 在摘要中保存本次七项 `BudgetSpec`、可选价格、usage 已知/未知格数、
-整批 Token 与费用。每格使用独立计数器，但共享同一份预算规格和价格配置。
+Agent benchmark 1.3.0 在摘要中保存本次七项 `BudgetSpec`、可选价格、usage 已知/未知格数、
+整批 Token 与费用。每格使用独立计数器，但共享同一份预算规格和价格配置。`--fail-fast`
+只在模型/API、重跑、对照或报告 I/O 等执行错误后停止后续格；真实规则失败属于有效缺陷结论，
+不会触发中止。部分摘要保留计划 12 格的固定分母、跳过格数、中止位置与原因。
 
 报告布局：`<output-dir>/<run_id>/agent-benchmark.json` 为摘要，
 `cells/<profile>/<goal_id>/` 下为 `<run_id>-agent.json` 与 `run/`、`replay/`、`control/` 三个子目录。
@@ -569,8 +580,16 @@ TASK-002A 完成数据库骨架与迁移，TASK-002B 完成 PostgreSQL 仓储、
 事务边界与确定性恢复，TASK-003A 完成确定性测试执行器与规则判定基线，
 TASK-003B 完成可控缺陷靶场与固定评测集，TASK-003C 完成第一条 LangGraph
 Agent 闭环与 12 格配对试验（离线工程部分实施完成）；真实单格 Gate A 已在协议修复后通过。
-Agent benchmark 的显式预算与整批 usage/费用汇总已完成，真实 normal 三目标 Gate B 已通过；
-下一步根据 Gate A/B 的实际 Token 证据决定是否执行完整 12 格 Gate C。
+Agent benchmark 的显式预算与整批 usage/费用汇总已完成，真实 normal 三目标 Gate B 已通过。
+Gate C 首轮在第 8 格因模型格式错误止损；V4 离线诊断已完成，schema 1.3 新增脱敏响应块类别，
+保留类型和数量，不保存原始推理内容。旧 Agent 报告不自动升级，游戏轨迹仍可由原 replay 读取。
+同一 healing 首轮输入出现不同结果，历史报告不足以确认输出 Token 的具体用途。
+V5 已实现显式关闭思考模式的参数，并在 `potion_not_consumed × healing` 完成一次真实单格验证：
+2 次工具调用、0 次格式纠正，命中 `R-POTION-DECREMENTS`，无模型 replay match；
+1,264 Token、费用 unknown。随后 V6 的真实固定 12 格评测在 thinking=disabled 下 exit 0：
+预定缺陷 3/3、normal 误报 0/3、无模型 replay 12/12 match、六项门槛 6/6；
+实际 27 次调用、7,216 Token，费用 unknown。证据见
+`docs/validation/TASK-003C-V6-second-real-gate-c.md`。
 详见 `docs/PHASE_2_PLAN.md`、`docs/PHASE_3_PLAN.md` 与 `AGENTS.md`。
 
 ## 已知限制
@@ -590,8 +609,8 @@ Agent benchmark 的显式预算与整批 usage/费用汇总已完成，真实 no
   只用于说明「不是真实网络请求」；真实 localhost HTTP 的验证由 `gamepilot.lab serve`
   加 `gamepilot.testing run/replay` 手动完成；
 - 评测是固定脚本基线，不是 Agent 自主发现能力；
-- Agent 闭环的**完整真实模型验收待完成**：Gate A/B 已通过，Gate C 未执行；12 格数字仍来自
-  离线测试替身，只说明工程链路正确；
+- Agent 已完成**固定 12 格的一次真实模型验收**；跨种子、跨时间的稳定性及费用金额
+  尚未评测，不能把这次小样本外推为通用游戏测试能力；
 - Agent 一次只跑一个会话、一条闭环，顺序执行不做并发；动作与模型调用默认上限为
   10 / 12，可在运行前显式收紧，没有自适应预算，也不自动重试失败的模型调用；
 - Agent 只有两个工具（`perform_action` / `finish`），一次只能调用一个；

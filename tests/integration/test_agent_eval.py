@@ -232,7 +232,7 @@ def test_the_cli_prints_the_evidence_and_the_pending_acceptance(agent_eval: Eval
     assert "供应商：fake" in output
     assert "（测试替身=True）" in output
     assert f"清单来源：{AGENT_MANIFEST_SOURCE}" in output
-    assert f"格数：计划 {CELL_COUNT}，执行 {CELL_COUNT}，目标达成 9" in output
+    assert f"格数：计划 {CELL_COUNT}，执行 {CELL_COUNT}，跳过 0，目标达成 9" in output
     assert "目标未完成 3，执行错误 0" in output
     assert "预定机会：3/3，去重缺陷 3，normal 误报 0，重跑一致 12/12 可比" in output
     assert "逐格结果（T=真实触发，D=清单内检出，+=清单外额外检出）：" in output
@@ -534,6 +534,8 @@ def test_timeout_alias_targets_the_http_budget_field() -> None:
 
     assert parser.parse_args(["agent", "--timeout", "7"]).http_timeout == 7
     assert parser.parse_args(["agent", "--http-timeout", "8"]).http_timeout == 8
+    assert parser.parse_args(["agent"]).fail_fast is False
+    assert parser.parse_args(["agent", "--fail-fast"]).fail_fast is True
 
 
 def test_the_acceptance_note_is_derived_from_the_provider_not_pasted() -> None:
@@ -549,5 +551,6 @@ def test_the_acceptance_note_is_derived_from_the_provider_not_pasted() -> None:
     )
 
     assert double.is_test_double is True and real.is_test_double is False
-    assert "真实模型验收待完成" in acceptance_note(double)
-    assert "真实模型验收待完成" not in acceptance_note(real)
+    assert "真实模型验收待完成" in acceptance_note(double, complete_matrix=True)
+    assert "真实模型验收待完成" not in acceptance_note(real, complete_matrix=True)
+    assert "固定 12 格能力验收未完成" in acceptance_note(real, complete_matrix=False)

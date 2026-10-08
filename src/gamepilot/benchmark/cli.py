@@ -51,6 +51,8 @@ _STATUS_LABEL = {
 
 
 def build_parser() -> argparse.ArgumentParser:
+    from gamepilot.agent.provider import THINKING_MODES
+
     from .agent_manifest import AGENT_EVAL_BUDGET
 
     parser = argparse.ArgumentParser(
@@ -95,9 +97,20 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="确认允许付费的真实模型调用；不给出时不会发出任何模型请求",
     )
+    agent_parser.add_argument(
+        "--fail-fast",
+        action="store_true",
+        help="任一格发生执行错误后停止后续格，并保存分母不缩小的部分摘要",
+    )
     agent_parser.add_argument("--model", default=None, help="模型名（仅真实供应商使用）")
     agent_parser.add_argument(
         "--model-base-url", default=None, help="模型入口地址（仅真实供应商使用）"
+    )
+    agent_parser.add_argument(
+        "--thinking",
+        choices=THINKING_MODES,
+        default="provider-default",
+        help="真实模型思考模式：provider-default 不发送该参数，disabled 显式关闭",
     )
     agent_parser.add_argument(
         "--api-key-env",
@@ -297,6 +310,8 @@ def _make_agent_provider_factory(args: argparse.Namespace) -> Callable[[str], Mo
     from .agent_eval import offline_provider_factory
 
     if args.provider == AGENT_PROVIDER_OFFLINE:
+        if args.thinking != "provider-default":
+            raise ValueError("--thinking disabled 仅适用于真实模型供应商")
         return offline_provider_factory
 
     if not args.paid:
@@ -318,6 +333,7 @@ def _make_agent_provider_factory(args: argparse.Namespace) -> Callable[[str], Mo
         model=args.model or DEFAULT_MODEL,
         base_url=args.model_base_url or DEFAULT_BASE_URL,
         api_key_env=api_key_env,
+        thinking=args.thinking,
     )
     return lambda _goal_id: provider
 
@@ -382,9 +398,15 @@ def _render_agent(report: AgentEvalReport, output_dir: str) -> None:
     )
     print(
         f"格数：计划 {summary.cells_planned}，执行 {summary.cells_executed}，"
+        f"跳过 {summary.cells_skipped}，"
         f"目标达成 {summary.goals_met}，目标未完成 {summary.goals_incomplete}，"
         f"执行错误 {summary.execution_errors}"
     )
+    if summary.aborted_early:
+        print(
+            f"提前中止：{summary.abort_after_cell}；{summary.abort_reason}；"
+            "未执行格保留在固定分母与 unknown 用量中"
+        )
     print(
         f"分阶段执行错误：Agent {summary.agent_execution_errors}/{summary.cells_planned}，"
         f"重跑 {summary.replay_execution_errors}/{summary.cells_planned}，"
@@ -431,6 +453,7 @@ async def _run_agent_command(args: argparse.Namespace) -> int:
         provider_factory=factory,
         budget=budget,
         pricing=pricing,
+        fail_fast=args.fail_fast,
     )
     _render_agent(report, args.output_dir)
     print(f"摘要：{path}")

@@ -163,10 +163,10 @@ docs/
 
 ## 10. 当前项目进度
 
-**状态日期：2026-09-21**
+**状态日期：2026-10-08**
 
 **当前阶段：第三阶段；TASK-002A、TASK-002B、TASK-003A 与 TASK-003B 已通过独立验收。
-TASK-003C-R1 离线工程链路与 V2 预算/费用工程准备通过，DeepSeek Flash 真实 Gate A 与 normal 三目标 Gate B 已通过；Gate C 与学习复盘仍待完成。**
+TASK-003C-R1 离线工程链路与 V2 预算/费用工程准备通过，DeepSeek Flash 真实 Gate A、normal 三目标 Gate B 与 V5 单格均通过；Gate C 首轮第 8 格止损，V6 以 thinking=disabled 完成固定 12/12 格真实模型小样本验收。金额仍为 unknown，学习复盘与公开展示决策待完成。**
 
 已经完成：
 
@@ -223,10 +223,12 @@ TASK-003C-R1 离线工程链路与 V2 预算/费用工程准备通过，DeepSeek
 - TASK-003C-V2 验收通过：`466 passed, 29 deselected` 非 PostgreSQL 回归，Ruff 检查与 118 个文件格式检查通过；离线 12 格 exit 0、12/12 重跑一致，原 32 组合 exit 0、7/7 指标达标。未调用真实模型，未复验 PostgreSQL，未提交或推送。
 - 所有者随后明确授权直接使用旧密钥执行 Gate B。normal profile 的 full-health、healing、victory 三目标均 goal_met / exit 0、规则失败 0、无模型 replay 3/3 match；共 7 个动作、8 次模型调用、1 次受控格式纠正，prompt 1,998、completion 1,630、total 3,628 Token。没有可靠单价，费用保持 unknown；Gate C 未执行。
 - 已生成 `TASK-003C-V3-real-gate-c-benchmark.md`：下一任务只执行真实固定 12 格，不再修改 Agent；统一逐格预算为 6 动作、6 次调用、1 次格式纠正和 512 输出 Token，整批上限 72 次调用与 36,864 输出 Token。Gate A/B 共 10 次有效调用、4,400 Token，为 Gate C 提供 14,512 Token 的矩阵外推与 31,680 Token 的满调用经验估算；执行仍需单独授权并确认价格/金额口径。
+- 经所有者授权由 Codex 暂代开发，已完成 Gate C 付费前止损切片：agent benchmark 1.3.0 新增 `--fail-fast`，任一格发生模型/API、重跑、对照或报告 I/O 执行错误后停止后续供应商调用；部分摘要保留固定 12 格分母、跳过格数、中止位置/原因和 unknown usage。有效游戏缺陷不会触发中止；离线 12 格在开启该选项后仍 exit 0、12/12 replay match。针对性测试 `39 passed`，完整非 PostgreSQL 回归 `468 passed, 29 deselected`，Ruff 检查与 119 个文件格式检查通过。
+- 2026-09-29 经所有者单独授权执行一次真实 Gate C，金额按 unknown 记录。第 8 格 `potion_not_consumed × healing` 连续两次返回 `stop_reason=max_tokens`、无工具调用，格式纠正耗尽；`--fail-fast` 按预期跳过后续 4 格，整批 exit 2。已执行 8/12 格、replay 8/8 match、normal 误报 0/3、预定缺陷检出 1/3；19 次模型调用、4,348 输入 + 4,195 输出 = 8,543 Token。完整能力结论尚不可得，未自动重跑。证据见 `docs/validation/TASK-003C-real-model-acceptance.md`。
+- 2026-10-08 经所有者授权执行一次 V6 真实固定矩阵：thinking=disabled、12/12 格执行、exit 0、六项门槛 6/6；预定缺陷 3/3、normal 误报 0/3、replay 12/12 match、执行错误 0。27 次模型调用、27 个动作、0 次格式纠正，5,639 输入 + 1,577 输出 = 7,216 Token，费用 unknown。49 份 JSON 和 48 个引用均核对，原 33 份首轮报告未改动；见 `docs/validation/TASK-003C-V6-second-real-gate-c.md`。
 
 尚未完成：
 
-- 根据 Gate A/B 实际 Token 证据决定并执行 Gate C 固定 12 格；
 - 完成本阶段对应的原理学习和代码复盘；
 - 最终确认项目公开名称、许可证和完整 README 展示策略。
 
@@ -241,18 +243,16 @@ TASK-003C-R1 已修复首轮审查发现的错误传播、usage、总时限与�
 通过独立复验；记录见 `docs/claude-tasks/TASK-003C-R1-review-fixes.md`。模型仍为 DeepSeek
 `deepseek-v4-flash`。首次真实 Gate A 的失败证据已定位为 `max_tokens`；协议级强制单工具选择
 修复后，真实模型用两次工具调用完成 healing，exit 0 且无模型 replay match，Gate A 已通过。
-Gate B 三目标也已全部 exit 0 且 replay 3/3 match；Gate C 未执行，记录见
-`docs/validation/TASK-003C-real-model-acceptance.md`。
-TASK-003C-V2 已完成无付费工程准备：真实 Gate C 可以在显式逐格预算下运行，报告会记录
-价格、已知/未知 usage 与整批费用；项目不内置或猜测供应商价格。
+Gate B 三目标也已全部 exit 0 且 replay 3/3 match。Gate C 首轮在第 8 格止损，原证据保留；
+V4 离线诊断后，V5 单格与 V6 固定 12 格在 thinking=disabled 下通过。
+V6 是 seed 42 的一次真实小样本：12/12 重跑一致、3/3 预定缺陷检出，金额仍为 unknown。
+证据见 `docs/validation/TASK-003C-V6-second-real-gate-c.md`，不能外推一般游戏测试能力。
 
 后续需要依次确认：
 
 1. TASK-003A / TASK-003B / TASK-003C 学习复盘；
-2. 轮换已进入聊天上下文的密钥，并确认显式单价与 Gate C 金额预算；
-3. 根据 Gate A/B 的 4,400 个已知 Token 与 Gate C 技术上限，单独决定 Gate C；
-4. 完成 Gate C 后给出 TASK-003C 的最终真实模型结论；
-5. 项目公开名称、许可证和仓库展示策略。
+2. 轮换已进入聊天上下文的密钥；今后如需金额验收，再提供可靠单价与预算；
+3. 项目公开名称、许可证和仓库展示策略。
 
 ## 12. 更新规则
 
@@ -264,6 +264,18 @@ TASK-003C-V2 已完成无付费工程准备：真实 Gate C 可以在显式逐�
 - 若代码现状与本文档不一致，应明确指出差异，不能默默假设文档或代码其中一方正确。
 
 ## 13. 更新记录
+
+- **2026-10-08（V6 真实 Gate C）**：所有者对固定 12 格、最多 72 次调用和金额 unknown 的方案回复“继续任务”。thinking=disabled 的真实矩阵 12/12 格、exit 0、六项门槛 6/6；三处预定缺陷检出、normal 无误报、replay 12/12 match。实际 27 次模型调用、7,216 Token；49 份 JSON 可读、48 个引用存在、令牌精确值未写入报告，首轮 Gate C 的 33 份 JSON 哈希不变。未重跑模型、未复验数据库、未提交或推送；学习复盘仍待所有者完成。
+
+- **2026-10-08（V5 真实 canary）**：所有者对一次单格付费验证、金额 unknown 口径回复“继续”。`potion_not_consumed × healing` 在 thinking=disabled 下以 attack、use_potion 两次工具调用检出 R-POTION-DECREMENTS，rule_failure / exit 1；0 次格式纠正、1,264 Token、费用 unknown，无模型 replay 1/1 match。三份 JSON 证据可读且未发现密钥样式文本；本地服务与临时密钥变量已清理。初次 Gate C 仍为 8/12 止损，未执行第二次完整矩阵、未提交或推送。
+
+- **2026-10-08（V5）**：按所有者“继续”指令完成 V5 离线准备：唯一真实 provider 和两个 CLI 新增显式思考模式参数，默认不发送、disabled 显式关闭，sampling 留下配置证据；fake/offline 不静默忽略该参数。485 项非 PostgreSQL 测试、Ruff（107 个文件）和离线 12 格通过，replay 12/12 match。已冻结失败格 canary 为 2 动作、3 调用、1 次纠正、512 单次输出（合计最多 1,536 输出 Token），费用口径与执行待独立授权；未读取真实密钥、调用模型、复验数据库、提交或推送。
+
+- **2026-10-08**：接续并完成 TASK-003C-V4 离线诊断。核对首轮 Gate C 的 33 个原始报告，三个 healing 首轮输入逐字段一致；官方文档确认禁止并行参数被忽略、支持显式关闭思考。接续已有 schema 1.3 响应块诊断改动，补齐 SDK 模拟响应、旧报告版本和第 8 格格式耗尽验证；离线 12 格 exit 0、replay 12/12 match。历史 Token 用途仍未知，不宣称真实修复。新增 V5 任务单，付费 canary 仍须独立授权；未调用模型、未复验 PostgreSQL、未提交或推送。
+
+- **2026-09-29**：所有者单独授权一次 Gate C，费用按 unknown；真实 DeepSeek Flash 运行 8/12 格后，`potion_not_consumed × healing` 连续两次 `max_tokens` 且无工具调用，fail-fast 跳过 4 格、exit 2，未自动重跑。已执行格 19 次模型调用、8,543 Token，replay 8/8 match；报告 33 个 JSON 均可解析、32 个引用文件存在，未发现密钥样式文本。随后修正评测摘要措辞，避免部分运行被称为完整 12 格结论；未提交或推送。
+
+- **2026-09-24**：经所有者授权由 Codex 暂代开发，完成 TASK-003C-V3 付费前 fail-fast 工程准备。agent benchmark 升级到 1.3.0，新增显式 `--fail-fast`、可审计部分摘要和固定清单分母；首格 rate-limit 注入会跳过后续 11 格，真实规则失败不会误中止，离线 12 格回归 exit 0。`468 passed, 29 deselected`、Ruff（119 个文件）通过；未调用真实模型，Gate C 尚未执行，未提交或推送。
 
 - **2026-09-21**：规划下一任务 TASK-003C-V3，范围冻结为 DeepSeek Flash 真实 Gate C 固定 12 格验收。复用现有 agent benchmark，不新增 Agent 功能；记录 72 次调用和 36,864 输出 Token 技术上限、Gate A/B 经验估算、独立授权、密钥注入、单次执行与不自动重跑规则。Gate C 尚未执行，未调用模型、未提交或推送。
 

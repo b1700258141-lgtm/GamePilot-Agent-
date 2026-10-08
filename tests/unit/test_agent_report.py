@@ -229,14 +229,15 @@ def test_report_rejects_unknown_fields(tmp_path: Path) -> None:
         AgentRunReport.model_validate(payload)
 
 
-def test_report_rejects_an_older_schema_explicitly() -> None:
-    """新增诊断字段后的 1.2 不把旧 1.1 报告静默解释成新契约。"""
+@pytest.mark.parametrize("old_version", ["1.1", "1.2"])
+def test_report_rejects_an_older_schema_explicitly(old_version: str) -> None:
+    """1.3 不把缺少响应块诊断的旧报告静默解释成新契约。"""
     from pydantic import ValidationError
 
     from gamepilot.agent.models import AgentRunReport
 
     payload = _report_payload("20260101T000000Z-abcdef")
-    payload["schema_version"] = "1.1"
+    payload["schema_version"] = old_version
     with pytest.raises(ValidationError):
         AgentRunReport.model_validate(payload)
 

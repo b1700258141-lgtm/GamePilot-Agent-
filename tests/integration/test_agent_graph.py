@@ -608,6 +608,69 @@ async def test_model_call_record_preserves_text_and_provider_stop_reason(
     assert outcome.report.summary.stop_reason == "model_format_error"
 
 
+@pytest.mark.parametrize("thinking", ["provider-default", "disabled"])
+@pytest.mark.anyio
+async def test_anthropic_block_diagnostics_exclude_reasoning_content(
+    normal: Server, thinking: str
+) -> None:
+    """截断回复只保留安全的块类别，不能把推理文本写进报告。"""
+
+    class Messages:
+        def __init__(self) -> None:
+            self.requests: list[dict[str, object]] = []
+
+        async def create(self, **request: object) -> object:
+            self.requests.append(request)
+            return SimpleNamespace(
+                content=[
+                    SimpleNamespace(type="thinking", thinking="private-reasoning-marker"),
+                    SimpleNamespace(type="provider-secret-block", value="private-block-marker"),
+                ],
+                usage=SimpleNamespace(input_tokens=158, output_tokens=512),
+                stop_reason="max_tokens",
+            )
+
+    messages = Messages()
+    provider = AnthropicCompatibleProvider(
+        api_key="test-only",
+        client=SimpleNamespace(messages=messages),
+        thinking=thinking,
+    )
+    state, context, _meta = await run_agent(
+        client=normal.client,
+        provider=provider,
+        budget=Budget(BudgetSpec(max_format_retries=0, max_model_calls=1)),
+        goal=resolve_goal(GOAL_HEALING),
+        seed=42,
+        description="脱敏响应块诊断",
+    )
+
+    record = context.model_call_records[0]
+    assert state["stop_reason"] == "model_format_error"
+    assert normal.action_requests == 0
+    assert messages.requests[0]["max_tokens"] == 512
+    assert (record.outcome, record.provider_stop_reason) == ("no_tool_call", "max_tokens")
+    assert record.response_block_types == ["thinking", "other"]
+    assert record.usage.total_tokens == 670
+    serialized = record.model_dump_json()
+    assert "private-reasoning-marker" not in serialized
+    assert "private-block-marker" not in serialized
+    assert "provider-secret-block" not in serialized
+    report = build_agent_report(
+        state=state,
+        context=context,
+        client=normal.client,
+        run_id=new_run_id(),
+        started_at=utc_now_iso(),
+        duration_ms=0.0,
+        run_report=None,
+    )
+    reloaded = AgentRunReport.model_validate_json(report.model_dump_json())
+    assert reloaded.provider.sampling["thinking"] == thinking
+    assert reloaded.summary.stop_reason == "model_format_error"
+    assert reloaded.summary.exit_code == 2
+
+
 @pytest.mark.anyio
 async def test_unknown_tool_repeated_never_reaches_the_game(
     normal: Server,

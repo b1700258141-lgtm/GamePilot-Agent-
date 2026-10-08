@@ -293,6 +293,7 @@ def _cell_error_detail(row: AgentCellEvidence) -> str:
             detail
             for detail in (
                 row.case_error,
+                row.stop_detail,
                 row.replay_error,
                 row.control_case_error,
                 row.run_report_error,
@@ -305,8 +306,18 @@ def _cell_error_detail(row: AgentCellEvidence) -> str:
     )
 
 
-def build_agent_metrics(cells: Sequence[AgentCellEvidence]) -> list[AgentMetricResult]:
+def build_agent_metrics(
+    cells: Sequence[AgentCellEvidence],
+    *,
+    planned_combinations: Sequence[AgentCombination] | None = None,
+) -> list[AgentMetricResult]:
     """按清单分母构造指标；未执行与执行错误都不缩小分母。"""
+    planned = tuple(AGENT_COMBINATIONS if planned_combinations is None else planned_combinations)
+    planned_count = len(planned)
+    planned_normal = sum(1 for row in planned if row.fault_id is None)
+    planned_untriggered_variants = sum(
+        1 for row in planned if row.fault_id is not None and not row.is_designated
+    )
     designated = [row for row in cells if row.is_designated]
     detected = [row for row in designated if row.detected]
     distinct = sorted({row.fault_id for row in detected if row.fault_id})
@@ -360,7 +371,7 @@ def build_agent_metrics(cells: Sequence[AgentCellEvidence]) -> list[AgentMetricR
             "normal_false_positive",
             "normal 上的误报（正确服务被判为违规）",
             len(normal_fp),
-            len(normal),
+            planned_normal,
             "0（越小越好）",
             expected="zero",
             details=[f"{row.profile} × {row.goal_id}：{row.case_status}" for row in normal_fp]
@@ -370,7 +381,7 @@ def build_agent_metrics(cells: Sequence[AgentCellEvidence]) -> list[AgentMetricR
             "variant_untriggered_false_positive",
             "变体未触发时的误报（缺陷没被走到却判为违规）",
             len(untriggered_fp),
-            len(untriggered),
+            planned_untriggered_variants,
             "0（分母为 0 时标 N/A）",
             expected="zero",
             details=[f"{row.profile} × {row.goal_id}：{row.case_status}" for row in untriggered_fp]
@@ -380,7 +391,7 @@ def build_agent_metrics(cells: Sequence[AgentCellEvidence]) -> list[AgentMetricR
             "beyond_designated",
             "清单外的额外检出（真实触发且有规则失败，信息项：不算异常，也不是误报）",
             len(beyond),
-            len(cells),
+            planned_count,
             "如实列出",
             expected="report",
             details=[
@@ -392,7 +403,7 @@ def build_agent_metrics(cells: Sequence[AgentCellEvidence]) -> list[AgentMetricR
             "goal_coverage",
             "目标覆盖成立（信息项：如实列出，不作门槛）",
             len(met),
-            len(cells),
+            planned_count,
             "如实列出",
             expected="report",
             details=[f"{row.profile} × {row.goal_id}：{row.stop_reason}" for row in incomplete],
@@ -400,8 +411,8 @@ def build_agent_metrics(cells: Sequence[AgentCellEvidence]) -> list[AgentMetricR
         _metric(
             "goal_incomplete",
             "目标未完成（信息项：覆盖条件未满足，含提前结束与预算耗尽）",
-            len(incomplete),
-            len(cells),
+            planned_count - len(met),
+            planned_count,
             "如实列出",
             expected="report",
             details=[
@@ -413,8 +424,8 @@ def build_agent_metrics(cells: Sequence[AgentCellEvidence]) -> list[AgentMetricR
             "execution_errors",
             "执行错误（连不上、超时、5xx、结构不符、报告写入失败）",
             len(errors),
-            len(cells),
-            "0/12",
+            planned_count,
+            f"0/{planned_count}",
             expected="zero",
             details=[
                 f"{row.profile} × {row.goal_id}：阶段 {', '.join(_cell_error_stages(row))}；"
@@ -427,14 +438,14 @@ def build_agent_metrics(cells: Sequence[AgentCellEvidence]) -> list[AgentMetricR
             "replay_mismatch",
             "同 profile 无模型重跑的差异数（不得出现 mismatch）",
             len(mismatches),
-            len(cells),
-            "0/12",
+            planned_count,
+            f"0/{planned_count}",
             expected="zero",
             details=[
-                f"match {_ratio(len(matches), len(cells))}，"
-                f"可比 {_ratio(len(comparable), len(cells))}，"
+                f"match {_ratio(len(matches), planned_count)}，"
+                f"可比 {_ratio(len(comparable), planned_count)}，"
                 f"mismatch {len(mismatches)}，"
-                f"未执行/不可比 {len(cells) - len(matches) - len(mismatches)}"
+                f"未执行/不可比 {planned_count - len(matches) - len(mismatches)}"
             ],
         ),
     ]
@@ -456,12 +467,14 @@ def _exit_code(status: str) -> int:
     return EXIT_OK
 
 
-def acceptance_note(provider: ModelProvider) -> str:
+def acceptance_note(provider: ModelProvider, *, complete_matrix: bool) -> str:
     if provider.is_test_double:
         return (
             "本次供应商是测试替身：以下数字只证明工程链路（图、预算、判定、重跑）正确，"
             "不是 Agent 能力成绩；真实模型验收待完成。"
         )
+    if not complete_matrix:
+        return "本次使用真实模型调用，但固定 12 格能力验收未完成；仅保留已执行格的证据。"
     return "本次使用真实模型调用，结论可作为首轮 12 格小样本冒烟结果。"
 
 
@@ -647,6 +660,7 @@ async def _run_cell(
         ),
         run_report_error=run_report_error,
         stop_reason=report.summary.stop_reason,
+        stop_detail=report.summary.stop_detail,
         exit_code=report.summary.exit_code,
         goal_met=report.summary.goal_met,
         completed=report.summary.completed,
@@ -709,6 +723,7 @@ async def run_agent_eval(
     provider_factory: Callable[[str], ModelProvider] | None = None,
     budget: BudgetSpec = AGENT_EVAL_BUDGET,
     pricing: AgentPricing | None = None,
+    fail_fast: bool = False,
 ) -> tuple[AgentEvalReport, Path]:
     """跑完 12 格配对试验，返回摘要与摘要文件路径。
 
@@ -721,8 +736,11 @@ async def run_agent_eval(
     run_id = new_run_id()
     root = Path(output_dir) / run_id
 
+    planned_combinations = tuple(AGENT_COMBINATIONS)
     cells: list[AgentCellEvidence] = []
     created: list[ModelProvider] = []
+    abort_after_cell: str | None = None
+    abort_reason: str | None = None
     async with AsyncExitStack() as stack:
         clients: dict[str, GameClient] = {}
         recorders: dict[str, TriggerRecorder] = {}
@@ -739,22 +757,28 @@ async def run_agent_eval(
             )
             recorders[profile] = recorder
 
-        for combination in AGENT_COMBINATIONS:
+        for index, combination in enumerate(planned_combinations):
             provider = factory(combination.goal_id)
             created.append(provider)
-            cells.append(
-                await _run_cell(
-                    combination,
-                    provider=provider,
-                    client=clients[combination.profile],
-                    recorder=recorders[combination.profile],
-                    root=root,
-                    budget_spec=budget,
-                    pricing=pricing,
-                )
+            cell = await _run_cell(
+                combination,
+                provider=provider,
+                client=clients[combination.profile],
+                recorder=recorders[combination.profile],
+                root=root,
+                budget_spec=budget,
+                pricing=pricing,
             )
+            cells.append(cell)
+            stages = _cell_error_stages(cell)
+            if fail_fast and stages and index + 1 < len(planned_combinations):
+                abort_after_cell = f"{cell.profile} × {cell.goal_id}"
+                abort_reason = f"阶段 {', '.join(stages)}：{_cell_error_detail(cell)}"
+                break
 
-    metrics = build_agent_metrics(cells)
+    cells_planned = len(planned_combinations)
+    cells_skipped = cells_planned - len(cells)
+    metrics = build_agent_metrics(cells, planned_combinations=planned_combinations)
     status = _status(metrics, cells)
     # 12 格必须来自同一个供应商配置：混用会让「同一 profile 的输入一致」失去意义。
     probe = created[0]
@@ -765,14 +789,18 @@ async def run_agent_eval(
     control_errors = sum(1 for row in cells if "control" in _cell_error_stages(row))
     usage_known, usage_unknown, total_usage, total_cost = summarize_spend(
         [row.spend for row in cells],
-        cells_planned=len(AGENT_COMBINATIONS),
+        cells_planned=cells_planned,
         pricing=pricing,
     )
     summary = AgentEvalSummary(
-        cells_planned=len(AGENT_COMBINATIONS),
+        cells_planned=cells_planned,
         cells_executed=len(cells),
+        cells_skipped=cells_skipped,
+        aborted_early=cells_skipped > 0,
+        abort_after_cell=abort_after_cell,
+        abort_reason=abort_reason,
         goals_met=sum(1 for row in cells if row.goal_met),
-        goals_incomplete=sum(1 for row in cells if not row.goal_met),
+        goals_incomplete=cells_planned - sum(1 for row in cells if row.goal_met),
         agent_execution_errors=agent_errors,
         replay_execution_errors=replay_errors,
         control_execution_errors=control_errors,
@@ -787,7 +815,8 @@ async def run_agent_eval(
         replay_comparable=sum(1 for row in cells if row.replay_outcome in ("match", "mismatch")),
         replay_mismatches=sum(1 for row in cells if row.replay_outcome == "mismatch"),
         replay_not_comparable=sum(1 for row in cells if row.replay_outcome == "not_comparable"),
-        replay_not_executed=sum(1 for row in cells if row.replay_outcome == "not_executed"),
+        replay_not_executed=cells_skipped
+        + sum(1 for row in cells if row.replay_outcome == "not_executed"),
         provider_is_test_double=probe.is_test_double,
         metrics_passed=sum(1 for metric in metrics if metric.required and metric.passed),
         metrics_total=sum(1 for metric in metrics if metric.required),
@@ -797,7 +826,9 @@ async def run_agent_eval(
         usage_unknown_cells=usage_unknown,
         usage=total_usage,
         cost=total_cost,
-        acceptance_note=acceptance_note(probe),
+        acceptance_note=acceptance_note(
+            probe, complete_matrix=cells_skipped == 0 and status != "execution_error"
+        ),
     )
 
     report = AgentEvalReport(

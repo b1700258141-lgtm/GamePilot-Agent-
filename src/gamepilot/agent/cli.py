@@ -38,6 +38,7 @@ from .provider import (
     DEFAULT_MODEL,
     PROVIDER_ANTHROPIC,
     PROVIDER_FAKE,
+    THINKING_MODES,
 )
 from .report import (
     AGENT_OUTPUT_DIR,
@@ -87,6 +88,12 @@ def build_parser() -> argparse.ArgumentParser:
     )
     run_parser.add_argument(
         "--model-base-url", default=DEFAULT_BASE_URL, help="模型入口地址（仅真实供应商使用）"
+    )
+    run_parser.add_argument(
+        "--thinking",
+        choices=THINKING_MODES,
+        default="provider-default",
+        help="真实模型思考模式：provider-default 不发送该参数，disabled 显式关闭",
     )
     run_parser.add_argument(
         "--api-key-env",
@@ -182,6 +189,8 @@ def _make_provider(args: argparse.Namespace) -> object:
     from .provider import AnthropicCompatibleProvider, FakeProvider, scripted_responder
 
     if args.provider == PROVIDER_FAKE:
+        if args.thinking != "provider-default":
+            raise ValueError("--thinking disabled 仅适用于真实模型供应商")
         if not args.script:
             raise ValueError(f"--provider {PROVIDER_FAKE} 必须同时给出 --script")
         return FakeProvider(scripted_responder(_parse_script(args.script)))
@@ -202,6 +211,7 @@ def _make_provider(args: argparse.Namespace) -> object:
         model=args.model,
         base_url=args.model_base_url,
         api_key_env=args.api_key_env,
+        thinking=args.thinking,
     )
 
 

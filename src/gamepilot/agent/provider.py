@@ -16,7 +16,7 @@
 """
 
 from collections.abc import Callable, Sequence
-from typing import Protocol
+from typing import Literal, Protocol
 
 from gamepilot.testing.client import redact_url
 
@@ -33,6 +33,8 @@ PROVIDER_ANTHROPIC = "anthropic-compatible"
 DEFAULT_MODEL = "deepseek-v4-flash"
 DEFAULT_BASE_URL = "https://api.deepseek.com/anthropic"
 DEFAULT_API_KEY_ENV = "GAMEPILOT_AGENT_API_KEY"
+THINKING_MODES = ("provider-default", "disabled")
+ThinkingMode = Literal["provider-default", "disabled"]
 
 
 class ModelReply:
@@ -42,7 +44,15 @@ class ModelReply:
     调用方必须按「模型错误」处理，而不是当成「模型选择了不动作」。
     """
 
-    __slots__ = ("tool_calls", "text", "usage", "error_kind", "error_detail", "stop_reason")
+    __slots__ = (
+        "tool_calls",
+        "text",
+        "usage",
+        "error_kind",
+        "error_detail",
+        "stop_reason",
+        "response_block_types",
+    )
 
     def __init__(
         self,
@@ -53,6 +63,7 @@ class ModelReply:
         error_kind: str | None = None,
         error_detail: str | None = None,
         stop_reason: str | None = None,
+        response_block_types: Sequence[str] = (),
     ) -> None:
         self.tool_calls = list(tool_calls)
         self.text = text
@@ -60,6 +71,7 @@ class ModelReply:
         self.error_kind = error_kind
         self.error_detail = error_detail
         self.stop_reason = stop_reason
+        self.response_block_types = list(response_block_types)
 
     @property
     def failed(self) -> bool:
@@ -231,12 +243,16 @@ class AnthropicCompatibleProvider:
         base_url: str = DEFAULT_BASE_URL,
         api_key_env: str = DEFAULT_API_KEY_ENV,
         temperature: float | None = None,
+        thinking: ThinkingMode = "provider-default",
         client: object | None = None,
     ) -> None:
+        if thinking not in THINKING_MODES:
+            raise ValueError("thinking must be provider-default or disabled")
         self._model = model
         self._base_url = base_url
         self._api_key_env = api_key_env
         self._temperature = temperature
+        self._thinking = thinking
         self._client = client if client is not None else _build_client(api_key, base_url)
 
     @property
@@ -262,6 +278,7 @@ class AnthropicCompatibleProvider:
             "max_retries": 0,
             "tool_choice": "any",
             "disable_parallel_tool_use": True,
+            "thinking": self._thinking,
         }
         if self._temperature is not None:
             sampling["temperature"] = self._temperature
@@ -286,8 +303,8 @@ class AnthropicCompatibleProvider:
             "max_tokens": max_output_tokens,
             "messages": conversation,
             "tools": list(tools),
-            # 工作流协议要求每轮恰好选择一个工具；在供应商层同步约束，
-            # 避免推理模型把整个输出预算耗在不可见思考上却不产生 tool_use。
+            # 请求单工具；DeepSeek 兼容入口忽略 disable_parallel_tool_use，
+            # 多工具回复仍由本地校验拒绝并闭合全部 tool_use ID。
             "tool_choice": {"type": "any", "disable_parallel_tool_use": True},
             "timeout": timeout,
         }
@@ -295,6 +312,8 @@ class AnthropicCompatibleProvider:
             request["system"] = system
         if self._temperature is not None:
             request["temperature"] = self._temperature
+        if self._thinking == "disabled":
+            request["thinking"] = {"type": "disabled"}
         try:
             response = await self._client.messages.create(**request)  # type: ignore[attr-defined]
         except Exception as exc:  # noqa: BLE001 - 供应商异常必须被分类，不能把运行打崩
@@ -351,7 +370,7 @@ def _to_api_message(message: ChatMessage) -> dict[str, object]:
 
 
 def _from_api_response(response: object) -> ModelReply:
-    """解析供应商响应：只取工具调用、文本与用量，其余一律不解释。"""
+    """解析工具、文本和用量；只记录脱敏块类型，不保存推理内容。"""
     blocks = getattr(response, "content", None)
     if not isinstance(blocks, list):
         return ModelReply(
@@ -359,8 +378,12 @@ def _from_api_response(response: object) -> ModelReply:
         )
     tool_calls: list[ToolCallRequest] = []
     texts: list[str] = []
+    block_types: list[str] = []
     for block in blocks:
         kind = getattr(block, "type", None)
+        block_types.append(
+            kind if kind in {"tool_use", "text", "thinking", "redacted_thinking"} else "other"
+        )
         if kind == "tool_use":
             arguments = getattr(block, "input", None)
             tool_calls.append(
@@ -377,6 +400,7 @@ def _from_api_response(response: object) -> ModelReply:
         text="".join(texts) or None,
         usage=_usage_of(response),
         stop_reason=_stop_reason(response),
+        response_block_types=block_types,
     )
 
 

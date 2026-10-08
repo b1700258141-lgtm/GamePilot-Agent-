@@ -15,7 +15,7 @@
 
 from typing import Literal
 
-from pydantic import ConfigDict, Field, field_validator
+from pydantic import ConfigDict, Field, field_validator, model_validator
 
 from gamepilot.agent.models import CostEstimate, TokenUsage
 from gamepilot.testing.models import CaseStatus, RunEnvironment
@@ -74,6 +74,7 @@ class AgentCellEvidence(BenchmarkModel):
     run_report_path: str | None = None
     run_report_error: str | None = None
     stop_reason: str
+    stop_detail: str | None = None
     exit_code: int
     goal_met: bool = False
     completed: bool = False
@@ -157,6 +158,10 @@ class AgentEvalSummary(BenchmarkModel):
 
     cells_planned: int
     cells_executed: int
+    cells_skipped: int
+    aborted_early: bool
+    abort_after_cell: str | None = None
+    abort_reason: str | None = None
     goals_met: int
     goals_incomplete: int
     agent_execution_errors: int
@@ -184,6 +189,19 @@ class AgentEvalSummary(BenchmarkModel):
     cost: CostEstimate = Field(default_factory=CostEstimate)
     # 真实模型的验收门槛与工程门槛分开表达，不混成一个通过/失败。
     acceptance_note: str = ""
+
+    @model_validator(mode="after")
+    def _check_abort_evidence(self) -> "AgentEvalSummary":
+        if self.cells_executed + self.cells_skipped != self.cells_planned:
+            raise ValueError("cells_executed + cells_skipped 必须等于 cells_planned")
+        if self.aborted_early != (self.cells_skipped > 0):
+            raise ValueError("aborted_early 必须与 cells_skipped 是否大于 0 一致")
+        evidence = (self.abort_after_cell, self.abort_reason)
+        if self.aborted_early and any(value is None for value in evidence):
+            raise ValueError("提前中止时必须记录 abort_after_cell 与 abort_reason")
+        if not self.aborted_early and any(value is not None for value in evidence):
+            raise ValueError("未提前中止时不得记录中止证据")
+        return self
 
 
 class AgentEvalReport(BenchmarkModel):

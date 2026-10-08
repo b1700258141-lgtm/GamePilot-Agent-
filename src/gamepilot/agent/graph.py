@@ -163,6 +163,7 @@ def _make_nodes(context: AgentContext) -> dict[str, Callable[[AgentState], Any]]
                 messages=sent,
                 response_text=reply.text,
                 provider_stop_reason=reply.stop_reason,
+                response_block_types=reply.response_block_types,
                 error_kind=reply.error_kind,
                 error_detail=reply.error_detail,
                 tool_calls=list(reply.tool_calls),

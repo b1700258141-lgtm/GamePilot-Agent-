@@ -1,6 +1,6 @@
 # 第三阶段建议：游戏测试闭环与首次 Agent 接入
 
-状态：2026-09-21；TASK-003A、TASK-003B（含 R1）已验收；TASK-003C-R1 离线工程链路和 V2 预算/费用工程准备通过。DeepSeek Flash 真实 Gate A 与 normal 三目标 Gate B 已通过；Gate C 未执行，完整真实模型验收仍在进行中。
+状态：2026-10-08；TASK-003A、TASK-003B（含 R1）已验收；TASK-003C-R1 离线工程链路与 V2 预算/费用工程准备通过。真实 Gate A、normal 三目标 Gate B 与 V5 单格已通过；Gate C 首轮第 8 格止损后，V6 在 thinking=disabled 下完成固定 12/12 格小样本验收。学习复盘待完成，金额 unknown。
 
 ## 1. 目标与依据
 
@@ -58,19 +58,32 @@ R1 以 443 项非 PostgreSQL 回归、原 32 组合脚本评测、离线 12 格 
 
 真实模型验收按 `docs/claude-tasks/TASK-003C-V1-real-model-acceptance.md` 分级执行。
 首次 Gate A 因输出预算耗尽而连续没有 `tool_use`；Agent schema 1.2 补齐 stop reason/文本证据后，
-诊断确认 `max_tokens`。供应商现用 `tool_choice=any` 且禁止并行工具调用，修复后以 2 次原生工具
+诊断确认 `max_tokens`。请求现用 `tool_choice=any` 并请求禁止并行，但供应商忽略后者，须由本地校验；修复后以 2 次原生工具
 调用、0 次格式纠正完成 `normal × healing`，exit 0，replay match。其后 Gate B 三目标均 exit 0、
-规则失败 0、无模型 replay match，共 8 次模型调用、3,628 Token；Gate C 没有执行；
+规则失败 0、无模型 replay match，共 8 次模型调用、3,628 Token；Gate C 首轮运行后止损；
 benchmark 可配置预算与整批费用汇总已在 V2 完成。
 
 `docs/claude-tasks/TASK-003C-V2-benchmark-budget-cost.md` 已完成：显式 `BudgetSpec` 和价格配置
 贯穿 12 格，严格汇总 usage/费用，agent benchmark 升级到 1.2.0。离线 12 格、原 32 组合、
-466 项非 PostgreSQL 回归和 Ruff 均通过；V2 本身未调用真实模型。其后 Gate B 已通过，Gate C
-仍待独立决定。
+466 项非 PostgreSQL 回归和 Ruff 均通过；V2 本身未调用真实模型。其后 Gate B 已通过，
+Gate C 首轮在 2026-09-29 止损。
 
-下一任务为 `docs/claude-tasks/TASK-003C-V3-real-gate-c-benchmark.md`：复用现有评测器执行真实固定
-12 格，不再增加 Agent 功能。Gate A/B 已累计 10 次有效调用、4,400 Token；Gate C 的整批技术
-上限为 72 次调用与 36,864 输出 Token，仍需所有者单独授权并确认单价/金额口径后才能执行。
+`docs/claude-tasks/TASK-003C-V3-real-gate-c-benchmark.md` 冻结了真实固定 12 格的预算和清单。
+Gate A/B 已累计 10 次有效调用、4,400 Token；Gate C 整批技术上限为 72 次调用与
+36,864 输出 Token。所有者已单独授权一次执行，并明确接受费用 unknown。
+2026-09-24 已完成付费前止损准备：agent benchmark 1.3.0 新增显式 `--fail-fast`，执行错误后停止
+后续格并保存固定 12 格分母的部分摘要；有效缺陷结论不会触发中止。468 项非 PostgreSQL 回归、
+Ruff（119 个文件）和开启 fail-fast 的离线 12 格均通过。2026-09-29 经单独授权执行一次真实 Gate C：
+第 8 格连续两次 `max_tokens` 且无工具调用，格式纠正耗尽后 exit 2；执行 8/12 格、跳过 4 格，
+已执行格的 replay 8/8 match，19 次调用共 8,543 Token。完整 12 格能力结论未形成，不自动重跑；
+2026-10-08 已完成 V4 离线诊断：三个 healing 首轮消息一致，旧响应缺少块类型，不能确认
+输出 Token 的具体用途。schema 1.3 补齐脱敏块类别与离线验证；V5 已接入两个 CLI 的显式思考模式
+参数，`potion_not_consumed × healing` 真实单格已通过（规则缺陷检出、无模型重放一致）；
+V6 已获独立授权并完成第二次真实固定 12 格：exit 0、六项门槛 6/6、
+replay 12/12 match、实际 7,216 Token，费用 unknown。
+详见 `docs/validation/TASK-003C-V4-format-exhaustion-diagnostic.md`、
+`docs/validation/TASK-003C-V5-thinking-mode-canary.md` 与
+`docs/validation/TASK-003C-V6-second-real-gate-c.md`。
 
 ## 5. 学习与范围
 
