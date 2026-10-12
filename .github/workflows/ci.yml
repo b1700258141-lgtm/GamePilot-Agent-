@@ -1,0 +1,181 @@
+name: GamePilot CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  offline:
+    name: Offline tests and regression demo
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: pyproject.toml
+      - name: Install test and offline Agent dependencies
+        run: python -m pip install '.[dev,agent]'
+      - name: Lint and format
+        run: |
+          python -m ruff check .
+          python -m ruff format --check .
+      - name: Run all non-PostgreSQL tests
+        run: python -m pytest -q -p no:cacheprovider -m 'not postgres' --junitxml=artifacts/ci/offline-tests.xml
+      - name: Generate reproducible regression evidence
+        run: python -m gamepilot.defects demo --output-dir artifacts/ci/demo
+      - name: Check fixed cross-seed scripted behavior
+        run: python -m gamepilot.benchmark seed-sweep --output-dir artifacts/ci/seed-sweeps
+      - name: Upload test and demo evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: offline-evidence
+          path: artifacts/ci/
+          if-no-files-found: warn
+          retention-days: 14
+
+  postgres:
+    name: PostgreSQL migrations and integration tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: gamepilot_test
+          POSTGRES_USER: gamepilot_ci
+          POSTGRES_PASSWORD: ci-only-password
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -h 127.0.0.1 -U gamepilot_ci -d gamepilot_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      # Disposable runner service; never points at the developer's database.
+      TEST_DATABASE_URL: postgresql+psycopg://gamepilot_ci:ci-only-password@127.0.0.1:5432/gamepilot_test
+      DATABASE_URL: postgresql+psycopg://gamepilot_ci:ci-only-password@127.0.0.1:5432/gamepilot_test
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: pyproject.toml
+      - name: Install database test dependencies
+        run: python -m pip install '.[dev]'
+      - name: Upgrade schema and check drift
+        run: |
+          python -m alembic upgrade head
+          python -m alembic upgrade head
+          python -m alembic check
+      - name: Run real PostgreSQL tests
+        run: python -m pytest -q -p no:cacheprovider -m postgres --junitxml=artifacts/ci/postgres-tests.xml
+      - name: Upload database test evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: postgres-evidence
+          path: artifacts/ci/postgres-tests.xml
+          if-no-files-found: warn
+          retention-days: 14
+
+  package:
+    name: Installed wheel without Agent extras
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Build wheel
+        run: python -m pip wheel --no-deps --wheel-dir dist .
+      - name: Install wheel into a clean environment
+        run: |
+          python -m venv "$RUNNER_TEMP/gamepilot-smoke"
+          "$RUNNER_TEMP/gamepilot-smoke/bin/python" -m pip install dist/*.whl
+      - name: Run installed package outside the checkout
+        working-directory: ${{ runner.temp }}
+        env:
+          DEMO_OUTPUT: ${{ github.workspace }}/artifacts/ci/package-demo
+        run: |
+          "$RUNNER_TEMP/gamepilot-smoke/bin/python" -I -c "import importlib.util; assert importlib.util.find_spec('anthropic') is None; assert importlib.util.find_spec('langgraph') is None"
+          "$RUNNER_TEMP/gamepilot-smoke/bin/python" -I -m gamepilot.defects demo --output-dir "$DEMO_OUTPUT"
+      - name: Upload package demo evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: package-evidence
+          path: artifacts/ci/package-demo/
+          if-no-files-found: warn
+          retention-days: 14
+
+  container:
+    name: Containerized API regression and recovery
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      GAMEPILOT_API_PORT: '18770'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: pyproject.toml
+      - name: Install host test client
+        run: python -m pip install .
+      - name: Build and start isolated Compose stack
+        run: docker compose -f compose.local.yaml -p gamepilot-ci up -d --build
+      - name: Run HTTP baseline, replay, and restart recovery
+        run: |
+          python -m gamepilot.testing run --base-url http://127.0.0.1:18770 --output-dir artifacts/ci/container-baseline
+          reports=(artifacts/ci/container-baseline/*.json)
+          test "${#reports[@]}" -eq 1
+          python -m gamepilot.testing replay --report "${reports[0]}" --base-url http://127.0.0.1:18770 --output-dir artifacts/ci/container-replay
+          python scripts/container_smoke.py --project gamepilot-ci --base-url http://127.0.0.1:18770 --output-dir artifacts/ci/container-smoke
+          test "$(docker inspect --format '{{.State.Health.Status}}' gamepilot-ci-api-1)" = healthy
+      - name: Preserve service logs
+        if: always()
+        continue-on-error: true
+        run: |
+          mkdir -p artifacts/ci
+          docker compose -f compose.local.yaml -p gamepilot-ci logs --no-color --tail 150 api migrate db > artifacts/ci/container-compose.log
+      - name: Stop test services and retain volume until runner teardown
+        if: always()
+        continue-on-error: true
+        run: docker compose -f compose.local.yaml -p gamepilot-ci stop
+      - name: Upload container evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: container-evidence
+          path: |
+            artifacts/ci/container-baseline/
+            artifacts/ci/container-replay/
+            artifacts/ci/container-smoke/
+            artifacts/ci/container-compose.log
+          if-no-files-found: warn
+          retention-days: 14

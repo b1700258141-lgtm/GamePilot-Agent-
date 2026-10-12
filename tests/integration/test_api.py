@@ -48,6 +48,13 @@ async def test_health_check(client: httpx.AsyncClient) -> None:
 
 
 @pytest.mark.anyio
+async def test_memory_backend_is_ready(client: httpx.AsyncClient) -> None:
+    response = await client.get("/ready")
+    assert response.status_code == 200
+    assert response.json() == {"status": "ready"}
+
+
+@pytest.mark.anyio
 async def test_create_session_returns_201_with_full_snapshot(
     client: httpx.AsyncClient,
 ) -> None:

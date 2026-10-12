@@ -85,6 +85,13 @@ async def _create(http: httpx.AsyncClient, payload: dict[str, object]) -> httpx.
 
 
 @pytest.mark.anyio
+async def test_lab_readiness_is_available_without_database(lab_app: LabHarness) -> None:
+    response = await lab_app.http.get("/ready")
+    assert response.status_code == 200
+    assert response.json() == {"status": "ready"}
+
+
+@pytest.mark.anyio
 async def test_lab_app_serves_the_same_api_shape_as_the_normal_service() -> None:
     async with (
         httpx.AsyncClient(

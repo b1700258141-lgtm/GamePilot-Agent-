@@ -86,6 +86,43 @@ def load_report(path: str | Path) -> RunReport:
     return report
 
 
+def load_replay_report(path: str | Path) -> ReplayReport:
+    """严格读取重跑证据；不把缺失字段的默认值当成实测结果。"""
+    report_file = Path(path)
+    if not report_file.is_file():
+        raise ReplayInputError(f"重跑报告文件不存在：{report_file}")
+    try:
+        raw = json.loads(report_file.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as exc:
+        raise ReplayInputError(f"重跑报告无法解析为 JSON：{type(exc).__name__}") from exc
+    if not isinstance(raw, dict) or raw.get("schema_version") not in SUPPORTED_SCHEMA_VERSIONS:
+        raise ReplayInputError("重跑报告 schema_version 不受支持或缺失")
+    try:
+        report = ReplayReport.model_validate(raw)
+    except ValidationError as exc:
+        raise ReplayInputError(f"重跑报告结构不合法（{len(exc.errors())} 处）") from exc
+    _require_complete(raw, report.model_dump(mode="json"))
+    if report.rules_version != RULES_VERSION:
+        raise ReplayInputError("重跑报告规则版本与当前判定规则不一致")
+    if not report.cases:
+        raise ReplayInputError("重跑报告不包含场景")
+    counts = [
+        sum(case.outcome == outcome for case in report.cases)
+        for outcome in ("match", "mismatch", "not_comparable")
+    ]
+    if counts != [
+        report.summary.matched,
+        report.summary.mismatched,
+        report.summary.not_comparable,
+    ]:
+        raise ReplayInputError("重跑报告汇总与场景结论不一致")
+    for case in report.cases:
+        _validate_case_boundary(case.execution)
+        if case.replayed_actions != case.execution.executed_actions:
+            raise ReplayInputError("重跑动作与执行证据不一致")
+    return report
+
+
 def _require_complete(raw: object, parsed: object, path: str = "report") -> None:
     """运行时模型可有便利默认值；读取证据时每个字段都必须实际存在。"""
     if isinstance(parsed, dict) and isinstance(raw, dict):
@@ -96,6 +133,11 @@ def _require_complete(raw: object, parsed: object, path: str = "report") -> None
     elif isinstance(parsed, list) and isinstance(raw, list):
         for index, (left, right) in enumerate(zip(raw, parsed, strict=True)):
             _require_complete(left, right, f"{path}[{index}]")
+
+
+def require_complete_fields(raw: object, parsed: object) -> None:
+    """供其他证据读取器复用的完整字段校验。"""
+    _require_complete(raw, parsed)
 
 
 def _validate_request(observation: HttpObservation | None, method: str, path: str) -> None:

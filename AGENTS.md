@@ -163,10 +163,21 @@ docs/
 
 ## 10. 当前项目进度
 
-**状态日期：2026-10-08**
+**状态日期：2026-10-12**
 
-**当前阶段：第三阶段；TASK-002A、TASK-002B、TASK-003A 与 TASK-003B 已通过独立验收。
-TASK-003C-R1 离线工程链路与 V2 预算/费用工程准备通过，DeepSeek Flash 真实 Gate A、normal 三目标 Gate B 与 V5 单格均通过；Gate C 首轮第 8 格止损，V6 以 thinking=disabled 完成固定 12/12 格真实模型小样本验收。金额仍为 unknown，学习复盘与公开展示决策待完成。**
+**当前工程已完成第五阶段本地容器交付，并进入第六阶段首个离线评测切片：TASK-004A 已把已确认规则失败导出为缺陷单和可运行回归规格；
+TASK-004B 增加固定清单批量回归验证，TASK-004C 增加可现场生成证据的一命令离线演示。
+TASK-004D 增加严格核验证据的修复前后回归对比。
+TASK-004E 增加离线、PostgreSQL 与安装包三条 CI 检查，本机对应验证通过，远程运行尚未触发。
+TASK-005A 已完成应用镜像与独立本地 Compose，真实 HTTP 基线、重放、重启恢复和迁移失败拦截通过。
+TASK-005B 增加运行期数据库就绪检查，真实断库时 API 容器转为 unhealthy，恢复后自行回到 healthy。
+TASK-005C 已把真实容器基线、重放和重启恢复接入第四条 CI 检查，本机等价流程通过，远程运行尚未触发。
+TASK-006A 开始第六阶段离线跨种子证据：固定 0–31 seed、两条脚本、四靶场，
+256/256 原运行与无模型重放通过；三处缺陷实际触发与目标规则检出分别为
+11/11、32/32、26/26，并已加入离线 CI。真实 Agent 跨 seed 能力仍未验证。
+此前 TASK-002A/B、TASK-003A/B 已独立验收；
+TASK-003C 离线链路及真实 V6 固定 12 格小样本通过。模型费用仍为 unknown，
+第三阶段学习复盘与公开展示决策待完成。**
 
 已经完成：
 
@@ -226,6 +237,16 @@ TASK-003C-R1 离线工程链路与 V2 预算/费用工程准备通过，DeepSeek
 - 经所有者授权由 Codex 暂代开发，已完成 Gate C 付费前止损切片：agent benchmark 1.3.0 新增 `--fail-fast`，任一格发生模型/API、重跑、对照或报告 I/O 执行错误后停止后续供应商调用；部分摘要保留固定 12 格分母、跳过格数、中止位置/原因和 unknown usage。有效游戏缺陷不会触发中止；离线 12 格在开启该选项后仍 exit 0、12/12 replay match。针对性测试 `39 passed`，完整非 PostgreSQL 回归 `468 passed, 29 deselected`，Ruff 检查与 119 个文件格式检查通过。
 - 2026-09-29 经所有者单独授权执行一次真实 Gate C，金额按 unknown 记录。第 8 格 `potion_not_consumed × healing` 连续两次返回 `stop_reason=max_tokens`、无工具调用，格式纠正耗尽；`--fail-fast` 按预期跳过后续 4 格，整批 exit 2。已执行 8/12 格、replay 8/8 match、normal 误报 0/3、预定缺陷检出 1/3；19 次模型调用、4,348 输入 + 4,195 输出 = 8,543 Token。完整能力结论尚不可得，未自动重跑。证据见 `docs/validation/TASK-003C-real-model-acceptance.md`。
 - 2026-10-08 经所有者授权执行一次 V6 真实固定矩阵：thinking=disabled、12/12 格执行、exit 0、六项门槛 6/6；预定缺陷 3/3、normal 误报 0/3、replay 12/12 match、执行错误 0。27 次模型调用、27 个动作、0 次格式纠正，5,639 输入 + 1,577 输出 = 7,216 Token，费用 unknown。49 份 JSON 和 48 个引用均核对，原 33 份首轮报告未改动；见 `docs/validation/TASK-003C-V6-second-real-gate-c.md`。
+- 所有者授权 Codex 暂代 Claude Code 实施 TASK-004A：新增 `gamepilot.defects export/verify`，
+  只从规则失败且无模型重跑 match 的游戏事实导出缺陷单与实际动作前缀；可选 Agent 报告须与
+  run_id、seed、规则、会话和停止原因一致。三处 V6 已知缺陷均可导出，回归规格在相应缺陷
+  靶场复现目标规则、在 normal 靶场通过；完整验收记录见
+  `docs/validation/TASK-004A-defect-regression-artifact.md`。未调用真实模型或修改数据库。
+- 所有者继续要求推进项目，Codex 实施 TASK-004B：新增 `gamepilot.defects batch`，
+  显式清单在 HTTP 前整体预检，顺序执行并生成固定分母的批量摘要；规则失败继续，
+  执行或写入错误停止并记录跳过项。真实本机 HTTP 验证 normal 为 3/3、exit 0，
+  `potion_not_consumed` 为 3/3 已执行、exit 1。非 PostgreSQL 回归 497 passed、
+  1 skipped、29 deselected；最终异常兜底经定向测试通过。未引入真实模型或数据库修改。
 
 尚未完成：
 
@@ -254,6 +275,20 @@ V6 是 seed 42 的一次真实小样本：12/12 重跑一致、3/3 预定缺陷�
 2. 轮换已进入聊天上下文的密钥；今后如需金额验收，再提供可靠单价与预算；
 3. 项目公开名称、许可证和仓库展示策略。
 
+第四阶段切片见 `docs/PHASE_4_PLAN.md`、`docs/CI.md`、
+`docs/claude-tasks/TASK-004A-defect-regression-artifact.md` 与
+`docs/claude-tasks/TASK-004B-batch-regression.md` 与
+`docs/claude-tasks/TASK-004C-reproducible-demo.md`、
+`docs/claude-tasks/TASK-004D-regression-comparison.md`；后续缺陷生命周期持久化、
+跨种子与长期稳定性评测需要另行定义范围。
+第五阶段本地容器交付已通过 TASK-005A 验收，见 `docs/PHASE_5_PLAN.md` 与
+`docs/DOCKER.md`；TASK-005B 运行期就绪检查也已通过，见
+`docs/validation/TASK-005B-runtime-readiness.md`。TASK-005C 增加容器 CI 门禁，
+见 `docs/validation/TASK-005C-container-ci-gate.md`。远程 CI、公开发布与本机验证保持分开记录。
+第六阶段首个离线切片见 `docs/PHASE_6_PLAN.md` 与
+`docs/validation/TASK-006A-cross-seed-scripted-eval.md`；它只衡量固定脚本、
+规则判定和确定性，不能替代真实 Agent 跨种子或长期稳定性验收。
+
 ## 12. 更新规则
 
 - 目标、角色边界和工程原则只在形成明确决策后更新；
@@ -264,6 +299,58 @@ V6 是 seed 42 的一次真实小样本：12/12 重跑一致、3/3 预定缺陷�
 - 若代码现状与本文档不一致，应明确指出差异，不能默默假设文档或代码其中一方正确。
 
 ## 13. 更新记录
+
+- **2026-10-12（TASK-006A）**：Codex 按继续推进指令新增固定跨种子离线脚本评测。
+  32 seed × 2 轨迹 × 4 靶场共 256 格，原运行与无模型重放均 256/256，
+  三处缺陷触发与目标规则检出为 11/11、32/32、26/26；修复独立靶场
+  `/ready` 探针装配，加入离线 CI。非 PostgreSQL 回归 `521 passed, 1 skipped,
+  29 deselected`，Ruff 与 127 文件格式检查通过。远程 CI 未触发，
+  未调用模型、提交或推送。
+
+- **2026-10-10（TASK-005C）**：Codex 按继续推进指令新增第四条 GitHub Actions
+  容器检查：构建并启动应用栈，验证 8 场 HTTP 基线、重放、四项重启恢复和最终
+  healthy 状态；失败时保留证据与日志。actionlint、Ruff 和格式检查通过；
+  本机独立容器等价流程 8/8 基线、8/8 重放、4/4 恢复通过。
+  测试项目已停止并保留卷。远程工作流尚未运行，未提交或推送。
+
+- **2026-10-10（TASK-005B）**：Codex 按继续推进指令新增 `/ready`，PostgreSQL
+  后端执行只读连接探测，容器健康检查改用该端点；`/health` 继续只表示进程存活。
+  定向测试 28 passed，Ruff 与 124 文件格式检查通过。独立容器实测断库后
+  `/ready` 为 503、容器 unhealthy；恢复后回到 200/healthy，游戏动作可用。
+  专用验收项目已停止且数据卷保留；未调用模型、提交或推送。
+
+- **2026-10-10（TASK-005A）**：Codex 继续暂代实施，新增非 root 基础应用镜像、构建
+  上下文白名单和独立 db/migrate/api Compose。真实镜像构建与迁移通过，容器 HTTP
+  基线 8/8、重放 8/8；API/数据库重启、API 容器重建及后续动作对照四项通过。
+  注入迁移 exit 7 后 API 保持未启动，Ruff 与 124 文件格式检查通过。
+  两个专用验收项目停止且保留数据卷；原开发卷未改动。未调用模型、提交或推送。
+  详见 `docs/validation/TASK-005A-local-container-delivery.md`。
+
+- **2026-10-09（TASK-004E）**：Codex 按继续推进指令新增 GitHub Actions 三任务检查。
+  本机完整离线回归 `508 passed, 1 skipped, 29 deselected`；独立临时 PostgreSQL
+  的迁移、重复升级、模型漂移检查及 `29 passed` 集成测试通过；基础 wheel 在全新环境、
+  源码目录外完成演示且无需模型 SDK。未调用模型、提交、推送或设置远程分支保护；
+  本机验收与远程 CI 状态分开记录，详见 `docs/CI.md`。
+
+- **2026-10-09（TASK-004D）**：Codex 按继续推进指令实现离线批量回归对比。
+  校验清单哈希、逐项运行证据和计数，按相同指纹与规格区分转为通过、持续通过、
+  新增失败、仍失败、不可判定。错误与跳过不会被算成修复；未调用模型或修改数据库。
+  验收见 `docs/validation/TASK-004D-regression-comparison.md`。
+
+- **2026-10-09（TASK-004C）**：Codex 按继续推进指令实现 `gamepilot.defects demo`。
+  使用固定脚本与进程内 ASGI 靶场现场生成三种缺陷的运行/重跑证据、缺陷单及清单，
+  验证 normal 全通过与三个缺陷靶场目标规则复现。独立 CLI exit 0，重复运行保留旧证据；
+  定向回归 `18 passed, 1 skipped`，Ruff 及 118 文件格式检查通过。
+  明确不作为新一次 Agent 评测。验收见 `docs/validation/TASK-004C-reproducible-demo.md`。
+
+- **2026-10-09（TASK-004B）**：所有者继续要求推进项目，Codex 暂代实施显式固定清单的批量回归。
+  全量预检先于 HTTP 请求；逐项复用独立判定器，规则失败继续、执行错误停止，
+  摘要固定计划分母并保留跳过项。本机 HTTP 批量 normal exit 0、药水缺陷 exit 1；
+  非 PostgreSQL 回归 `497 passed, 1 skipped, 29 deselected`，最终改动定向测试
+  `13 passed, 1 skipped`，Ruff 检查及 116 文件格式检查通过。验收见
+  `docs/validation/TASK-004B-batch-regression.md`。未调用模型、复验 PostgreSQL、提交或推送。
+
+- **2026-10-08（TASK-004A）**：所有者明确授权 Codex 暂代 Claude Code 实施。新增无模型缺陷导出与回归验证命令，要求原运行与重跑严格一致、目标规则确实被独立判定器检查；三处 V6 缺陷均成功导出，localhost 上 normal exit 0、对应缺陷 exit 1。非 PostgreSQL 回归 `493 passed, 29 deselected`，Ruff 检查及 114 文件格式检查通过；未改数据库、调用模型、提交或推送。
 
 - **2026-10-08（V6 真实 Gate C）**：所有者对固定 12 格、最多 72 次调用和金额 unknown 的方案回复“继续任务”。thinking=disabled 的真实矩阵 12/12 格、exit 0、六项门槛 6/6；三处预定缺陷检出、normal 无误报、replay 12/12 match。实际 27 次模型调用、7,216 Token；49 份 JSON 可读、48 个引用存在、令牌精确值未写入报告，首轮 Gate C 的 33 份 JSON 哈希不变。未重跑模型、未复验数据库、未提交或推送；学习复盘仍待所有者完成。
 

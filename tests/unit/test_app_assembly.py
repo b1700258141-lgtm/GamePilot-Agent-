@@ -9,7 +9,7 @@ import logging
 import traceback
 from collections.abc import Iterator
 from pathlib import Path
-from unittest.mock import Mock
+from unittest.mock import MagicMock, Mock
 
 import anyio
 import pytest
@@ -138,6 +138,36 @@ def test_postgres_app_probes_connection_at_startup(
 
     with pytest.raises(PersistenceUnavailableError, match="not reachable at startup"):
         anyio.run(_enter_lifespan, app)
+
+
+def test_readiness_tracks_database_outage_without_exposing_exception(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    marker = "REVIEW_FAKE_SECRET"
+    _use_config(
+        monkeypatch,
+        tmp_path,
+        REPOSITORY_BACKEND="postgres",
+        DATABASE_URL=UNREACHABLE_URL,
+    )
+    fake_engine = MagicMock(spec=Engine)
+    monkeypatch.setattr(main_module, "create_db_engine", lambda _url: fake_engine)
+    monkeypatch.setattr(main_module, "create_session_factory", lambda _engine: Mock())
+    app = main_module.create_app()
+    client = TestClient(app)
+
+    assert client.get("/ready").json() == {"status": "ready"}
+    fake_engine.connect.side_effect = OperationalError("SELECT 1", {}, Exception(marker))
+    assert client.get("/health").json() == {"status": "ok"}
+    unavailable = client.get("/ready")
+    assert unavailable.status_code == 503
+    assert unavailable.json() == {
+        "code": "persistence_unavailable",
+        "message": "database is not reachable",
+    }
+    assert marker not in unavailable.text
+    fake_engine.connect.side_effect = None
+    assert client.get("/ready").json() == {"status": "ready"}
 
 
 def test_failed_startup_disposes_engine_and_hides_original_error(

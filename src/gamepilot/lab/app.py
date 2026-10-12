@@ -50,6 +50,8 @@ def create_lab_app(profile: str, *, recorder: TriggerRecorder | None = None) -> 
         description=LAB_API_DESCRIPTION,
     )
     app.state.repository = InMemorySessionRepository()
+    # 与正常服务的内存后端一致；公共 /ready 路由需要此探针。
+    app.state.readiness_probe = lambda: None
     app.state.session_factory = make_session_factory(resolved, trigger_recorder)
     # 下面两项只供宿主（CLI、评测器、测试）自省，不参与任何 HTTP 响应，
     # 也不出现在 OpenAPI 文档里；正常服务的应用没有这两个属性。

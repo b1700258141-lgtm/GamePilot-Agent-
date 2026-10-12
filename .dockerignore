@@ -1,0 +1,14 @@
+# Only project runtime and migration inputs enter the build context.
+**
+!Dockerfile
+!.dockerignore
+!pyproject.toml
+!README.md
+!src/
+!src/**
+!alembic.ini
+!alembic/
+!alembic/**
+**/__pycache__/
+**/*.pyc
+**/*.pyo

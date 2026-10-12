@@ -68,6 +68,13 @@ def create_app(repository: SessionRepository | None = None) -> FastAPI:
         lifespan=lifespan,
     )
     app.state.repository = resolved
+
+    # 注入仓储时不推断其底层类型；由调用方持有的依赖不在此处探测。
+    def readiness_probe() -> None:
+        if engine is not None:
+            _probe_database(engine, startup=False)
+
+    app.state.readiness_probe = readiness_probe
     # 正常服务固定使用领域层的会话工厂；缺陷靶场由自己的装配覆盖它。
     app.state.session_factory = create_combat_session
     register_exception_handlers(app)
@@ -75,15 +82,16 @@ def create_app(repository: SessionRepository | None = None) -> FastAPI:
     return app
 
 
-def _probe_database(engine: Engine) -> None:
-    """启动时探测一次连接：数据库不可用时让启动明确失败，而不是等到首个请求。"""
+def _probe_database(engine: Engine, *, startup: bool = True) -> None:
+    """探测连接；启动和运行期就绪检查共用同一安全错误边界。"""
     try:
         with engine.connect() as connection:
             connection.execute(text("SELECT 1"))
     except SQLAlchemyError:
         # Lifespan 异常由服务器记录。隐藏原始异常链，避免连接参数或 SQL
         # 进入服务器日志；对外只保留稳定、安全的启动错误。
-        raise PersistenceUnavailableError("database is not reachable at startup") from None
+        message = "database is not reachable at startup" if startup else "database is not reachable"
+        raise PersistenceUnavailableError(message) from None
 
 
 app = create_app()

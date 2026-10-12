@@ -20,16 +20,19 @@
 - 可控缺陷靶场 `gamepilot.lab`：三个真实状态缺陷、独立内存入口，正常服务与公开 API 不受影响
 - 固定评测集 `gamepilot.benchmark`：4 个 profile × 8 个基线场景 = 32 个组合、同 profile 重跑、
   负向验证与 7 项带分子/分母的指标，退出码区分「符合预期 / 存在偏差 / 执行错误」
+- 固定跨种子脚本评测：0–31 seed × 两条动作轨迹 × 四个隔离靶场，记录实际触发、目标规则检出和无模型重放证据
 - LangGraph 游戏测试 Agent `gamepilot.agent`：一条完整闭环（模型选动作 → 程序判定 → 收口 → 出报告），
   产物与脚本执行器同构、可用既有 `replay` 无模型重跑；4 profile × 3 目标的 12 格配对试验
   （离线工程链路与真实 Gate A/B 已通过；首轮 Gate C 止损后，V6 固定 12 格真实小样本通过，见「游戏测试 Agent」一节）
+- 缺陷回归 `gamepilot.defects`：从已确认且重跑一致的规则失败导出缺陷单与实际动作前缀，
+  在指定目标的新会话中验证修复或复现，并保存新的运行报告
 - 完整的领域单元测试、API 集成测试与真实 PostgreSQL 集成测试
 
 ## 当前未实现（属于后续阶段）
 
-- **跨种子与长期稳定性评测**：现有真实模型证据是固定 seed 42、12 格的一次小样本；
-  金额验收尚未完成，实际费用仍为 unknown。
-- MCP 接入、应用容器化与线上部署、前端与视觉测试。
+- **Agent 跨种子与长期稳定性评测**：真实模型证据仍是固定 seed 42、12 格的一次小样本；
+  离线脚本评测不能证明模型规划泛化。金额验收尚未完成，实际费用仍为 unknown。
+- MCP 接入、线上部署、前端与视觉测试。
 
 这些不会提前引入。
 
@@ -184,6 +187,9 @@ python -m gamepilot.testing replay --base-url http://127.0.0.1:8000 --report art
 
 # 4. 批量评测：自动组装四个隔离应用（不依赖手动开启的服务）
 .venv\Scripts\python.exe -m gamepilot.benchmark run --output-dir artifacts/benchmarks
+
+# 5. 固定跨 seed 脚本评测：256 格及其无模型重放，exit 0 表示全部符合预期
+.venv\Scripts\python.exe -m gamepilot.benchmark seed-sweep --output-dir artifacts/seed-sweeps
 ```
 
 `gamepilot.lab serve` 只监听本机、随终端关闭而退出，不启动也不清理任何数据库或会话。
@@ -574,7 +580,90 @@ API 层（FastAPI 路由 + Pydantic 请求 Schema）
   选动作驱动它。因此两者的客户端行为、判定与报告完全同构，Agent 的轨迹天然可以被既有
   `replay` 重跑。Agent 不导入靶场、评测清单或脚本场景，判定始终由 oracle 完成。
 
-## 后续计划
+## 缺陷单与回归验证
+
+本地 Docker 交付入口（数据库、迁移和 API 一起启动）：
+
+```powershell
+docker compose -f compose.local.yaml up --build
+```
+
+就绪后打开 `http://127.0.0.1:8000/docs`；`/ready` 可检查数据库连接。
+此方案使用独立数据卷，
+原有仅启动开发数据库的 `compose.yaml` 仍保留。停止/重启与持久化演示见
+[Docker 运行说明](docs/DOCKER.md)。
+
+仓库已配置 [GitHub Actions 检查](.github/workflows/ci.yml)：推送到 `main`、提交 PR
+或手动触发时，分别运行完整离线测试、临时 PostgreSQL 16 的迁移与集成测试、
+基础 wheel 安装后的独立演示，以及容器中的 HTTP 回归与重启恢复。
+流程不需要模型密钥，测试和演示证据保留 14 天。
+工作流配置就绪不等于已在 GitHub 上运行；是否设为合并必需检查，需要仓库所有者设置。
+更多运行与排错说明见 [持续集成说明](docs/CI.md)。
+
+新环境可先运行一条完整的离线演示命令（安装项目运行依赖即可，无需密钥或数据库）：
+
+```powershell
+python -m gamepilot.defects demo
+```
+
+命令现场生成三种已知缺陷的脚本运行与重跑证据、缺陷单及固定回归清单，
+再检查 normal 和三个缺陷靶场；每次创建独立目录，汇总路径打印到终端。
+全部预期满足才退出 0：正常靶场全部通过，三个缺陷靶场各自复现目标规则。
+预期不符退出 1，执行或写入错误退出 2。报告内的缺陷靶场批次退出 1 是预期结果。
+该演示使用进程内 ASGI HTTP 接口和固定脚本，不调用 LLM、不代表新一次 Agent 评测。
+清单可直接交给下方 `batch` 命令验证真实服务；历史证据含机器路径，换机器请重新生成。
+
+`gamepilot.defects export` 读取 `testing.RunReport` 与匹配的 `ReplayReport`，
+只为已复现的游戏规则失败生成缺陷单。若同一步有多条失败规则，
+用 `--rule-id` 指定要跟踪的规则；可用 `--agent-report` 核对 Agent 结论与游戏事实的引用。
+缺陷单含稳定指纹、证据引用及到首个失败为止的实际动作前缀，不复制原始 HTTP body 或模型文本。
+
+```powershell
+python -m gamepilot.defects export --run-report RUN_REPORT.json --replay-report REPLAY_REPORT.json --case-id agent-healing --rule-id R-POTION-DECREMENTS
+python -m gamepilot.defects verify --artifact DEFECT_ARTIFACT.json --base-url http://127.0.0.1:8765
+python -m gamepilot.defects batch --manifest regression-manifest.json --base-url http://127.0.0.1:8765
+```
+
+`export` 会打印实际产物路径，把它填入第二条命令。`verify` 的目标地址只来自本次
+`--base-url`；它复用 HTTP 客户端和独立判定器，并为验证另存一份运行报告。
+退出码 0 表示目标规则确实被检查且所有规则通过；1 表示目标规则复现、其他规则失败，
+或目标规则未被执行（具体原因见命令输出）；2 表示输入、执行或报告写入错误。
+例如同一药水扣减回归规格在 `normal` 靶场 exit 0，在 `potion_not_consumed` 靶场 exit 1。
+导出与验证均不调用模型，也不修改游戏数据库。
+
+批量清单是 JSON 文件，放在缺陷产物的上层目录。每项填写相对于清单目录的路径和
+`export` 打印的 64 位指纹，例如：
+
+```json
+{
+  "schema_version": "1.0",
+  "name": "known-defects",
+  "items": [
+    {"artifact": "defects/defect-example.json", "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"}
+  ]
+}
+```
+
+将示例文件名和指纹替换为实际 `export` 产物；最多 100 项。`batch` 会先核对整份清单，
+再逐项开新会话并保存独立运行报告及批量摘要。0 表示全部通过，1 表示至少一项规则失败，
+2 表示输入、执行或报告写入错误；执行错误会停止后续项，摘要仍保留计划分母和跳过数。
+批量验证不调用模型，也不会更新缺陷数据库。
+
+修复前后可以离线比较两份批量报告：
+
+```powershell
+python -m gamepilot.defects compare --before BEFORE_BATCH.json --after AFTER_BATCH.json
+```
+
+两边必须是同一组缺陷指纹和回归规格，允许条目顺序不同。比较前会核对原清单的哈希、
+逐项运行证据和汇总计数；请保留批量报告引用的清单与产物文件。
+输出区分 `now_passing`（转为通过）、`still_passing`（持续通过）、
+`new_failure`（新增失败）、`still_failing`（仍然失败）和 `inconclusive`（不可判定）。
+执行错误、跳过项或目标规则未检查均不可判定，不能视为修复通过。
+退出 0 表示全部可比较且本次全通过，1 表示仍有失败，2 表示不可判定、输入或写入错误。
+这是指定 seed 和动作轨迹上的回归项变化，不会自动关闭缺陷，也不证明修复的因果关系。
+
+## 阶段记录与下一步
 
 TASK-002A 完成数据库骨架与迁移，TASK-002B 完成 PostgreSQL 仓储、
 事务边界与确定性恢复，TASK-003A 完成确定性测试执行器与规则判定基线，
@@ -590,7 +679,9 @@ V5 已实现显式关闭思考模式的参数，并在 `potion_not_consumed × h
 预定缺陷 3/3、normal 误报 0/3、无模型 replay 12/12 match、六项门槛 6/6；
 实际 27 次调用、7,216 Token，费用 unknown。证据见
 `docs/validation/TASK-003C-V6-second-real-gate-c.md`。
-详见 `docs/PHASE_2_PLAN.md`、`docs/PHASE_3_PLAN.md` 与 `AGENTS.md`。
+TASK-004A 已补齐从确认缺陷到单项回归验证的首条链路；TASK-004B 增加固定清单批量回归。
+后续的缺陷持久化与更大样本评测仍需另行设计。详见 `docs/PHASE_2_PLAN.md`、`docs/PHASE_3_PLAN.md`、
+`docs/PHASE_4_PLAN.md` 与 `AGENTS.md`。
 
 ## 已知限制
 
@@ -605,7 +696,7 @@ V5 已实现显式关闭思考模式的参数，并在 `potion_not_consumed × h
   超时后结果未知，重跑只重新检查而不承诺复现原错误；
 - 缺陷靶场与固定评测集同样是单进程顺序执行，不做并发评测；profile 由启动参数决定，
   不存在运行期开关（这是刻意的隔离边界，不是待补的开关）；
-- 评测报告里的地址是进程内 ASGI 应用的占位地址（`benchmark.invalid`），
+- 评测报告里的地址是进程内 ASGI 应用的占位地址（如 `benchmark.invalid`、`seed-sweep.invalid`），
   只用于说明「不是真实网络请求」；真实 localhost HTTP 的验证由 `gamepilot.lab serve`
   加 `gamepilot.testing run/replay` 手动完成；
 - 评测是固定脚本基线，不是 Agent 自主发现能力；
@@ -614,5 +705,5 @@ V5 已实现显式关闭思考模式的参数，并在 `potion_not_consumed × h
 - Agent 一次只跑一个会话、一条闭环，顺序执行不做并发；动作与模型调用默认上限为
   10 / 12，可在运行前显式收紧，没有自适应预算，也不自动重试失败的模型调用；
 - Agent 只有两个工具（`perform_action` / `finish`），一次只能调用一个；
-  没有轨迹最小化、缺陷复现脚本生成，也没有跨会话的长期记忆；
+  已有确定性回归规格导出，但没有轨迹自动最小化或跨会话的长期记忆；
 - 尚未接入 MCP，也没有缺陷开关（属于后续任务）。

@@ -1,0 +1,50 @@
+# Local demonstration stack. Independent of compose.yaml and gamepilot-pgdata.
+# The credentials below are only for this isolated local demo database.
+name: gamepilot-local
+
+x-app: &app
+  image: gamepilot-local:dev
+  build:
+    context: .
+  environment:
+    DATABASE_URL: postgresql+psycopg://gamepilot:local-demo-only@db:5432/gamepilot
+    REPOSITORY_BACKEND: postgres
+
+services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: gamepilot
+      POSTGRES_USER: gamepilot
+      POSTGRES_PASSWORD: local-demo-only
+    volumes:
+      - local-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD", "pg_isready", "-h", "127.0.0.1", "-U", "gamepilot", "-d", "gamepilot"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
+
+  migrate:
+    <<: *app
+    command: ["python", "-m", "alembic", "upgrade", "head"]
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      disable: true
+    restart: "no"
+
+  api:
+    <<: *app
+    ports:
+      - "127.0.0.1:${GAMEPILOT_API_PORT:-8000}:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+
+volumes:
+  local-pgdata:

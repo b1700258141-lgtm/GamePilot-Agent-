@@ -66,6 +66,17 @@ def health() -> dict[str, str]:
     return {"status": "ok"}
 
 
+@router.get(
+    "/ready",
+    responses={503: {"model": ErrorResponse, "description": "运行期数据库不可用"}},
+    summary="就绪检查",
+)
+def ready(request: Request) -> dict[str, str]:
+    """确认当前应用依赖可用；PostgreSQL 后端每次执行只读连接探测。"""
+    request.app.state.readiness_probe()
+    return {"status": "ready"}
+
+
 @router.post(
     "/api/v1/game-sessions",
     status_code=201,

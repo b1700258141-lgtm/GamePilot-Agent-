@@ -39,6 +39,7 @@ if TYPE_CHECKING:  # 只在类型检查时需要：运行期不导入 agent extr
 
 DEFAULT_OUTPUT_DIR = "artifacts/benchmarks"
 DEFAULT_AGENT_OUTPUT_DIR = "artifacts/agent-benchmarks"
+DEFAULT_SEED_SWEEP_OUTPUT_DIR = "artifacts/seed-sweeps"
 
 AGENT_PROVIDER_OFFLINE = "offline"
 AGENT_PROVIDER_REAL = "anthropic-compatible"
@@ -72,6 +73,15 @@ def build_parser() -> argparse.ArgumentParser:
         type=float,
         default=DEFAULT_TIMEOUT_SECONDS,
         help=f"单次请求超时秒数（默认 {DEFAULT_TIMEOUT_SECONDS}）",
+    )
+
+    sweep_parser = subparsers.add_parser(
+        "seed-sweep", help="离线执行固定 0–31 种子、两条脚本和四个靶场的规则评测"
+    )
+    sweep_parser.add_argument(
+        "--output-dir",
+        default=DEFAULT_SEED_SWEEP_OUTPUT_DIR,
+        help=f"证据输出目录（默认 {DEFAULT_SEED_SWEEP_OUTPUT_DIR}）",
     )
 
     agent_parser = subparsers.add_parser(
@@ -260,6 +270,25 @@ async def _run_command(args: argparse.Namespace) -> int:
     _render(report, args.output_dir)
     print(f"摘要：{args.output_dir}/{report.run_id}/benchmark.json")
     return report.summary.exit_code
+
+
+async def _run_seed_sweep_command(args: argparse.Namespace) -> int:
+    from .seed_sweep import run_seed_sweep
+
+    report, path = await run_seed_sweep(args.output_dir)
+    print(
+        f"跨种子脚本评测：执行 {report.executed}/{report.planned}，"
+        f"无模型重放一致 {report.replay_matches}/{report.planned}，"
+        f"原运行错误 {report.run_errors}，重放错误 {report.replay_errors}，"
+        f"偏差 {report.deviations}"
+    )
+    for profile in report.profiles:
+        print(
+            f"  {profile}：实际触发 {report.trigger_counts[profile]}，"
+            f"目标规则检出 {report.detection_counts[profile]}"
+        )
+    print(f"摘要：{path}")
+    return report.exit_code
 
 
 # ------------------------------------------------------------- agent 子命令
@@ -465,6 +494,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     try:
         if args.command == "agent":
             return asyncio.run(_run_agent_command(args))
+        if args.command == "seed-sweep":
+            return asyncio.run(_run_seed_sweep_command(args))
         return asyncio.run(_run_command(args))
     except ReplayInputError as exc:
         print(f"输入错误：{exc}", file=sys.stderr)
