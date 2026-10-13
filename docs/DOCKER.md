@@ -9,7 +9,7 @@ docker compose -f compose.local.yaml up --build
 
 服务顺序是 PostgreSQL 健康 → 一次性迁移成功 → API 启动。
 就绪后访问 `http://127.0.0.1:8000/` 打开战斗测试页：既可创建或恢复手动
-会话，也可在“Agent 自动测试”中选择目标、种子和缺陷，运行默认的离线演练并
+会话，也可在“Agent 自动测试”中选择 skill、种子和缺陷，运行默认的离线演练并
 查看判定过程、报告与再测对照。页面与 API 同源，无需另启前端服务。
 `http://127.0.0.1:8000/docs` 仍可查看接口文档；`/health` 检查进程存活，
 `/ready` 检查当前依赖是否可用。容器健康检查使用 `/ready`。
@@ -26,7 +26,7 @@ docker compose -f compose.local.yaml up --build
 `./scripts/start_local_with_model.ps1`：脚本优先使用 `GAMEPILOT_AGENT_API_KEY`，
 也接受指向 DeepSeek Anthropic 入口的 `ANTHROPIC_AUTH_TOKEN`，只在此次启动时
 转发给 WSL Docker；已有镜像无需重建，需要重建时加 `-Build`。每次网页运行
-最多 6 次模型调用、6 次动作，每次请求最多 512 输出 Token；输入 Token 和
+最多 20 次模型调用、20 次动作，每次请求最多 512 输出 Token；输入 Token 和
 金额无硬上限，费用无可靠单价时为 unknown。网页真实模式已完成一次单格
 验证，记录见 `docs/validation/AGENT-WEB-REAL-SMOKE-20261013.md`。
 
@@ -64,6 +64,8 @@ python scripts/container_smoke.py --project gamepilot-local --base-url http://12
   迁移失败时依赖条件阻止 API 启动，先检查 `docker compose -f compose.local.yaml logs migrate`。
 - 默认 Compose 项目名为 `gamepilot-local`，卷为该项目的 `local-pgdata`。
   原 `compose.yaml` 和 `gamepilot-pgdata` 开发卷不受影响。
+- 上传的自定义 skill 作为纯文本保存在独立的 `local-agent-skills` 卷；默认 skill 内置于代码。
+  上传内容不作为 Python 或 shell 执行，自定义 skill 只供真实模型使用。
 - `compose.local.yaml` 的固定凭据只用于这个本地演示数据库；此配置不是公网生产部署方案。
 - `/health` 只检查进程 HTTP 存活；`/ready` 对 PostgreSQL 执行一次只读连接探测，
   数据库不可用时返回 503 与稳定错误码 `persistence_unavailable`。容器健康检查

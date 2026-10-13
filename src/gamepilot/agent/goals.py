@@ -30,6 +30,7 @@ from .models import GoalCondition, GoalCoverage
 GOAL_FULL_HEALTH = "full-health"
 GOAL_HEALING = "healing"
 GOAL_VICTORY = "victory"
+GOAL_BATTLE_END = "battle-end"
 
 GOAL_IDS: tuple[str, ...] = (GOAL_FULL_HEALTH, GOAL_HEALING, GOAL_VICTORY)
 
@@ -39,6 +40,8 @@ COND_POTION_FROM_INJURED = "potion-from-injured"
 COND_HEAL_AND_POTIONS_CHECKED = "heal-and-potions-checked"
 COND_WON_OBSERVED = "won-observed"
 COND_POST_VICTORY_REJECTED = "post-victory-rejected"
+COND_BATTLE_ENDED = "battle-ended"
+COND_POST_BATTLE_REJECTED = "post-battle-rejected"
 
 
 def _passed(step: StepReport, rule_id: str) -> bool:
@@ -46,33 +49,37 @@ def _passed(step: StepReport, rule_id: str) -> bool:
 
 
 def _full_health_conditions(steps: Sequence[StepReport]) -> list[GoalCondition]:
-    rejected = [
+    used = [
         step
         for step in steps
         if step.action == "use_potion"
         and step.before.player.hp >= step.before.player.max_hp
-        and step.observed_status == 409
-        and step.observed_code == "player_full_hp"
+        and step.observed_status == 200
     ]
-    unchanged = [step for step in rejected if _passed(step, R_REJECT_NO_STATE_CHANGE)]
+    checked = [
+        step
+        for step in used
+        if _passed(step, R_POTION_HEAL)
+        and _passed(step, R_POTION_CAP)
+        and _passed(step, R_POTION_DECREMENTS)
+    ]
     return [
         GoalCondition(
             condition_id=COND_REJECTED_AT_FULL_HP,
-            met=bool(rejected),
+            met=bool(used),
             detail=(
-                f"第 {rejected[0].index} 步：满血（{rejected[0].before.player.hp}"
-                f"/{rejected[0].before.player.max_hp}）使用药水被 409 player_full_hp 拒绝"
-                if rejected
-                else "没有在满血快照下尝试使用药水并观察到 409 player_full_hp"
+                f"第 {used[0].index} 步：满血使用药水成功"
+                if used
+                else "尚未在满血状态下成功使用药水"
             ),
         ),
         GoalCondition(
             condition_id=COND_REJECTED_UNCHANGED,
-            met=bool(unchanged),
+            met=bool(checked),
             detail=(
-                f"第 {unchanged[0].index} 步：被拒绝后由 GET 证明状态与完整事件未变"
-                if unchanged
-                else f"缺少 {R_REJECT_NO_STATE_CHANGE} 通过的证据"
+                f"第 {checked[0].index} 步：实际回血、血量上限和药水消耗均通过"
+                if checked
+                else "缺少满血喝药规则通过的证据"
             ),
         ),
     ]
@@ -132,6 +139,7 @@ def _victory_conditions(steps: Sequence[StepReport]) -> list[GoalCondition]:
         and step.observed_code == "battle_not_active"
         and _passed(step, R_REJECT_NO_STATE_CHANGE)
     ]
+
     return [
         GoalCondition(
             condition_id=COND_WON_OBSERVED,
@@ -155,6 +163,51 @@ def _victory_conditions(steps: Sequence[StepReport]) -> list[GoalCondition]:
     ]
 
 
+def _battle_end_conditions(steps: Sequence[StepReport]) -> list[GoalCondition]:
+    ended = next(
+        (
+            step
+            for step in steps
+            if step.after is not None
+            and step.after.status in ("won", "lost")
+            and step.status == "pass"
+        ),
+        None,
+    )
+    rejected = next(
+        (
+            step
+            for step in steps
+            if ended is not None
+            and step.index > ended.index
+            and step.observed_status == 409
+            and step.observed_code == "battle_not_active"
+            and _passed(step, R_REJECT_NO_STATE_CHANGE)
+        ),
+        None,
+    )
+    return [
+        GoalCondition(
+            condition_id=COND_BATTLE_ENDED,
+            met=ended is not None,
+            detail=(
+                f"第 {ended.index} 步：观察到战斗状态 {ended.after.status}"
+                if ended is not None and ended.after is not None
+                else "尚未观察到玩家或敌人阵亡后的游戏终态"
+            ),
+        ),
+        GoalCondition(
+            condition_id=COND_POST_BATTLE_REJECTED,
+            met=rejected is not None,
+            detail=(
+                f"第 {rejected.index} 步：终态后操作被拒且状态未变"
+                if rejected
+                else "尚未验证终态后不能继续行动"
+            ),
+        ),
+    ]
+
+
 @dataclass(frozen=True)
 class GoalSpec:
     """一个测试目标：对外编号、给模型的目标文本与覆盖条件求值器。"""
@@ -165,9 +218,14 @@ class GoalSpec:
 
 
 GOAL_CATALOG: dict[str, GoalSpec] = {
+    GOAL_BATTLE_END: GoalSpec(
+        goal_id=GOAL_BATTLE_END,
+        goal="按照所选策略战斗至终态，并验证阵亡后不能继续行动",
+        evaluate=_battle_end_conditions,
+    ),
     GOAL_FULL_HEALTH: GoalSpec(
         goal_id=GOAL_FULL_HEALTH,
-        goal="验证满血时使用药水的处理及状态是否保持一致",
+        goal="验证满血时使用药水：实际回血为零、消耗一瓶且生命不越界",
         evaluate=_full_health_conditions,
     ),
     GOAL_HEALING: GoalSpec(
@@ -218,6 +276,7 @@ __all__ = [
     "COND_REJECTED_UNCHANGED",
     "COND_WON_OBSERVED",
     "GOAL_CATALOG",
+    "GOAL_BATTLE_END",
     "GOAL_FULL_HEALTH",
     "GOAL_HEALING",
     "GOAL_IDS",

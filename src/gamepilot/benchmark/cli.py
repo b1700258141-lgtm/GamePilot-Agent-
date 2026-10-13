@@ -12,7 +12,7 @@
 **注意 `agent` 子命令的退出码含义不同**：Agent 的一条闭环有自己的对外契约
 （0 目标达成 / 1 确认游戏违规 / 2 执行错误 / 3 目标未完成，见
 `gamepilot.agent.report.derive_exit_code`）。本入口一律返回**评测层**的含义：
-0 = 12 格无偏差，1 = 出现偏差，2 = 执行错误，不转发单格的退出码。
+0 = 15 格无偏差，1 = 出现偏差，2 = 执行错误，不转发单格的退出码。
 """
 
 from __future__ import annotations
@@ -79,7 +79,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
 
     sweep_parser = subparsers.add_parser(
-        "seed-sweep", help="离线执行固定 0–31 种子、两条脚本和四个靶场的规则评测"
+        "seed-sweep", help="离线执行固定 0–31 种子、两条脚本和多个靶场的规则评测"
     )
     sweep_parser.add_argument(
         "--output-dir",
@@ -167,7 +167,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     agent_parser = subparsers.add_parser(
         "agent",
-        help="运行 4 profile × 3 目标的 12 格 Agent 配对试验（退出码含义与 run 不同，见模块说明）",
+        help="运行 5 profile × 3 目标的 15 格 Agent 配对试验（退出码含义与 run 不同，见模块说明）",
     )
     agent_parser.add_argument(
         "--output-dir",
@@ -309,7 +309,7 @@ def _print_negative_validation(report: BenchmarkReport) -> None:
         return
     mark = "通过" if negative.passed else "不通过"
     print(
-        f"负向验证（不计入 32 次重跑）：{mark} - {negative.source_profile} x "
+        f"负向验证（不计入固定矩阵重跑）：{mark} - {negative.source_profile} x "
         f"{negative.source_case_id} 在 normal 上重放，结果为 {negative.replay_outcome}"
     )
     print(f"      {negative.note}")
@@ -531,7 +531,7 @@ def _make_agent_provider_factory(args: argparse.Namespace) -> Callable[[str], Mo
             f"环境变量 {api_key_env} 未设置，无法调用真实模型；"
             "请先导出它（本次不会显示或记录它的值）"
         )
-    # 4 profile 共用同一个供应商实例：12 格的模型配置必须完全一致。
+    # 全部 profile 共用同一个供应商实例：15 格的模型配置必须完全一致。
     provider = AnthropicCompatibleProvider(
         api_key=api_key,
         model=args.model or DEFAULT_MODEL,

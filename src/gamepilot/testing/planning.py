@@ -36,8 +36,8 @@ def derive_expectation(snapshot: SnapshotView, action: ActionName) -> ActionStep
         )
     if action == "attack":
         return ActionStep(action=action, expected_status=HTTP_OK, expected_code=None)
-    # use_potion：满血判定在药水数量之前，与公开实现的检查顺序一致。
-    if snapshot.player.hp >= snapshot.player.max_hp:
+    # 旧规则下满血拒绝；新规则下药水效力固定，但实际回血截断到生命上限。
+    if snapshot.ruleset == "v1" and snapshot.player.hp >= snapshot.player.max_hp:
         return ActionStep(
             action=action, expected_status=HTTP_CONFLICT, expected_code=CODE_PLAYER_FULL_HP
         )

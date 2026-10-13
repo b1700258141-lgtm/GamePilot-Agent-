@@ -1,4 +1,4 @@
-"""固定四种 seed 的离线 Agent 预检；测试替身成绩不作为模型能力结论。"""
+"""固定四种 seed 的 60 格离线 Agent 预检；替身成绩不作为模型能力结论。"""
 
 import time
 from contextlib import AsyncExitStack
@@ -25,17 +25,17 @@ from .agent_manifest import AGENT_COMBINATIONS, AGENT_GOAL_IDS, AgentCombination
 from .agent_models import AgentCellEvidence
 from .agent_seed_reachability import ReachabilityCase, search_fault_reachability
 
-PREFLIGHT_VERSION = "1.1.0"
+PREFLIGHT_VERSION = "2.0.0"
 PREFLIGHT_SEEDS = (0, 1, 2, 3)
 # 连续 seed，不按 Agent 结果筛选。HTTP 独立判定器会再次验证这些对照脚本。
-VICTORY_ATTACKS = {0: 3, 1: 3, 2: 4, 3: 3}
+VICTORY_ATTACKS = {0: 3, 1: 4, 2: 4, 3: 3}
 PREFLIGHT_BUDGET = BudgetSpec(
     max_action_attempts=6,
     max_model_calls=6,
     max_format_retries=1,
     total_timeout_seconds=60,
 )
-MANIFEST_SOURCE = "docs/claude-tasks/TASK-006C-agent-seed-preflight.md"
+MANIFEST_SOURCE = "docs/BATTLE_RULES_V2.md#缺陷靶场"
 
 
 class PreflightModel(BaseModel):
@@ -215,7 +215,7 @@ def _summarize(
 
 
 async def run_agent_seed_preflight(output_dir: str | Path) -> tuple[PreflightReport, Path]:
-    """只用离线观测驱动替身跑固定 48 格；绝不提供真实模型入口。"""
+    """只用离线观测驱动替身跑固定 60 格；绝不提供真实模型入口。"""
     started_at = utc_now_iso()
     started = time.perf_counter()
     run_id = new_run_id()

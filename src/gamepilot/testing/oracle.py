@@ -15,6 +15,8 @@ from collections.abc import Sequence
 
 from .models import ActionStep, HttpObservation, RuleCheck, SnapshotView, normalize_snapshot
 from .rules import (
+    ENEMY_DAMAGE_RANGES,
+    ENEMY_MAX_HP,
     INITIAL_POTIONS,
     PLAYER_DAMAGE_MAX,
     PLAYER_DAMAGE_MIN,
@@ -37,6 +39,11 @@ from .rules import (
     R_INIT_STATE,
     R_INVARIANTS,
     R_LAST_EVENT_MATCHES_SNAPSHOT,
+    R_LOOT_BALANCE,
+    R_LOOT_ITEM,
+    R_LOOT_PRESENT,
+    R_LOOT_RANGE,
+    R_NO_ACTION_AFTER_PLAYER_DEATH,
     R_NO_RETALIATE_ON_KILL,
     R_POTION_CAP,
     R_POTION_DECREMENTS,
@@ -47,9 +54,6 @@ from .rules import (
     R_STATUS_CONSISTENT,
     R_TURN_INCREMENT,
     RULE_CATALOG,
-    SLIME_DAMAGE_MAX,
-    SLIME_DAMAGE_MIN,
-    SLIME_MAX_HP,
 )
 
 
@@ -133,9 +137,24 @@ def check_initial_state(created: SnapshotView, fetched: SnapshotView) -> list[Ru
     checks = [
         _equality_rule(R_INIT_STATE, None, PLAYER_MAX_HP, created.player.hp),
         _equality_rule(R_INIT_STATE, None, PLAYER_MAX_HP, created.player.max_hp),
-        _equality_rule(R_INIT_STATE, None, INITIAL_POTIONS, created.player.potions),
-        _equality_rule(R_INIT_STATE, None, SLIME_MAX_HP, created.slime.hp),
-        _equality_rule(R_INIT_STATE, None, SLIME_MAX_HP, created.slime.max_hp),
+        _equality_rule(
+            R_INIT_STATE,
+            None,
+            2 if created.ruleset == "v1" else INITIAL_POTIONS,
+            created.player.potions,
+        ),
+        _equality_rule(R_INIT_STATE, None, 0, created.player.gold),
+        _boolean_rule(
+            R_INIT_STATE,
+            None,
+            created.enemy_type in ENEMY_MAX_HP,
+            "known enemy type",
+            created.enemy_type,
+        ),
+        _equality_rule(R_INIT_STATE, None, ENEMY_MAX_HP.get(created.enemy_type), created.slime.hp),
+        _equality_rule(
+            R_INIT_STATE, None, ENEMY_MAX_HP.get(created.enemy_type), created.slime.max_hp
+        ),
         _equality_rule(R_INIT_STATE, None, "active", created.status),
         _equality_rule(R_INIT_STATE, None, 0, created.turn),
         _equality_rule(R_INIT_STATE, None, [], created.events),
@@ -166,9 +185,20 @@ def check_step(
     因此治疗量按动作前快照计算、反击按药水事件后的 HP 计算，
     不能拿动作前后的最终 HP 差当作治疗量。
     """
-    checks = [
-        _equality_rule(R_EXPECTED_STATUS, step, plan.expected_status, observation.status_code),
-    ]
+    checks = []
+    if before.status == "lost":
+        checks.append(
+            _boolean_rule(
+                R_NO_ACTION_AFTER_PLAYER_DEATH,
+                step,
+                observation.status_code == 409,
+                "玩家死亡后动作返回 409",
+                f"HTTP {observation.status_code}",
+            )
+        )
+    checks.append(
+        _equality_rule(R_EXPECTED_STATUS, step, plan.expected_status, observation.status_code)
+    )
     if plan.expected_code is not None:
         checks.append(
             _equality_rule(R_EXPECTED_CODE, step, plan.expected_code, observation.error_code)
@@ -193,7 +223,7 @@ def check_step(
     )
 
     if plan.action == "attack":
-        checks.extend(_attack_checks(step, before, new_events))
+        checks.extend(_attack_checks(step, before, after, new_events))
         checks.append(
             _equality_rule(R_ATTACK_HP_APPLY, step, before.player.potions, after.player.potions)
         )
@@ -225,7 +255,9 @@ def check_step(
     return checks
 
 
-def _attack_checks(step: int, before: SnapshotView, new_events: Sequence) -> list[RuleCheck]:
+def _attack_checks(
+    step: int, before: SnapshotView, after: SnapshotView, new_events: Sequence
+) -> list[RuleCheck]:
     if not new_events:
         return [
             _boolean_rule(
@@ -239,7 +271,10 @@ def _attack_checks(step: int, before: SnapshotView, new_events: Sequence) -> lis
         ]
     attack = new_events[0]
     enemy_down = attack.slime_hp == 0
-    expected_count = 1 if enemy_down else 2
+    drop_expected = (
+        enemy_down and before.ruleset == "v2" and before.enemy_type in ("slime", "goblin")
+    )
+    expected_count = (2 if drop_expected else 1) if enemy_down else 2
     checks = [
         _boolean_rule(
             R_EVENT_ACTOR_ORDER,
@@ -272,13 +307,40 @@ def _attack_checks(step: int, before: SnapshotView, new_events: Sequence) -> lis
             _boolean_rule(
                 R_NO_RETALIATE_ON_KILL,
                 step,
-                len(new_events) == 1,
-                "敌人被击杀时本回合不反击（仅 1 个新事件）",
+                not any(event.kind == "retaliate" for event in new_events[1:]),
+                "敌人被击杀时本回合不反击",
                 f"{len(new_events)} new events",
             )
         )
+        if drop_expected:
+            drops = [event for event in new_events[1:] if event.kind == "drop"]
+            checks.append(_equality_rule(R_LOOT_PRESENT, step, 1, len(drops)))
+            if drops:
+                drop = drops[0]
+                low, high = (1, 3) if before.enemy_type == "slime" else (10, 20)
+                checks.extend(
+                    [
+                        _boolean_rule(
+                            R_LOOT_ITEM, step, drop.item == "gold", "item=gold", str(drop.item)
+                        ),
+                        _boolean_rule(
+                            R_LOOT_RANGE,
+                            step,
+                            low <= drop.value <= high,
+                            f"{low} <= gold <= {high}",
+                            str(drop.value),
+                        ),
+                        _equality_rule(
+                            R_LOOT_BALANCE,
+                            step,
+                            before.player.gold + (drop.value if drop.item == "gold" else 0),
+                            after.player.gold,
+                        ),
+                    ]
+                )
     else:
-        checks.extend(_retaliate_checks(step, new_events, previous_hp=attack.player_hp))
+        checks.extend(_retaliate_checks(step, before, new_events, previous_hp=attack.player_hp))
+        checks.append(_equality_rule(R_LOOT_BALANCE, step, before.player.gold, after.player.gold))
     return checks
 
 
@@ -296,6 +358,7 @@ def _potion_checks(step: int, before: SnapshotView, new_events: Sequence) -> lis
         ]
     potion = new_events[0]
     expected_heal = min(POTION_HEAL, before.player.max_hp - before.player.hp)
+    expected_value = expected_heal if before.ruleset == "v1" else POTION_HEAL
     checks = [
         _boolean_rule(
             R_EVENT_ACTOR_ORDER,
@@ -307,11 +370,11 @@ def _potion_checks(step: int, before: SnapshotView, new_events: Sequence) -> lis
         _boolean_rule(
             R_POTION_HEAL,
             step,
-            potion.value == expected_heal
+            potion.value == expected_value
             and potion.player_hp == before.player.hp + expected_heal
             and potion.slime_hp == before.slime.hp,
-            f"heal = min({POTION_HEAL}, {before.player.max_hp} - {before.player.hp}) = "
-            f"{expected_heal}, 事件 HP = 动作前 HP + 治疗量",
+            f"药水效力 {expected_value}，实际回血 min({POTION_HEAL}, "
+            f"{before.player.max_hp} - {before.player.hp}) = {expected_heal}",
             f"heal={potion.value} event player_hp={potion.player_hp}",
         ),
         _boolean_rule(
@@ -325,11 +388,13 @@ def _potion_checks(step: int, before: SnapshotView, new_events: Sequence) -> lis
         _equality_rule(R_EVENT_COUNT, step, 2, len(new_events)),
     ]
     # 喝药的反击按「治疗之后」的 HP 计算，不能拿动作前的 HP 算。
-    checks.extend(_retaliate_checks(step, new_events, previous_hp=potion.player_hp))
+    checks.extend(_retaliate_checks(step, before, new_events, previous_hp=potion.player_hp))
     return checks
 
 
-def _retaliate_checks(step: int, new_events: Sequence, *, previous_hp: int) -> list[RuleCheck]:
+def _retaliate_checks(
+    step: int, before: SnapshotView, new_events: Sequence, *, previous_hp: int
+) -> list[RuleCheck]:
     if len(new_events) < 2:
         return [
             _boolean_rule(
@@ -341,16 +406,17 @@ def _retaliate_checks(step: int, new_events: Sequence, *, previous_hp: int) -> l
             )
         ]
     retaliate = new_events[1]
+    low, high = (20, 35) if before.ruleset == "v1" else ENEMY_DAMAGE_RANGES[before.enemy_type]
     return [
         _boolean_rule(
             R_RETALIATE_ONCE,
             step,
-            retaliate.actor == "slime"
+            retaliate.actor == before.enemy_type
             and retaliate.kind == "retaliate"
-            and SLIME_DAMAGE_MIN <= retaliate.value <= SLIME_DAMAGE_MAX
+            and low <= retaliate.value <= high
             and retaliate.player_hp == max(0, previous_hp - retaliate.value)
             and retaliate.slime_hp == new_events[0].slime_hp,
-            f"slime retaliate with damage in [{SLIME_DAMAGE_MIN}, {SLIME_DAMAGE_MAX}] "
+            f"{before.enemy_type} retaliate with damage in [{low}, {high}] "
             f"and player.hp = max(0, {previous_hp} - damage)",
             f"actor={retaliate.actor} kind={retaliate.kind} value={retaliate.value} "
             f"player_hp={retaliate.player_hp}",

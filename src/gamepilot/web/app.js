@@ -5,6 +5,7 @@ const STORAGE_KEY = "gamepilot:last-session-id";
 const $ = (id) => document.getElementById(id);
 let snapshot = null;
 let busy = false;
+const enemyNames = { slime: "史莱姆", goblin: "哥布林", troll: "巨魔" };
 
 function feedback(message, kind = "success") {
   const node = $("feedback");
@@ -42,16 +43,14 @@ function controls() {
   $("session-input").disabled = busy;
   $("attack-button").disabled = busy || !active;
   $("potion-button").disabled = busy || !active || snapshot.player.potions < 1 ||
-    snapshot.player.hp >= snapshot.player.max_hp;
+    (snapshot.ruleset === "v1" && snapshot.player.hp >= snapshot.player.max_hp);
   $("refresh-button").disabled = busy || !snapshot;
   if (!snapshot) return;
   $("action-hint").textContent = !active
     ? "战斗已结束。可以创建新会话，或读取另一场战斗。"
-    : snapshot.player.hp >= snapshot.player.max_hp
-      ? "满血时不能使用药水。"
-      : snapshot.player.potions < 1
+    : snapshot.player.potions < 1
         ? "药水已用完。"
-        : "每次行动后，存活的史莱姆会反击。";
+        : "药水固定效力 25，实际回血不超过生命上限；行动后存活的敌人会反击。";
 }
 
 function renderEvents(events) {
@@ -62,19 +61,26 @@ function renderEvents(events) {
   const descriptions = {
     attack: "玩家攻击",
     potion: "玩家使用药水",
-    retaliate: "史莱姆反击",
+    retaliate: "敌人反击",
+    drop: "击杀掉落",
   };
   for (const event of events) {
     const item = document.createElement("li");
     const summary = document.createElement("span");
     const name = document.createElement("span");
-    name.textContent = descriptions[event.kind] || event.kind;
+    name.textContent = event.kind === "retaliate"
+      ? `${enemyNames[event.actor] || event.actor}反击`
+      : descriptions[event.kind] || event.kind;
     const meta = document.createElement("span");
     meta.className = "event-meta";
-    meta.textContent = `第 ${event.turn} 回合 · 玩家 ${event.player_hp} HP · 史莱姆 ${event.slime_hp} HP`;
+    meta.textContent = `第 ${event.turn} 回合 · 玩家 ${event.player_hp} HP · 敌人 ${event.slime_hp} HP`;
     summary.append(name, meta);
     const value = document.createElement("strong");
-    value.textContent = `${event.kind === "potion" ? "+" : "−"}${event.value}`;
+    value.textContent = event.kind === "drop"
+      ? `+${event.value} ${event.item === "gold" ? "金币" : event.item || "物品"}`
+      : event.kind === "potion" && snapshot?.ruleset === "v2"
+        ? `效力 ${event.value} · 实际 +${Math.max(0, event.player_hp - (events[events.indexOf(event) - 1]?.player_hp ?? 100))}`
+        : `${event.kind === "potion" ? "+" : "−"}${event.value}`;
     item.append(summary, value);
     list.append(item);
   }
@@ -95,6 +101,10 @@ function render(next) {
   $("turn-value").textContent = next.turn;
   $("battle-status").textContent = { active: "进行中", won: "玩家获胜", lost: "玩家失败" }[next.status] || next.status;
   $("battle-status").className = `status-chip ${next.status}`;
+  const enemyName = enemyNames[next.enemy_type] || "史莱姆";
+  $("battle-heading").textContent = `玩家 vs ${enemyName}`;
+  $("slime-heading").textContent = enemyName;
+  $("slime-progress").setAttribute("aria-label", `${enemyName}生命值`);
   $("player-hp").textContent = `${next.player.hp} / ${next.player.max_hp}`;
   $("player-progress").max = next.player.max_hp;
   $("player-progress").value = next.player.hp;
@@ -102,6 +112,7 @@ function render(next) {
   $("slime-progress").max = next.slime.max_hp;
   $("slime-progress").value = next.slime.hp;
   $("potions-value").textContent = next.player.potions;
+  $("gold-value").textContent = next.player.gold ?? 0;
   $("raw-json").textContent = JSON.stringify(next, null, 2);
   renderEvents(next.events);
   controls();

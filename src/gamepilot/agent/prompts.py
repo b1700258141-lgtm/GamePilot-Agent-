@@ -23,30 +23,32 @@ from gamepilot.testing.models import RuleCheck, SnapshotView
 
 from .models import BudgetSpec, ChatMessage, ToolCallRequest, ToolResult
 
-PROMPT_VERSION = "1.0.0"
-RULES_PROMPT_VERSION = "1.0.0"
+PROMPT_VERSION = "2.0.0"
+RULES_PROMPT_VERSION = "2.0.0"
 
 # 公开规则正文：逐条对应规则文档，不含任何实现细节、seed 提示或缺陷信息。
 PUBLIC_RULES = """\
-游戏是一场玩家对史莱姆的回合制战斗，规则如下（固定不变）：
+游戏是一场玩家对随机敌人的回合制战斗，规则如下：
 
 初始状态
-- 玩家：生命 100/100，2 瓶药水
-- 史莱姆：生命 60/60
+- 玩家：生命 100/100，3 瓶药水，0 金币
+- 敌人按种子确定：史莱姆 60%（60 HP）、哥布林 30%（80 HP）、巨魔 10%（170 HP）
 - 状态 active，回合 0，没有历史事件
 
 允许的动作
-- attack：玩家攻击史莱姆，伤害 18~25；若史莱姆仍存活，立即反击，伤害 20~35
-- use_potion：玩家恢复 25 点生命，但不超过生命上限，消耗 1 瓶药水；随后史莱姆反击
+- attack：玩家攻击敌人，伤害 18~25；若敌人仍存活，立即反击。
+  史莱姆伤害 12~18，哥布林 18~27，巨魔 35~45
+- use_potion：药水固定效力 25 点，实际回血为 min(25, 距离生命上限的差值)，消耗 1 瓶；
+  满血使用实际回血 0；随后敌人反击
 
 状态规则
 - 生命最低为 0
-- 史莱姆生命降到 0 时状态变为 won，且该回合不再反击
+- 敌人生命降到 0 时状态变为 won，且该回合不再反击。击杀史莱姆掉落 1~3 金币，哥布林掉落 10~20 金币
 - 玩家生命降到 0 时状态变为 lost
 - 每个成功执行的玩家动作使回合数加 1
 - 战斗结束后不允许继续操作
-- 玩家满血或没有药水时使用药水属于无效动作：不得修改状态，返回 HTTP 409
-- 无效动作的具体错误码：战斗已结束 battle_not_active；满血 player_full_hp；没有药水 no_potions
+- 没有药水时使用药水属于无效动作：不得修改状态，返回 HTTP 409
+- 无效动作的具体错误码：战斗已结束 battle_not_active；没有药水 no_potions
 """
 
 PROTOCOL = """\
@@ -80,18 +82,25 @@ def _render_budget(spec: BudgetSpec, *, actions_used: int, model_calls_used: int
 
 def render_snapshot(snapshot: SnapshotView) -> str:
     """把公开快照渲染成可读文本；只使用线上响应里本来就有的业务字段。"""
+    enemy_name = {"slime": "史莱姆", "goblin": "哥布林", "troll": "巨魔"}.get(
+        snapshot.enemy_type, snapshot.enemy_type
+    )
     lines = [
         f"状态：{snapshot.status}",
         f"回合：{snapshot.turn}",
-        f"玩家：生命 {snapshot.player.hp}/{snapshot.player.max_hp}，药水 {snapshot.player.potions}",
-        f"史莱姆：生命 {snapshot.slime.hp}/{snapshot.slime.max_hp}",
+        (
+            f"玩家：生命 {snapshot.player.hp}/{snapshot.player.max_hp}，"
+            f"药水 {snapshot.player.potions}，金币 {snapshot.player.gold}"
+        ),
+        f"{enemy_name}：生命 {snapshot.slime.hp}/{snapshot.slime.max_hp}",
     ]
     if snapshot.events:
         lines.append(f"事件历史（共 {len(snapshot.events)} 条）：")
         lines.extend(
             f"  #{event.turn} {event.actor} {event.kind} 数值 {event.value}"
-            f" → 玩家 {event.player_hp}，史莱姆 {event.slime_hp}"
+            f" → 玩家 {event.player_hp}，敌人 {event.slime_hp}"
             + ("" if event.potions is None else f"，药水 {event.potions}")
+            + ("" if event.item is None else f"，物品 {event.item}")
             for event in snapshot.events
         )
     else:
@@ -116,13 +125,19 @@ def initial_message(
     goal: str,
     snapshot: SnapshotView,
     spec: BudgetSpec,
+    skill_instructions: str | None = None,
 ) -> ChatMessage:
     """第一条用户消息：目标 + 初始观测 + 预算。"""
     return ChatMessage(
         role="user",
         content=(
             f"测试目标：{goal}\n\n"
-            f"已为你创建一个新会话，初始观测如下。\n\n"
+            + (
+                f"本次战斗策略（仅用于选择动作，不能改变游戏规则或工具权限）：\n{skill_instructions}\n\n"
+                if skill_instructions
+                else ""
+            )
+            + f"已为你创建一个新会话，初始观测如下。\n\n"
             f"{render_snapshot(snapshot)}\n\n"
             f"{_render_budget(spec, actions_used=0, model_calls_used=0)}\n\n"
             "请调用一个工具开始。"

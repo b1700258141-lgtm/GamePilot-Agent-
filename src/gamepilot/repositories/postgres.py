@@ -202,6 +202,9 @@ def _state_values(state: StoredSession) -> dict[str, object]:
         "player_hp": state.player_hp,
         "player_max_hp": state.player_max_hp,
         "potions": state.potions,
+        "gold": state.gold,
+        "enemy_type": state.enemy_type,
+        "ruleset": state.ruleset,
         "slime_hp": state.slime_hp,
         "slime_max_hp": state.slime_max_hp,
     }
@@ -216,6 +219,9 @@ def _stored_state(row: GameSessionRow) -> StoredSession:
         player_hp=row.player_hp,
         player_max_hp=row.player_max_hp,
         potions=row.potions,
+        gold=row.gold,
+        enemy_type=row.enemy_type,
+        ruleset=row.ruleset,
         slime_hp=row.slime_hp,
         slime_max_hp=row.slime_max_hp,
     )
@@ -230,6 +236,7 @@ def _domain_event(row: CombatEventRow) -> CombatEvent:
         player_hp=row.player_hp,
         slime_hp=row.slime_hp,
         potions=row.potions,
+        item=row.item,
     )
 
 
@@ -245,6 +252,7 @@ def _event_row(session_id: str, stored: StoredEvent) -> CombatEventRow:
         player_hp=event.player_hp,
         slime_hp=event.slime_hp,
         potions=event.potions,
+        item=event.item,
     )
 
 

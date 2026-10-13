@@ -4,10 +4,12 @@ import secrets
 from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Request
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from gamepilot.agent.goals import GOAL_FULL_HEALTH, GOAL_HEALING, GOAL_VICTORY
+from gamepilot.agent.goals import GOAL_BATTLE_END, GOAL_FULL_HEALTH, GOAL_HEALING, GOAL_VICTORY
+from gamepilot.agent.skills import DEFAULT_SKILL_ID
 from gamepilot.lab.profiles import (
+    FAULT_LOOT_ANOMALY,
     FAULT_POTION_NOT_CONSUMED,
     FAULT_POTION_OVERHEAL,
     FAULT_RETALIATE_AFTER_DEATH,
@@ -21,13 +23,17 @@ router = APIRouter(prefix="/api/v1/agent-test-runs", tags=["Agent 自动测试"]
 class StartAgentTestRequest(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
 
-    goal_id: Literal[GOAL_FULL_HEALTH, GOAL_HEALING, GOAL_VICTORY]
+    goal_id: Literal[GOAL_BATTLE_END, GOAL_FULL_HEALTH, GOAL_HEALING, GOAL_VICTORY] = (
+        GOAL_BATTLE_END
+    )
+    skill_id: str = DEFAULT_SKILL_ID
     seed: int | None = Field(default=None, ge=-(2**53 - 1), le=2**53 - 1)
     profile: Literal[
         PROFILE_NORMAL,
         FAULT_POTION_OVERHEAL,
         FAULT_POTION_NOT_CONSUMED,
         FAULT_RETALIATE_AFTER_DEATH,
+        FAULT_LOOT_ANOMALY,
     ] = PROFILE_NORMAL
     provider_mode: Literal["offline", "real"] = "offline"
     paid_ack: bool = False
@@ -43,6 +49,39 @@ def config() -> dict[str, object]:
         "real_available": real_key() is not None,
         "budget": WEB_BUDGET.model_dump(),
     }
+
+
+class AddSkillRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    name: str = Field(min_length=1, max_length=80)
+    instructions: str = Field(min_length=1, max_length=4000)
+
+    @field_validator("name", "instructions")
+    @classmethod
+    def non_blank(cls, value: str) -> str:
+        value = value.strip()
+        if not value or "\x00" in value:
+            raise ValueError("skill 名称和内容不能为空")
+        return value
+
+
+@router.get("/skills")
+def list_skills(
+    manager: Annotated[AgentWebRunManager, Depends(get_manager)],
+) -> list[dict[str, object]]:
+    return [skill.model_dump() for skill in manager.skills.list()]
+
+
+@router.post("/skills", status_code=201)
+def add_skill(
+    payload: AddSkillRequest,
+    manager: Annotated[AgentWebRunManager, Depends(get_manager)],
+) -> dict[str, object]:
+    try:
+        return manager.skills.add(payload.name, payload.instructions).model_dump()
+    except OSError:
+        raise HTTPException(status_code=503, detail="无法保存 skill，请检查本地存储") from None
 
 
 @router.post("", status_code=202)

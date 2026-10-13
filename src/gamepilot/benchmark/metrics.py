@@ -78,7 +78,7 @@ def build_metrics(evidences: Iterable[CombinationEvidence]) -> list[MetricResult
 
 
 def _defect_coverage(index: Mapping[_KEY, CombinationEvidence]) -> MetricResult:
-    """缺陷覆盖：指定触发场景中「真实触发且命中目标规则」的不同缺陷数 / 3。"""
+    """缺陷覆盖：指定触发场景中真正检出的不同缺陷数。"""
     covered: set[str] = set()
     details: list[str] = []
     for key in DESIGNATED_TRIGGERS:
@@ -89,7 +89,7 @@ def _defect_coverage(index: Mapping[_KEY, CombinationEvidence]) -> MetricResult:
             details.append(f"{key[0]} × {key[1]}：未同时满足「触发」与「命中目标规则」")
     return MetricResult(
         metric_id=METRIC_DEFECT_COVERAGE,
-        description="三个指定触发场景中，真实触发且命中目标规则的不同缺陷数",
+        description="指定触发场景中，真实触发且命中目标规则的不同缺陷数",
         numerator=len(covered),
         denominator=len(DESIGNATED_TRIGGERS),
         target=f"{len(DESIGNATED_TRIGGERS)}/{len(DESIGNATED_TRIGGERS)}",
@@ -181,7 +181,7 @@ def _normal_false_positive(
 def _variant_false_positive(
     index: Mapping[_KEY, CombinationEvidence], variant_pass: list[_KEY]
 ) -> MetricResult:
-    """未触发变体误报：三个变体的预期通过组合上失败（或意外触发）的数量 / 15。"""
+    """未触发变体误报：预期通过组合上失败（或意外触发）的数量。"""
     offenders: list[_KEY] = []
     details: list[str] = []
     for key in variant_pass:
@@ -200,7 +200,7 @@ def _variant_false_positive(
     unique = len(set(offenders))
     return MetricResult(
         metric_id=METRIC_VARIANT_FALSE_POSITIVE,
-        description="三个变体的预期通过组合中，失败或意外触发的组合数",
+        description="缺陷变体的预期通过组合中，失败或意外触发的组合数",
         numerator=unique,
         denominator=len(variant_pass),
         target=f"0/{len(variant_pass)}",
@@ -210,13 +210,13 @@ def _variant_false_positive(
 
 
 def _execution_errors(index: Mapping[_KEY, CombinationEvidence]) -> MetricResult:
-    """执行错误数：32 个组合中的 error 数。"""
+    """执行错误数：全部计划组合中的 error 数。"""
     all_keys = _planned()
     errored = [key for key in all_keys if (item := index.get(key)) and item.case_status == "error"]
     details = [f"{profile} × {case_id}：执行错误" for profile, case_id in errored]
     return MetricResult(
         metric_id=METRIC_EXECUTION_ERRORS,
-        description="32 个原始运行的执行错误数（重放与负向验证错误在摘要中单列）",
+        description="原始运行的执行错误数（重放与负向验证错误在摘要中单列）",
         numerator=len(errored),
         denominator=len(all_keys),
         target=f"0/{len(all_keys)}",
@@ -228,7 +228,7 @@ def _execution_errors(index: Mapping[_KEY, CombinationEvidence]) -> MetricResult
 def _replay_consistency(
     index: Mapping[_KEY, CombinationEvidence], target_fail: list[_KEY]
 ) -> MetricResult:
-    """重跑一致率：同 profile 新会话重跑后逐字段一致的组合数 / 32。
+    """重跑一致率：同 profile 新会话重跑后逐字段一致的组合数。
 
     另列 9 个缺陷组合的复现情况：失败结论也应当被一致复现。
     失败与不可比较都不从分母里剔除。

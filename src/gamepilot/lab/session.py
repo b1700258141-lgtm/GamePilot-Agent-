@@ -16,8 +16,10 @@ from gamepilot.domain.combat import (
     CombatSession,
     new_session_identity,
 )
+from gamepilot.domain.models import BattleStatus
 
 from .profiles import (
+    FAULT_LOOT_ANOMALY,
     FAULT_POTION_NOT_CONSUMED,
     FAULT_POTION_OVERHEAL,
     FAULT_RETALIATE_AFTER_DEATH,
@@ -77,6 +79,34 @@ class LabCombatSession(CombatSession):
             )
             return True
         return super()._should_retaliate(enemy_defeated)
+
+    def _ensure_active(self) -> None:
+        if (
+            self._fault_profile.fault_id == FAULT_RETALIATE_AFTER_DEATH
+            and self._status is BattleStatus.LOST
+        ):
+            self._recorder.record(
+                self.session_id,
+                FAULT_RETALIATE_AFTER_DEATH,
+                "玩家死亡后仍允许执行动作",
+            )
+            return
+        super()._ensure_active()
+
+    def _drop_reward(self) -> tuple[str, int] | None:
+        if self._fault_profile.fault_id != FAULT_LOOT_ANOMALY:
+            return super()._drop_reward()
+        variant = self.seed % 3
+        self._recorder.record(
+            self.session_id,
+            FAULT_LOOT_ANOMALY,
+            ("击杀后不掉落金币", "金币数量超出范围", "击杀后掉落错误物品")[variant],
+        )
+        if variant == 0:
+            return None
+        if variant == 1:
+            return "gold", 100
+        return "stone", 1
 
 
 def make_session_factory(profile: FaultProfile, recorder: TriggerRecorder) -> SessionFactory:

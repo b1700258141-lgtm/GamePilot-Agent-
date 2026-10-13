@@ -31,7 +31,7 @@ from .agent_models import AgentCellEvidence, AgentPricing
 from .agent_seed_preflight import _row_status, control_scenario
 from .agent_seed_reachability import ReachabilityCase, search_fault_reachability
 
-GATE_VERSION = "1.0.0"
+GATE_VERSION = "2.0.0"
 GATE_GOAL_ID = "victory"
 GATE_PROFILES = (PROFILE_NORMAL, FAULT_RETALIATE_AFTER_DEATH)
 GATE_SEEDS = (0, 1, 2, 3)
@@ -46,7 +46,7 @@ GATE_BUDGET = BudgetSpec(
     total_timeout_seconds=60,
     max_output_tokens=512,
 )
-GATE_MANIFEST_SOURCE = "docs/claude-tasks/TASK-006G-victory-seed-gate.md"
+GATE_MANIFEST_SOURCE = "docs/BATTLE_RULES_V2.md#缺陷靶场"
 GATE_COMBINATIONS: tuple[AgentCombination, ...] = tuple(
     row
     for profile in GATE_PROFILES

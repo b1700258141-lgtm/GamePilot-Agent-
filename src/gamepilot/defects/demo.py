@@ -24,6 +24,7 @@ DEMO_CASES = (
     ("potion_overheal", "attack-then-potion", "R-POTION-CAP"),
     ("potion_not_consumed", "attack-then-potion", "R-POTION-DECREMENTS"),
     ("retaliate_after_death", "win-then-rejected", "R-NO-RETALIATE-ON-KILL"),
+    ("loot_anomaly", "win-then-rejected", "R-LOOT-PRESENT"),
 )
 
 
@@ -36,7 +37,7 @@ def _write(path: Path, content: str) -> None:
 
 
 async def run_demo(output_dir: str | Path) -> tuple[int, Path]:
-    """每次创建独立目录；只有证据链和四个靶场预期均满足时才返回 0。"""
+    """每次创建独立目录；只有证据链和五个靶场预期均满足时才返回 0。"""
     root = Path(output_dir).resolve() / new_run_id()
     try:
         root.mkdir(parents=True, exist_ok=False)
@@ -46,8 +47,8 @@ async def run_demo(output_dir: str | Path) -> tuple[int, Path]:
         "schema_version": "1.0",
         "mode": "offline-scripted-asgi",
         "model_calls": 0,
-        "planned_exports": 3,
-        "planned_targets": 4,
+        "planned_exports": len(DEMO_CASES),
+        "planned_targets": len(DEMO_CASES) + 1,
         "exports": [],
         "targets": [],
         "manifest": None,
@@ -92,7 +93,7 @@ async def run_demo(output_dir: str | Path) -> tuple[int, Path]:
                     GameClient(http, base_url="http://offline-demo"),
                     root / "verification" / profile,
                 )
-            complete = report.summary.executed == 3 and report.summary.skipped == 0
+            complete = report.summary.executed == len(DEMO_CASES) and report.summary.skipped == 0
             met = complete and (
                 report.summary.exit_code == 0
                 if target_rule is None

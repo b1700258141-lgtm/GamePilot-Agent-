@@ -37,7 +37,7 @@ def build_parser() -> argparse.ArgumentParser:
     batch.add_argument("--base-url", required=True)
     batch.add_argument("--timeout", type=float, default=5.0)
     batch.add_argument("--output-dir", default="artifacts/defect-batches")
-    demo = commands.add_parser("demo", help="离线生成三种缺陷的证据并验证完整回归闭环")
+    demo = commands.add_parser("demo", help="离线生成四种缺陷的证据并验证完整回归闭环")
     demo.add_argument("--output-dir", default="artifacts/defect-demo")
     compare = commands.add_parser("compare", help="核验并比较两次批量回归结果")
     compare.add_argument("--before", required=True)

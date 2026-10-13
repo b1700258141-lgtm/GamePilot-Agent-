@@ -2,7 +2,7 @@
 
 与 `benchmark.models` 分开：那套模型描述的是「脚本 × 缺陷」矩阵，
 这套描述的是「Agent × 缺陷」配对试验，两者的分母与结论含义不同，
-混在一起会让「32 组合的脚本成绩」和「12 格的 Agent 成绩」互相冒充。
+混在一起会让「40 组合的脚本成绩」和「15 格的 Agent 成绩」互相冒充。
 
 关键约定：
 
@@ -205,7 +205,7 @@ class AgentEvalSummary(BenchmarkModel):
 
 
 class AgentEvalReport(BenchmarkModel):
-    """一次 12 格配对试验的完整摘要（不覆盖已有文件）。"""
+    """一次 15 格配对试验的完整摘要（不覆盖已有文件）。"""
 
     agent_benchmark_version: str
     manifest_source: str

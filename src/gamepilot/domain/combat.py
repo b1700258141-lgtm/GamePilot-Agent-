@@ -16,22 +16,41 @@ from .models import BattleStatus, CombatantState, CombatEvent, GameSnapshot, Pla
 
 PLAYER_MAX_HP = 100
 SLIME_MAX_HP = 60
-INITIAL_POTIONS = 2
+INITIAL_POTIONS = 3
 POTION_HEAL = 25
 PLAYER_DAMAGE_RANGE = (18, 25)
 # 让失败分支能通过公开动作真实到达，同时保留固定种子的可回放性。
-SLIME_DAMAGE_RANGE = (20, 35)
+SLIME_DAMAGE_RANGE = (12, 18)
+ENEMY_SPECS = {
+    "slime": (60, (12, 18)),
+    "goblin": (80, (18, 27)),
+    "troll": (170, (35, 45)),
+}
 
 
 class CombatSession:
     """一场玩家对战史莱姆的回合制战斗。"""
 
-    def __init__(self, session_id: str, seed: int) -> None:
+    def __init__(self, session_id: str, seed: int, *, ruleset: str = "v2") -> None:
         self._session_id = session_id
         self._seed = seed
+        if ruleset not in ("v1", "v2"):
+            raise ValueError(f"unsupported ruleset: {ruleset}")
+        self._ruleset = ruleset
         self._rng = random.Random(seed)
-        self._player = PlayerState(hp=PLAYER_MAX_HP, max_hp=PLAYER_MAX_HP, potions=INITIAL_POTIONS)
-        self._slime = CombatantState(hp=SLIME_MAX_HP, max_hp=SLIME_MAX_HP)
+        roll = random.Random(seed + 7).random()
+        self._enemy_type = (
+            "slime" if ruleset == "v1" or roll < 0.6 else "goblin" if roll < 0.9 else "troll"
+        )
+        enemy_hp, self._enemy_damage_range = ENEMY_SPECS[self._enemy_type]
+        if ruleset == "v1":
+            self._enemy_damage_range = (20, 35)
+        self._player = PlayerState(
+            hp=PLAYER_MAX_HP,
+            max_hp=PLAYER_MAX_HP,
+            potions=2 if ruleset == "v1" else INITIAL_POTIONS,
+        )
+        self._slime = CombatantState(hp=enemy_hp, max_hp=enemy_hp)
         self._status = BattleStatus.ACTIVE
         self._turn = 0
         self._events: list[CombatEvent] = []
@@ -69,12 +88,14 @@ class CombatSession:
             self._status = BattleStatus.WON
         if self._should_retaliate(enemy_defeated):
             self._retaliate(turn)
+        if enemy_defeated and self._ruleset == "v2":
+            self._award_drop(turn)
         self._turn = turn
 
     def use_potion(self) -> None:
         """玩家使用药水恢复 25 点生命（不超过上限），随后史莱姆反击。"""
         self._ensure_active()
-        if self._player.hp == self._player.max_hp:
+        if self._ruleset == "v1" and self._player.hp == self._player.max_hp:
             raise InvalidCombatAction("player_full_hp", "player is already at full HP")
         if self._player.potions == 0:
             raise InvalidCombatAction("no_potions", "no potions left")
@@ -87,7 +108,7 @@ class CombatSession:
                 turn=turn,
                 actor="player",
                 kind="potion",
-                value=healed,
+                value=healed if self._ruleset == "v1" else POTION_HEAL,
                 player_hp=self._player.hp,
                 slime_hp=self._slime.hp,
                 potions=self._player.potions,
@@ -105,6 +126,8 @@ class CombatSession:
             turn=self._turn,
             player=self._player.model_copy(deep=True),
             slime=self._slime.model_copy(deep=True),
+            enemy_type=self._enemy_type,
+            ruleset=self._ruleset,
             events=[event.model_copy(deep=True) for event in self._events],
         )
 
@@ -141,12 +164,12 @@ class CombatSession:
 
     def _retaliate(self, turn: int) -> None:
         """史莱姆反击；玩家生命降至 0 则战斗失败。"""
-        damage = self._rng.randint(*SLIME_DAMAGE_RANGE)
+        damage = self._rng.randint(*self._enemy_damage_range)
         self._player.hp = max(0, self._player.hp - damage)
         self._append_event(
             CombatEvent(
                 turn=turn,
-                actor="slime",
+                actor=self._enemy_type,
                 kind="retaliate",
                 value=damage,
                 player_hp=self._player.hp,
@@ -155,6 +178,33 @@ class CombatSession:
         )
         if self._player.hp == 0:
             self._status = BattleStatus.LOST
+
+    def _drop_reward(self) -> tuple[str, int] | None:
+        """击杀奖励；随机数来自会话私有生成器，重放时结果一致。"""
+        if self._enemy_type == "slime":
+            return "gold", self._rng.randint(1, 3)
+        if self._enemy_type == "goblin":
+            return "gold", self._rng.randint(10, 20)
+        return None
+
+    def _award_drop(self, turn: int) -> None:
+        reward = self._drop_reward()
+        if reward is None:
+            return
+        item, amount = reward
+        if item == "gold":
+            self._player.gold += amount
+        self._append_event(
+            CombatEvent(
+                turn=turn,
+                actor=self._enemy_type,
+                kind="drop",
+                value=amount,
+                item=item,
+                player_hp=self._player.hp,
+                slime_hp=self._slime.hp,
+            )
+        )
 
     def _append_event(self, event: CombatEvent) -> None:
         self._events.append(event)

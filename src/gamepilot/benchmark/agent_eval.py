@@ -1,4 +1,4 @@
-"""Agent 配对试验：4 profile × 3 目标的 12 格对照评测。
+"""Agent 配对试验：5 profile × 3 目标的 15 格对照评测。
 
 评测层是本仓库里**唯一**被允许同时组装 `agent` / `lab` / `benchmark` / `scenarios`
 的地方——这正是「Agent 不得沿导入链读到答案」的边界所在：Agent 读不到靶场、
@@ -30,7 +30,13 @@ from pathlib import Path
 import httpx
 
 from gamepilot.agent.budget import Budget
-from gamepilot.agent.goals import GOAL_FULL_HEALTH, GOAL_HEALING, GOAL_VICTORY, resolve_goal
+from gamepilot.agent.goals import (
+    GOAL_BATTLE_END,
+    GOAL_FULL_HEALTH,
+    GOAL_HEALING,
+    GOAL_VICTORY,
+    resolve_goal,
+)
 from gamepilot.agent.graph import run_agent
 from gamepilot.agent.models import (
     AgentRunReportRef,
@@ -92,7 +98,7 @@ CONTROL_SUITE = "agent-control"
 
 STATUS_PATTERN = re.compile(r"状态：(\S+)")
 PLAYER_PATTERN = re.compile(r"玩家：生命 (\d+)/(\d+)，药水 (\d+)")
-SLIME_PATTERN = re.compile(r"史莱姆：生命 (\d+)/(\d+)")
+SLIME_PATTERN = re.compile(r"(?:史莱姆|哥布林|巨魔)：生命 (\d+)/(\d+)")
 
 
 class Observation:
@@ -152,9 +158,10 @@ def observation_reacting_double(goal_id: str) -> ModelProvider:
     而这些边界只能由观测到的真实状态判断出来。
     """
     probed = False
+    opening_potion_used = False
 
     def respond(messages: Sequence[ChatMessage]) -> ModelReply:
-        nonlocal probed
+        nonlocal probed, opening_potion_used
         step = sum(1 for item in messages if item.role == "assistant")
         observation = latest_observation(messages)
         if observation is None:
@@ -162,12 +169,22 @@ def observation_reacting_double(goal_id: str) -> ModelProvider:
             # 不会产生任何游戏请求。
             return ModelReply(text="（读不到可用观测）")
 
-        if goal_id == GOAL_VICTORY and observation.status == "won" and not probed:
+        if (
+            (goal_id == GOAL_VICTORY and observation.status == "won")
+            or (goal_id == GOAL_BATTLE_END and observation.status in ("won", "lost"))
+        ) and not probed:
             # 获胜后再试一次，验证「战斗结束后不允许操作」；只试探一次。
             probed = True
             return _action("attack", step)
         if observation.status != "active":
             return _finish(step, f"战斗状态为 {observation.status}，观测到此为止。")
+        if goal_id == GOAL_BATTLE_END:
+            if not opening_potion_used and observation.potions > 0:
+                opening_potion_used = True
+                return _action("use_potion", step)
+            if observation.hp < observation.max_hp and observation.potions > 0:
+                return _action("use_potion", step)
+            return _action("attack", step)
         if goal_id == GOAL_FULL_HEALTH:
             if observation.hp >= observation.max_hp and not probed:
                 probed = True
@@ -474,8 +491,8 @@ def acceptance_note(provider: ModelProvider, *, complete_matrix: bool) -> str:
             "不是 Agent 能力成绩；真实模型验收待完成。"
         )
     if not complete_matrix:
-        return "本次使用真实模型调用，但固定 12 格能力验收未完成；仅保留已执行格的证据。"
-    return "本次使用真实模型调用，结论可作为首轮 12 格小样本冒烟结果。"
+        return "本次使用真实模型调用，但固定 15 格能力验收未完成；仅保留已执行格的证据。"
+    return "本次使用真实模型调用，结论可作为首轮 15 格小样本冒烟结果。"
 
 
 def summarize_spend(
@@ -729,7 +746,7 @@ async def run_agent_eval(
     pricing: AgentPricing | None = None,
     fail_fast: bool = False,
 ) -> tuple[AgentEvalReport, Path]:
-    """跑完 12 格配对试验，返回摘要与摘要文件路径。
+    """跑完 15 格配对试验，返回摘要与摘要文件路径。
 
     `provider_factory` 按目标编号给出供应商：默认是离线测试替身。
     真实模型由调用方注入，**评测层自己不会隐式发起付费调用**。
@@ -784,7 +801,7 @@ async def run_agent_eval(
     cells_skipped = cells_planned - len(cells)
     metrics = build_agent_metrics(cells, planned_combinations=planned_combinations)
     status = _status(metrics, cells)
-    # 12 格必须来自同一个供应商配置：混用会让「同一 profile 的输入一致」失去意义。
+    # 15 格必须来自同一个供应商配置：混用会让「同一 profile 的输入一致」失去意义。
     probe = created[0]
     distinct_models = sorted({item.provider_id for item in created})
     detected = [row for row in cells if row.is_designated and row.detected]

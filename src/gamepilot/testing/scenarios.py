@@ -3,8 +3,8 @@
 场景只是数据，不含执行逻辑。每个场景都在真实 HTTP 上跑一遍，
 因此这里的 seed 与动作序列必须能在当前规则下确定性地到达预期分支。
 
-seed=42：三次攻击获胜；满血喝药被拒；前两次喝药成功、第三次 no_potions。
-seed=1252：三次攻击阵亡（lost 分支同样通过公开动作到达，不修改私有 HP）。
+seed=42：史莱姆战斗，满血喝药成功；三瓶药水用完后再喝药返回 no_potions。
+seed=8：三次攻击后被巨魔击败，随后动作被拒绝。
 seed=12345：攻击 → 喝药 → 攻击，全程 active，用作对照运行的样本。
 """
 
@@ -21,12 +21,10 @@ BASELINE_SCENARIOS: tuple[Scenario, ...] = (
         expected_final_status="active",
     ),
     Scenario(
-        case_id="potion-at-full-hp-rejected",
-        description="满血时喝药被拒绝：409 player_full_hp，且状态与事件不变",
+        case_id="potion-at-full-hp-capped",
+        description="满血时喝药成功：固定效力 25、实际回血 0、消耗一瓶",
         seed=42,
-        steps=[
-            ActionStep(action="use_potion", expected_status=409, expected_code="player_full_hp")
-        ],
+        steps=[ActionStep(action="use_potion")],
         expected_final_status="active",
     ),
     Scenario(
@@ -41,10 +39,11 @@ BASELINE_SCENARIOS: tuple[Scenario, ...] = (
     ),
     Scenario(
         case_id="potion-exhaustion",
-        description="攻击后连续喝药：前两次成功，第三次 409 no_potions",
+        description="攻击后连续喝药：前三次成功，第四次 409 no_potions",
         seed=42,
         steps=[
             ActionStep(action="attack"),
+            ActionStep(action="use_potion"),
             ActionStep(action="use_potion"),
             ActionStep(action="use_potion"),
             ActionStep(action="use_potion", expected_status=409, expected_code="no_potions"),
@@ -66,7 +65,7 @@ BASELINE_SCENARIOS: tuple[Scenario, ...] = (
     Scenario(
         case_id="lose-then-rejected",
         description="用公开动作打到阵亡（lost），之后动作被 409 拒绝",
-        seed=1252,
+        seed=8,
         steps=[
             ActionStep(action="attack"),
             ActionStep(action="attack"),
@@ -77,18 +76,20 @@ BASELINE_SCENARIOS: tuple[Scenario, ...] = (
     ),
     Scenario(
         case_id="rejected-action-keeps-rng",
-        description="被拒绝的动作不消耗随机数：与不含该次尝试的对照会话逐事件一致",
+        description="药水耗尽后的拒绝动作不消耗随机数，与对照会话逐事件一致",
         seed=42,
         steps=[
-            ActionStep(action="use_potion", expected_status=409, expected_code="player_full_hp"),
-            ActionStep(action="attack"),
             ActionStep(action="use_potion"),
+            ActionStep(action="use_potion"),
+            ActionStep(action="use_potion"),
+            ActionStep(action="use_potion", expected_status=409, expected_code="no_potions"),
+            ActionStep(action="attack"),
             ActionStep(action="attack"),
         ],
         expected_final_status="active",
         control=ControlSpec(
             description="同一 seed，只执行被接受的动作，用于比对随机结果",
-            actions=["attack", "use_potion", "attack"],
+            actions=["use_potion", "use_potion", "use_potion", "attack", "attack"],
         ),
     ),
     Scenario(

@@ -89,6 +89,7 @@ class AgentContext:
     provider: ModelProvider
     goal: GoalSpec
     seed: int
+    skill_instructions: str | None = None
     messages: list[ChatMessage] = field(default_factory=list)
     model_call_records: list[ModelCallRecord] = field(default_factory=list)
     rule_failures: list[str] = field(default_factory=list)
@@ -125,7 +126,9 @@ def _make_nodes(context: AgentContext) -> dict[str, Callable[[AgentState], Any]]
                 **_stop(state, "execution_error", stop.message),
             }
         context.messages.extend([prompts.rules_message(), prompts.protocol_message()])
-        context.messages.append(prompts.initial_message(context.goal.goal, snapshot, spec))
+        context.messages.append(
+            prompts.initial_message(context.goal.goal, snapshot, spec, context.skill_instructions)
+        )
         return {"session_created": True, "session_id": snapshot.session_id, "snapshot": snapshot}
 
     async def decide(state: AgentState) -> AgentState:
@@ -507,6 +510,7 @@ async def run_agent(
     goal: GoalSpec,
     seed: int,
     description: str,
+    skill_instructions: str | None = None,
     timeout_provider: Callable[[], float] | None = None,
     on_update: Callable[[str, AgentState, AgentContext], None] | None = None,
 ) -> tuple[AgentState, AgentContext, dict[str, Any]]:
@@ -520,6 +524,7 @@ async def run_agent(
         provider=provider,
         goal=goal,
         seed=seed,
+        skill_instructions=skill_instructions,
     )
     graph = build_graph(context, on_update=on_update)
     initial: AgentState = {

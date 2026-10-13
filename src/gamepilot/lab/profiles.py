@@ -17,12 +17,14 @@ PROFILE_NORMAL = "normal"
 FAULT_POTION_OVERHEAL = "potion_overheal"
 FAULT_POTION_NOT_CONSUMED = "potion_not_consumed"
 FAULT_RETALIATE_AFTER_DEATH = "retaliate_after_death"
+FAULT_LOOT_ANOMALY = "loot_anomaly"
 
 # 缺陷编号：与 profile 同名，评测清单用它标记「这一列属于哪个缺陷」。
 FAULT_IDS: tuple[str, ...] = (
     FAULT_POTION_OVERHEAL,
     FAULT_POTION_NOT_CONSUMED,
     FAULT_RETALIATE_AFTER_DEATH,
+    FAULT_LOOT_ANOMALY,
 )
 
 # 合法 profile 全集：normal 在前，其后是三个单缺陷变体。
@@ -65,7 +67,12 @@ PROFILE_CATALOG: dict[str, FaultProfile] = {
     FAULT_RETALIATE_AFTER_DEATH: FaultProfile(
         profile_id=FAULT_RETALIATE_AFTER_DEATH,
         fault_id=FAULT_RETALIATE_AFTER_DEATH,
-        summary="致死攻击后敌人仍执行一次真实反击并扣玩家生命值",
+        summary="敌人死亡后仍反击，或玩家死亡后仍可继续行动",
+    ),
+    FAULT_LOOT_ANOMALY: FaultProfile(
+        profile_id=FAULT_LOOT_ANOMALY,
+        fault_id=FAULT_LOOT_ANOMALY,
+        summary="击杀后金币不掉落、数量越界或掉落错误物品（按种子取模选择）",
     ),
 }
 

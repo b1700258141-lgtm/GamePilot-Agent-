@@ -1,8 +1,7 @@
-"""Agent 评测清单：4 profile × 3 目标 = 12 组合的固定标准答案。
+"""Agent 评测清单：5 profile × 3 目标 = 15 组合的固定标准答案。
 
-这是一套**明确标注的子集试验**（`docs/claude-tasks/TASK-003C-langgraph-test-agent.md`
-第 7 节），不声称完成全部 32 组合的 Agent 对照。原 32 组合与七项指标保持不变，
-继续作为确定性回归，不被重命名为 Agent 成绩。
+这是一套**明确标注的子集试验**，不声称完成全部 40 组合的 Agent 对照。
+40 组合脚本评测仍单独作为确定性回归，不被重命名为 Agent 成绩。
 
 清单与实现分离的意义：目标文本、脚本对照、预定缺陷机会与目标规则都**先于运行写死**。
 Agent 的导入链读不到本模块，因此模型不可能沿导入链拿到标准答案；
@@ -22,6 +21,7 @@ from dataclasses import dataclass
 from gamepilot.agent.goals import GOAL_CATALOG, GOAL_FULL_HEALTH, GOAL_HEALING, GOAL_VICTORY
 from gamepilot.agent.models import BudgetSpec
 from gamepilot.lab import (
+    FAULT_LOOT_ANOMALY,
     FAULT_POTION_NOT_CONSUMED,
     FAULT_POTION_OVERHEAL,
     FAULT_RETALIATE_AFTER_DEATH,
@@ -29,34 +29,36 @@ from gamepilot.lab import (
     PROFILES,
 )
 from gamepilot.testing.rules import (
+    R_LOOT_ITEM,
+    R_LOOT_PRESENT,
+    R_LOOT_RANGE,
     R_NO_RETALIATE_ON_KILL,
     R_POTION_CAP,
     R_POTION_DECREMENTS,
 )
 
-AGENT_BENCHMARK_VERSION = "1.3.0"
-AGENT_MANIFEST_SOURCE = (
-    "docs/claude-tasks/TASK-003C-langgraph-test-agent.md#7-最小评测12-组合配对试验"
-)
+AGENT_BENCHMARK_VERSION = "2.0.0"
+AGENT_MANIFEST_SOURCE = "docs/BATTLE_RULES_V2.md#缺陷靶场"
 
-# 全部 12 格统一使用既有对应场景的 seed=42，Agent 与脚本对照完全同参。
+# 全部 15 格统一使用对应场景的 seed=42，Agent 与脚本对照完全同参。
 AGENT_SEED = 42
 
 AGENT_GOAL_IDS: tuple[str, ...] = (GOAL_FULL_HEALTH, GOAL_HEALING, GOAL_VICTORY)
 
 # 每个目标对应的**脚本对照**（对照组用原有 Scenario，不放宽也不改写）。
 GOAL_SCRIPT_COUNTERPART: dict[str, str] = {
-    GOAL_FULL_HEALTH: "potion-at-full-hp-rejected",
+    GOAL_FULL_HEALTH: "potion-at-full-hp-capped",
     GOAL_HEALING: "attack-then-potion",
     GOAL_VICTORY: "win-then-rejected",
 }
 
-# 预定缺陷机会：两个 healing 格 + 一个 victory 格。分母固定为 3，
+# 预定缺陷机会：两个 healing 格 + 两个 victory 格。分母固定为 4，
 # 未到达与执行错误都不缩小分母，只如实出现在明细里。
 DESIGNATED_OPPORTUNITIES: tuple[tuple[str, str], ...] = (
     (FAULT_POTION_OVERHEAL, GOAL_HEALING),
     (FAULT_POTION_NOT_CONSUMED, GOAL_HEALING),
     (FAULT_RETALIATE_AFTER_DEATH, GOAL_VICTORY),
+    (FAULT_LOOT_ANOMALY, GOAL_VICTORY),
 )
 
 # 每个预定机会必须命中的规则编号；命中多条时按编号去重计数。
@@ -64,9 +66,10 @@ OPPORTUNITY_TARGET_RULES: dict[tuple[str, str], tuple[str, ...]] = {
     (FAULT_POTION_OVERHEAL, GOAL_HEALING): (R_POTION_CAP,),
     (FAULT_POTION_NOT_CONSUMED, GOAL_HEALING): (R_POTION_DECREMENTS,),
     (FAULT_RETALIATE_AFTER_DEATH, GOAL_VICTORY): (R_NO_RETALIATE_ON_KILL,),
+    (FAULT_LOOT_ANOMALY, GOAL_VICTORY): (R_LOOT_PRESENT, R_LOOT_RANGE, R_LOOT_ITEM),
 }
 
-# 12 格共用的预算：与 Agent 的保守默认值一致，评测不额外放宽。
+# 15 格共用的预算：与 Agent 的保守默认值一致，评测不额外放宽。
 AGENT_EVAL_BUDGET = BudgetSpec()
 
 

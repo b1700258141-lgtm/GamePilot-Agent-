@@ -63,6 +63,9 @@ class StoredSession:
     potions: int
     slime_hp: int
     slime_max_hp: int
+    gold: int = 0
+    enemy_type: str = "slime"
+    ruleset: str = "v1"
 
     @classmethod
     def from_snapshot(cls, snapshot: GameSnapshot) -> "StoredSession":
@@ -75,6 +78,9 @@ class StoredSession:
             player_hp=snapshot.player.hp,
             player_max_hp=snapshot.player.max_hp,
             potions=snapshot.player.potions,
+            gold=snapshot.player.gold,
+            enemy_type=snapshot.enemy_type,
+            ruleset=snapshot.ruleset,
             slime_hp=snapshot.slime.hp,
             slime_max_hp=snapshot.slime.max_hp,
         )
@@ -135,7 +141,7 @@ def rebuild_session(state: StoredSession, events: Sequence[StoredEvent]) -> Comb
     seed = parse_seed(state.seed, session_id=session_id)
     ensure_contiguous_sequences(session_id, [stored.sequence for stored in events])
 
-    session = CombatSession(session_id=session_id, seed=seed)
+    session = CombatSession(session_id=session_id, seed=seed, ruleset=state.ruleset)
     for stored in events:
         _replay_player_action(session, stored.event, session_id=session_id)
 
@@ -148,8 +154,8 @@ def rebuild_session(state: StoredSession, events: Sequence[StoredEvent]) -> Comb
 
 def _replay_player_action(session: CombatSession, event: CombatEvent, *, session_id: str) -> None:
     """重放单条事件；史莱姆反击不重放，由上一个玩家动作自动生成。"""
-    if event.actor == "slime":
-        if event.kind != "retaliate":
+    if event.actor in ("slime", "goblin", "troll"):
+        if event.kind not in ("retaliate", "drop"):
             raise PersistenceInconsistentError(
                 f"session {session_id}: turn {event.turn} recorded unexpected "
                 f"slime event kind {event.kind!r}"

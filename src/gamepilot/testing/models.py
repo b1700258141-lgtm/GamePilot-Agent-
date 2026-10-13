@@ -78,6 +78,7 @@ class EventView(EvidenceModel):
     player_hp: int
     slime_hp: int
     potions: int | None = None
+    item: str | None = None
 
 
 class CombatantView(EvidenceModel):
@@ -87,6 +88,7 @@ class CombatantView(EvidenceModel):
 
 class PlayerView(CombatantView):
     potions: int
+    gold: int = 0
 
 
 class SnapshotView(EvidenceModel):
@@ -98,6 +100,8 @@ class SnapshotView(EvidenceModel):
     turn: int
     player: PlayerView
     slime: CombatantView
+    enemy_type: str = "slime"
+    ruleset: str = "v1"
     events: list[EventView]
 
 

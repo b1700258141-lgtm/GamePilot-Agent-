@@ -14,8 +14,8 @@ WORKDIR /app
 COPY --from=builder /wheels /wheels
 RUN python -m pip install --no-cache-dir --no-index --find-links=/wheels "gamepilot[agent]" \
     && useradd --uid 10001 --create-home gamepilot \
-    && mkdir /app/artifacts \
-    && chown gamepilot:gamepilot /app/artifacts
+    && mkdir -p /app/artifacts/agent-skills \
+    && chown -R gamepilot:gamepilot /app/artifacts
 COPY alembic.ini ./
 COPY alembic/ ./alembic/
 

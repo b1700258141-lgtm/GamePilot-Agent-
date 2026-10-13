@@ -27,10 +27,10 @@ python -m uvicorn gamepilot.main:app --reload
 
 | 部分 | 作用 |
 | --- | --- |
-| 游戏与 API | 玩家对史莱姆的确定性战斗；固定 seed + 同一动作序列可重现状态和事件。 |
+| 游戏与 API | 玩家与史莱姆、哥布林或巨魔的确定性战斗；固定 seed + 同一动作序列可重现敌人、状态、掉落和事件。 |
 | PostgreSQL | 保存战斗状态与事件；重启后按历史重放恢复。 |
 | `gamepilot.testing` | 固定场景、HTTP 动作、独立规则判定、JSON 报告及无模型重放。 |
-| `gamepilot.lab` | 三个可控规则缺陷：治疗越界、药水未消耗、敌人死亡后反击。 |
+| `gamepilot.lab` | 可控规则缺陷：治疗越界、药水未消耗、死亡后行动、掉落异常。 |
 | `gamepilot.agent` | LangGraph 单 Agent 按目标逐步选动作并调用工具；预算、错误和用量进入报告。 |
 | `gamepilot.benchmark` | 正常/缺陷配对、跨 seed 评测、脚本对照与证据核验。 |
 | `gamepilot.defects` | 将已确认规则失败导出为缺陷单和回归规格，支持批量比较。 |
@@ -39,7 +39,7 @@ python -m uvicorn gamepilot.main:app --reload
 
 ## 最短的自动测试演示
 
-网页中选择“Agent 自动测试”，设置目标、随机种子与可选的已知缺陷，再点击“开始自动测试”。随机种子留空时服务端会生成并保存实际种子，供之后重放。默认“离线演练”使用测试替身，不消耗付费模型额度；过程展示模型选择、工具动作、游戏状态和独立规则检查，结束后可查看结论、原始报告，并切换缺陷再测。离线结果不代表真实模型能力。内存模式下运行记录随服务重启丢失；PostgreSQL 模式保存记录。页面的“deepseek-flash”选项实际请求 `deepseek-v4-flash`，须服务端密钥和每次单独付费确认，每次最多 6 次模型调用、6 次动作、每次请求最多 512 输出 Token；输入 Token 和金额无硬上限，费用无可靠单价时为 unknown。[网页真实单格验证](docs/validation/AGENT-WEB-REAL-SMOKE-20261013.md)已跑通；它不代表其他配置的能力验收。
+网页中选择“Agent 自动测试”，默认 skill 会先在满血时喝药，此后受伤且有药水就喝药，药水耗尽后持续攻击，并在战斗结束后再试一次行动限制；无需选择测试目标。可单独选择随机种子与已知缺陷，留空 seed 时服务端生成并记录实际值。也可上传不超过 4,000 字符的 Markdown/纯文本 skill 并选择它；上传内容只作为真实模型的动作策略输入，不执行代码。默认“离线演练”使用只支持默认 skill 的测试替身，不消耗付费额度，也不代表真实模型能力。过程、独立规则检查、最终结论与无模型重放均有证据；PostgreSQL 保存运行记录，上传的 skill 保存在独立 Docker 卷。页面的“deepseek-flash”选项实际请求 `deepseek-v4-flash`，须服务端密钥和每次单独付费确认，每次最多 20 次模型调用、20 次动作、每次请求最多 512 输出 Token（合计请求输出上限 10,240）；输入 Token 和金额无硬上限，费用无可靠单价时为 unknown。[新版战斗规则](docs/BATTLE_RULES_V2.md)写明药水效力、敌人和掉落。[网页真实单格验证](docs/validation/AGENT-WEB-REAL-SMOKE-20261013.md)是此前 6 步预算下的历史验证，不代表本次 skill 变更后的真实模型能力。
 
 Windows 本机已有 DeepSeek 环境变量时，可运行 `./scripts/start_local_with_model.ps1` 启动真实模式；脚本不把密钥写入文件。详细说明见[本地 Docker 交付](docs/DOCKER.md)。
 
@@ -49,13 +49,13 @@ Windows 本机已有 DeepSeek 环境变量时，可运行 `./scripts/start_local
 python -m gamepilot.defects demo
 ```
 
-它现场生成三类已知缺陷的运行、重放、缺陷单与正常对照。要体验 Agent 自动选动作，需要安装 `agent` 依赖；以下命令**只使用离线测试替身，不调用付费模型**：
+它现场生成四类已知缺陷的运行、重放、缺陷单与正常对照。要体验 Agent 自动选动作，需要安装 `agent` 依赖；以下命令**只使用离线测试替身，不调用付费模型**：
 
 ```powershell
 python -m gamepilot.benchmark agent-seed-gate --output-dir artifacts/agent-seed-gates
 ```
 
-该门槛固定 seed 0–3 × 正常/死亡后反击 × 胜利目标，共 8 格；输出 Agent、游戏运行、无模型重放和同 seed 对照证据。可用 `python -m gamepilot.benchmark --help` 查看其他离线评测命令。报告默认写入被 Git 忽略的 `artifacts/`，每次创建新目录，不覆盖旧报告。
+该门槛固定 seed 0–3 × 正常/死亡后反击 × 胜利目标，共 8 格；输出 Agent、游戏运行、无模型重放和同 seed 对照证据。v2 离线复验 8/8 符合预期；历史真实模型八格证据属于 v1 规则。可用 `python -m gamepilot.benchmark --help` 查看其他离线评测命令。报告默认写入被 Git 忽略的 `artifacts/`，每次创建新目录，不覆盖旧报告。
 
 真实模型测试需要显式 `--provider anthropic-compatible --paid` 和密钥环境变量，**不要把密钥写入命令、文档或提交**。TASK-006G 于 2026-10-13 完成一次固定真实八格：8/8 符合预期，30 次模型调用，输入 6,691 / 输出 1,664 Token；无可靠计价，费用 unknown。固定上限为 48 次调用、24,576 请求输出 Token；输入 Token 与金额没有硬上限。具体门槛和证据见 [第六阶段计划](docs/PHASE_6_PLAN.md)和[TASK-006G 验收](docs/validation/TASK-006G-victory-seed-gate.md)。
 

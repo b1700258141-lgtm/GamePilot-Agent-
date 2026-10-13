@@ -39,6 +39,8 @@ services:
 
   api:
     <<: *app
+    volumes:
+      - local-agent-skills:/app/artifacts/agent-skills
     ports:
       - "127.0.0.1:${GAMEPILOT_API_PORT:-8000}:8000"
     depends_on:
@@ -49,3 +51,4 @@ services:
 
 volumes:
   local-pgdata:
+  local-agent-skills:

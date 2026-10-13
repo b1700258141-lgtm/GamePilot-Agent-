@@ -33,8 +33,8 @@ from .database import Base
 
 # 与领域枚举保持一致的取值集合，通过检查约束在数据库层兜底。
 SESSION_STATUSES = ("active", "won", "lost")
-EVENT_ACTORS = ("player", "slime")
-EVENT_KINDS = ("attack", "potion", "retaliate")
+EVENT_ACTORS = ("player", "slime", "goblin", "troll")
+EVENT_KINDS = ("attack", "potion", "retaliate", "drop")
 
 # 用于生成 IN (...) 检查约束的取值列表；顺序固定，保证迁移可复现。
 _STATUS_LIST = ", ".join(f"'{value}'" for value in SESSION_STATUSES)
@@ -62,6 +62,9 @@ class GameSessionRow(Base):
     player_hp: Mapped[int] = mapped_column(Integer, nullable=False)
     player_max_hp: Mapped[int] = mapped_column(Integer, nullable=False)
     potions: Mapped[int] = mapped_column(Integer, nullable=False)
+    gold: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
+    enemy_type: Mapped[str] = mapped_column(String(16), nullable=False, server_default="slime")
+    ruleset: Mapped[str] = mapped_column(String(8), nullable=False, server_default="v1")
     slime_hp: Mapped[int] = mapped_column(Integer, nullable=False)
     slime_max_hp: Mapped[int] = mapped_column(Integer, nullable=False)
     created_at: Mapped[datetime] = mapped_column(
@@ -78,6 +81,11 @@ class GameSessionRow(Base):
         CheckConstraint(f"status IN ({_STATUS_LIST})", name="ck_game_sessions_status_valid"),
         CheckConstraint("turn >= 0", name="ck_game_sessions_turn_non_negative"),
         CheckConstraint("potions >= 0", name="ck_game_sessions_potions_non_negative"),
+        CheckConstraint("gold >= 0", name="ck_game_sessions_gold_non_negative"),
+        CheckConstraint(
+            "enemy_type IN ('slime', 'goblin', 'troll')", name="ck_game_sessions_enemy_type_valid"
+        ),
+        CheckConstraint("ruleset IN ('v1', 'v2')", name="ck_game_sessions_ruleset_valid"),
         CheckConstraint("player_max_hp > 0", name="ck_game_sessions_player_max_hp_positive"),
         CheckConstraint(
             "player_hp >= 0 AND player_hp <= player_max_hp",
@@ -115,6 +123,7 @@ class CombatEventRow(Base):
     slime_hp: Mapped[int] = mapped_column(Integer, nullable=False)
     # 仅玩家动作事件记录剩余药水，因此允许为空；非空时不得为负数。
     potions: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    item: Mapped[str | None] = mapped_column(String(32), nullable=True)
 
     __table_args__ = (
         UniqueConstraint("session_id", "sequence", name="uq_combat_events_session_sequence"),

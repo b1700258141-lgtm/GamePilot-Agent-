@@ -43,10 +43,10 @@
           <aside class="setup-panel card" aria-label="会话操作">
             <section aria-labelledby="new-session-heading">
               <h2 id="new-session-heading">新建会话</h2>
-              <p class="helper">默认使用种子 42，清空后由服务随机生成。</p>
+              <p class="helper">留空会随机生成种子；输入固定种子可重现敌人和掉落。</p>
               <form id="create-form">
                 <label for="seed-input">随机种子</label>
-                <input id="seed-input" name="seed" type="number" step="1" value="42" inputmode="numeric" />
+                <input id="seed-input" name="seed" type="number" step="1" inputmode="numeric" placeholder="留空随机生成" />
                 <button id="create-button" class="button button-primary" type="submit">开始新战斗</button>
               </form>
             </section>
@@ -93,6 +93,7 @@
                   <div class="fighter-title"><h3 id="player-heading">玩家</h3><strong id="player-hp">—</strong></div>
                   <progress id="player-progress" max="100" value="100" aria-label="玩家生命值"></progress>
                   <p>剩余药水 <strong id="potions-value">—</strong> 瓶</p>
+                  <p>金币 <strong id="gold-value">—</strong></p>
                 </section>
                 <section class="fighter" aria-labelledby="slime-heading">
                   <div class="fighter-title"><h3 id="slime-heading">史莱姆</h3><strong id="slime-hp">—</strong></div>
@@ -132,14 +133,16 @@
           <div class="workspace">
             <aside class="setup-panel card" aria-labelledby="agent-setup-heading">
               <h2 id="agent-setup-heading">设置本次测试</h2>
-              <p class="helper">一次只运行一个目标、一个种子和一种缺陷配置。</p>
+              <p class="helper">选择战斗策略、种子和缺陷配置；规则判定器会独立检查每一步。</p>
               <form id="agent-form">
-                <label for="agent-goal">测试目标</label>
-                <select id="agent-goal" name="goal_id">
-                  <option value="victory">击败敌人并验证结束</option>
-                  <option value="healing">受伤后治疗</option>
-                  <option value="full-health">满血使用药水</option>
+                <label for="agent-skill">战斗 skill</label>
+                <select id="agent-skill" name="skill_id">
+                  <option value="injured-potion-then-attack">受伤喝药，随后持续攻击</option>
                 </select>
+                <p id="agent-skill-hint" class="helper field-helper">默认策略：开局满血喝药，受伤后补药，药水耗尽持续攻击；终态后再验证一次行动限制。</p>
+                <label for="agent-skill-upload">上传自定义 skill（Markdown 或纯文本）</label>
+                <input id="agent-skill-upload" type="file" accept=".md,.txt,text/markdown,text/plain" aria-describedby="agent-upload-hint" />
+                <p id="agent-upload-hint" class="helper field-helper">文件最多 4,000 字符，上传后可选择。自定义策略由真实模型执行；上传内容不会作为程序代码运行。</p>
 
                 <label for="agent-seed">随机种子</label>
                 <input id="agent-seed" name="seed" type="number" step="1" min="-9007199254740991" max="9007199254740991" value="42" inputmode="numeric" title="请输入 -9007199254740991 至 9007199254740991 之间的整数" aria-describedby="agent-seed-hint" />
@@ -154,9 +157,9 @@
                     <option value="retaliate_after_death">死亡后反击</option>
                     <option value="potion_overheal">治疗越过生命上限</option>
                     <option value="potion_not_consumed">喝药不消耗药水</option>
+                    <option value="loot_anomaly">掉落物品异常</option>
                   </select>
-                  <p id="agent-goal-hint" class="goal-guidance" aria-live="polite"></p>
-                  <button id="agent-use-recommended-goal" class="button button-secondary" type="button" hidden></button>
+                  <p id="agent-defect-hint" class="goal-guidance" aria-live="polite">所选缺陷仅作用于本次隔离战斗；是否触发和检出以实际战斗证据为准。</p>
                 </div>
 
                 <label for="agent-provider">执行方式</label>
@@ -167,7 +170,7 @@
                 <p id="agent-provider-hint" class="helper field-helper">离线替身只验证工程流程，不代表真实模型能力。</p>
                 <label id="agent-paid-row" class="check-row" for="agent-paid" hidden>
                   <input id="agent-paid" type="checkbox" />
-                  <span>我确认本次最多 6 次模型调用、每次最多请求 512 输出 Token；输入 Token 和金额无硬上限。</span>
+                  <span>我确认本次最多 20 步、20 次模型调用，每次最多请求 512 输出 Token；输入 Token 和金额无硬上限。</span>
                 </label>
                 <button id="agent-start" class="button button-primary" type="submit">开始自动测试</button>
                 <p id="agent-form-error" class="form-error" role="alert" hidden></p>
@@ -175,15 +178,15 @@
             </aside>
 
             <div class="battle-column">
-              <div id="agent-feedback" class="feedback" role="status" aria-live="polite" aria-atomic="true">设置测试目标后开始自动测试。</div>
+              <div id="agent-feedback" class="feedback" role="status" aria-live="polite" aria-atomic="true">选择战斗 skill 后开始自动测试。</div>
               <section id="agent-run-card" class="card agent-run-card" aria-labelledby="agent-run-heading" hidden>
                 <div class="section-heading">
                   <div><p class="eyebrow">运行状态</p><h2 id="agent-run-heading">本次自动测试</h2></div>
                   <span id="agent-run-status" class="status-chip">等待中</span>
                 </div>
                 <dl class="agent-run-metrics">
-                  <div><dt>模型调用</dt><dd id="agent-model-count">0 / 6</dd></div>
-                  <div><dt>动作尝试</dt><dd id="agent-action-count">0 / 6</dd></div>
+                  <div><dt>模型调用</dt><dd id="agent-model-count">0 / 20</dd></div>
+                  <div><dt>动作尝试</dt><dd id="agent-action-count">0 / 20</dd></div>
                   <div><dt>测试配置</dt><dd id="agent-run-config">—</dd></div>
                   <div><dt>运行 ID</dt><dd id="agent-run-id">—</dd></div>
                 </dl>

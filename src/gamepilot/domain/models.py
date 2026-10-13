@@ -29,10 +29,11 @@ class PlayerState(CombatantState):
     """玩家状态：在生命值之外还持有药水数量。"""
 
     potions: int
+    gold: int = 0
 
 
-EventActor = Literal["player", "slime"]
-EventKind = Literal["attack", "potion", "retaliate"]
+EventActor = Literal["player", "slime", "goblin", "troll"]
+EventKind = Literal["attack", "potion", "retaliate", "drop"]
 
 
 class CombatEvent(BaseModel):
@@ -40,7 +41,8 @@ class CombatEvent(BaseModel):
 
     `value` 的含义取决于 `kind`：
     - attack / retaliate：造成的伤害；
-    - potion：实际恢复的生命值（可能被生命上限截断）。
+    - potion：v2 为固定药水效力 25；实际回血由动作前后 HP 计算，并受上限截断。
+      v1 历史存档仍记录实际回血量。
 
     事件不携带时间戳，保证相同种子与相同动作序列下事件完全可比。
     """
@@ -52,6 +54,7 @@ class CombatEvent(BaseModel):
     player_hp: int
     slime_hp: int
     potions: int | None = None  # 事件结束后的剩余药水，仅玩家动作事件记录
+    item: str | None = None  # drop 事件的物品名称
 
 
 class GameSnapshot(BaseModel):
@@ -63,4 +66,6 @@ class GameSnapshot(BaseModel):
     turn: int
     player: PlayerState
     slime: CombatantState
+    enemy_type: Literal["slime", "goblin", "troll"] = "slime"
+    ruleset: Literal["v1", "v2"] = "v2"
     events: list[CombatEvent] = Field(default_factory=list)

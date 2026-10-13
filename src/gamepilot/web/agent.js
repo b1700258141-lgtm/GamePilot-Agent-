@@ -1,6 +1,7 @@
 "use strict";
 
 const agentEl = (id) => document.getElementById(id);
+const agentEnemyNames = { slime: "史莱姆", goblin: "哥布林", troll: "巨魔" };
 const AGENT_API = "/api/v1/agent-test-runs";
 const AGENT_STORAGE_KEY = "gamepilot:last-agent-run-id";
 const defectNames = {
@@ -8,13 +9,15 @@ const defectNames = {
   potion_overheal: "治疗越过生命上限",
   potion_not_consumed: "喝药不消耗药水",
   retaliate_after_death: "死亡后反击",
+  loot_anomaly: "掉落物品异常",
 };
 const goalNames = {
+  "battle-end": "战斗至结束",
   "full-health": "满血使用药水",
   healing: "受伤后治疗",
   victory: "击败敌人并验证结束",
 };
-const actionNames = { attack: "攻击", potion: "使用药水", use_potion: "使用药水", retaliate: "反击" };
+const actionNames = { attack: "攻击", potion: "使用药水", use_potion: "使用药水", retaliate: "反击", drop: "掉落" };
 const verdictNames = {
   pass: "游戏规则通过",
   defect_detected: "发现游戏缺陷",
@@ -28,6 +31,7 @@ let currentAgentRun = null;
 let previousAgentRun = null;
 let agentPollTimer = null;
 let realAvailable = false;
+let agentSkills = [];
 
 function showMode(mode) {
   const manual = mode === "manual";
@@ -67,21 +71,8 @@ function agentFormError(message) {
 function updateDefectFields() {
   const enabled = agentEl("agent-defect-enabled").checked;
   agentEl("agent-defect-fields").hidden = !enabled;
-  if (!enabled) return;
-  const defect = agentEl("agent-defect").value;
-  const goal = agentEl("agent-goal").value;
-  const recommended = defect === "retaliate_after_death" ? "victory" : "healing";
-  const compatible = goal === recommended;
-  const hint = agentEl("agent-goal-hint");
-  hint.classList.toggle("warning", !compatible);
-  hint.textContent = compatible
-    ? "当前目标会尝试产生该缺陷的触发条件。已知缺陷只作用于本次 Agent 隔离战斗，手动战斗仍使用正常规则。"
-    : defect === "retaliate_after_death"
-      ? `当前“${goalNames[goal]}”目标不要求击败敌人，可能无法触发死亡后反击。请改用“${goalNames[recommended]}”。`
-      : `当前“${goalNames[goal]}”目标不要求受伤后成功喝药，可能完全不会触发此缺陷。请改用“${goalNames[recommended]}”。`;
-  const useRecommended = agentEl("agent-use-recommended-goal");
-  useRecommended.hidden = compatible;
-  useRecommended.textContent = `改用“${goalNames[recommended]}”目标`;
+  if (enabled) agentEl("agent-defect-hint").textContent =
+    "缺陷只作用于本次隔离战斗。自定义 skill 若没有执行到触发动作，结果会标为“缺陷未触发”。";
 }
 
 function updateProviderFields() {
@@ -89,7 +80,7 @@ function updateProviderFields() {
   agentEl("agent-paid-row").hidden = !real;
   if (!real) agentEl("agent-paid").checked = false;
   agentEl("agent-provider-hint").textContent = real
-    ? "实际请求模型 deepseek-v4-flash；每次最多 6 次调用、每次最多请求 512 输出 Token。输入 Token 和金额无硬上限，费用没有可靠单价时为 unknown。"
+    ? "实际请求模型 deepseek-v4-flash；最多 20 步、20 次调用，每次最多请求 512 输出 Token（合计请求输出上限 10,240）。输入 Token 和金额无硬上限，费用没有可靠单价时为 unknown。"
     : realAvailable
       ? "离线替身只验证工程流程，不代表真实模型能力。"
       : "离线替身只验证工程流程，不代表真实模型能力。当前服务未配置 DeepSeek 密钥，deepseek-flash 暂不可用。";
@@ -104,8 +95,13 @@ function formConfig() {
   if (providerMode === "real" && !agentEl("agent-paid").checked) {
     throw new Error("请先确认本次真实模型调用的预算和费用边界。");
   }
+  const skillId = agentEl("agent-skill").value;
+  if (providerMode === "offline" && skillId !== "injured-potion-then-attack") {
+    throw new Error("自定义 skill 需要 deepseek-flash；离线替身只支持默认策略。");
+  }
   return {
-    goal_id: agentEl("agent-goal").value,
+    goal_id: "battle-end",
+    skill_id: skillId,
     ...(raw ? { seed: Number(raw) } : {}),
     profile: agentEl("agent-defect-enabled").checked ? agentEl("agent-defect").value : "normal",
     provider_mode: providerMode,
@@ -114,7 +110,7 @@ function formConfig() {
 }
 
 function fillForm(config) {
-  agentEl("agent-goal").value = config.goal_id;
+  agentEl("agent-skill").value = config.skill_id || "injured-potion-then-attack";
   agentEl("agent-seed").value = String(config.seed);
   agentEl("agent-defect-enabled").checked = config.profile !== "normal";
   if (config.profile !== "normal") agentEl("agent-defect").value = config.profile;
@@ -124,10 +120,61 @@ function fillForm(config) {
   updateProviderFields();
 }
 
+function renderSkillChoices(selectedId = agentEl("agent-skill").value) {
+  const select = agentEl("agent-skill");
+  select.replaceChildren();
+  for (const skill of agentSkills) {
+    const option = document.createElement("option");
+    option.value = skill.skill_id;
+    option.textContent = skill.name + (skill.built_in ? "（默认）" : "（已上传）");
+    select.append(option);
+  }
+  select.value = agentSkills.some((skill) => skill.skill_id === selectedId)
+    ? selectedId : "injured-potion-then-attack";
+  updateSkillHint();
+}
+
+function updateSkillHint() {
+  const skill = agentSkills.find((item) => item.skill_id === agentEl("agent-skill").value);
+  agentEl("agent-skill-hint").textContent = skill?.built_in
+    ? "默认策略：开局满血喝药，受伤后补药，药水耗尽持续攻击；终态后再验证一次行动限制。"
+    : "已选自定义文本策略。只有真实模型会根据上传内容选择动作；所有动作仍受工具、规则和预算约束。";
+}
+
+async function uploadSkill() {
+  const input = agentEl("agent-skill-upload");
+  const file = input.files?.[0];
+  if (!file) return;
+  try {
+    if (!/\.(md|txt)$/i.test(file.name) || file.size > 16000) {
+      throw new Error("请选择不超过 16 KB 的 .md 或 .txt 文件（内容最多 4,000 字符）。");
+    }
+    const instructions = (await file.text()).trim();
+    if (!instructions || instructions.length > 4000) {
+      throw new Error("skill 内容须为 1 至 4,000 字符。");
+    }
+    const heading = instructions.match(/^#\s+(.+)$/m)?.[1]?.trim();
+    const name = (heading || file.name.replace(/\.(md|txt)$/i, "")).slice(0, 80);
+    const skill = await agentRequest(`${AGENT_API}/skills`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name, instructions }),
+    });
+    agentSkills = await agentRequest(`${AGENT_API}/skills`);
+    renderSkillChoices(skill.skill_id);
+    agentFeedback(`已添加 skill“${skill.name}”。选择 deepseek-flash 后可运行。`, "success");
+    agentFormError("");
+  } catch (error) {
+    agentFormError(error.message || "上传 skill 失败。");
+  } finally {
+    input.value = "";
+  }
+}
+
 function timelineText(item) {
   if (item.kind === "initial") {
     const s = item.snapshot;
-    return ["读取初始战斗状态", `玩家 ${s.player.hp}/${s.player.max_hp} HP · 史莱姆 ${s.slime.hp}/${s.slime.max_hp} HP`, s];
+    return ["读取初始战斗状态", `玩家 ${s.player.hp}/${s.player.max_hp} HP · ${agentEnemyNames[s.enemy_type || "slime"]} ${s.slime.hp}/${s.slime.max_hp} HP`, s];
   }
   if (item.kind === "model") {
     const action = item.tool_calls?.map((call) => {
@@ -150,10 +197,13 @@ function timelineText(item) {
     const after = item.after || before;
     const failedRules = [...new Set((item.checks || []).filter((check) => check.status === "fail").map((check) => check.rule_id))];
     const potionEvent = (item.new_events || []).find((event) => event.actor === "player" && event.kind === "potion");
-    const events = (item.new_events || []).map((event) => `${actionNames[event.kind] || event.kind} ${event.value}`).join("、");
+    const events = (item.new_events || []).map((event) => `${actionNames[event.kind] || event.kind} ${event.value}${event.item ? ` ${event.item === "gold" ? "金币" : event.item}` : ""}`).join("、");
+    const potionAmount = before.ruleset === "v2"
+      ? `药水效力 ${potionEvent?.value}，实际回血 ${potionEvent?.player_hp - before.player.hp}`
+      : `实际回血 ${potionEvent?.player_hp - before.player.hp}`;
     const detail = potionEvent
-      ? `HTTP ${item.observed_status ?? "未知"} · 喝药事件：生命 ${before.player.hp}→${potionEvent.player_hp}/${before.player.max_hp}，药水 ${before.player.potions}→${potionEvent.potions} · 回合结束生命 ${after.player.hp}（可能已受反击）`
-      : `HTTP ${item.observed_status ?? "未知"} · 玩家 ${before.player.hp}→${after.player.hp} HP · 史莱姆 ${before.slime.hp}→${after.slime.hp} HP`;
+      ? `HTTP ${item.observed_status ?? "未知"} · ${potionAmount}；生命 ${before.player.hp}→${potionEvent.player_hp}/${before.player.max_hp}，药水 ${before.player.potions}→${potionEvent.potions} · 回合结束生命 ${after.player.hp}（可能已受反击）`
+      : `HTTP ${item.observed_status ?? "未知"} · 玩家 ${before.player.hp}→${after.player.hp} HP · ${agentEnemyNames[before.enemy_type] || "敌人"} ${before.slime.hp}→${after.slime.hp} HP · 金币 ${before.player.gold ?? 0}→${after.player.gold ?? 0}`;
     return [
       `第 ${item.index} 步：${item.action === "attack" ? "攻击" : "使用药水"}`,
       `${detail}${events ? ` · 事件：${events}` : ""}${failedRules.length ? ` · 规则失败：${failedRules.join("、")}` : ""}`,
@@ -227,9 +277,9 @@ function resultReason(run) {
       return `测试目标尚未覆盖。${stop}`;
     case "not_triggered":
       if (["potion_overheal", "potion_not_consumed"].includes(run.config.profile) && !potionStep) {
-        return `本次没有成功喝药，所选缺陷因此未触发。请把测试目标改为“受伤后治疗”再测。${stop}`;
+        return `本次没有成功喝药，所选缺陷因此未触发。可换用会在受伤后喝药的 skill 再测。${stop}`;
       }
-      return `已完成目标，但未触发所选缺陷；不能据此判断 Agent 漏检。${stop}`;
+      return `本次动作未触发所选缺陷；不能据此判断 Agent 漏检。${stop}`;
     case "execution_error":
       return result.replay_outcome !== "match"
         ? `无模型重放结果为 ${result.replay_outcome}，本次测试不能判定通过。${stop}`
@@ -273,6 +323,7 @@ function renderComparison(run) {
   const comparable = previousAgentRun?.status === "completed" && run.status === "completed" &&
     previousAgentRun.config.seed === run.config.seed &&
     previousAgentRun.config.goal_id === run.config.goal_id &&
+    previousAgentRun.config.skill_id === run.config.skill_id &&
     previousAgentRun.config.provider_mode === run.config.provider_mode &&
     previousAgentRun.config.profile !== run.config.profile;
   agentEl("agent-compare-card").hidden = !comparable;
@@ -280,7 +331,7 @@ function renderComparison(run) {
     agentEl("agent-compare-text").textContent =
       `${defectNames[previousAgentRun.config.profile]}：${verdictNames[previousAgentRun.result.verdict]}；` +
       `${defectNames[run.config.profile]}：${verdictNames[run.result.verdict]}。` +
-      "两次运行使用相同种子和目标，Agent 选择的动作可能不同。";
+      "两次运行使用相同种子和 skill，Agent 选择的动作可能不同。";
   }
 }
 
@@ -293,7 +344,7 @@ function renderAgentRun(run) {
   status.className = `status-chip ${run.status === "error" ? "error" : run.status === "running" ? "running" : run.result?.verdict === "defect_detected" ? "detected" : ""}`;
   agentEl("agent-model-count").textContent = `${run.model_calls} / ${run.budget.max_model_calls}`;
   agentEl("agent-action-count").textContent = `${run.actions_attempted} / ${run.budget.max_action_attempts}`;
-  agentEl("agent-run-config").textContent = `${goalNames[run.config.goal_id]} · seed ${run.config.seed} · ${defectNames[run.config.profile]}`;
+  agentEl("agent-run-config").textContent = `${run.skill?.name || goalNames[run.config.goal_id]} · seed ${run.config.seed} · ${defectNames[run.config.profile]}`;
   agentEl("agent-run-id").textContent = run.run_id;
   agentFeedback(run.message, run.status === "error" ? "error" : run.status === "running" ? "busy" : "success");
   agentEl("agent-start").disabled = run.status === "queued" || run.status === "running";
@@ -341,14 +392,11 @@ async function startAgentRun(config) {
 
 agentEl("mode-manual").addEventListener("click", () => showMode("manual"));
 agentEl("mode-agent").addEventListener("click", () => showMode("agent"));
-for (const id of ["agent-defect-enabled", "agent-defect", "agent-goal"]) {
+for (const id of ["agent-defect-enabled", "agent-defect"]) {
   agentEl(id).addEventListener("change", updateDefectFields);
 }
-agentEl("agent-use-recommended-goal").addEventListener("click", () => {
-  agentEl("agent-goal").value = agentEl("agent-defect").value === "retaliate_after_death" ? "victory" : "healing";
-  updateDefectFields();
-  agentEl("agent-goal").focus();
-});
+agentEl("agent-skill").addEventListener("change", updateSkillHint);
+agentEl("agent-skill-upload").addEventListener("change", () => void uploadSkill());
 agentEl("agent-provider").addEventListener("change", updateProviderFields);
 agentEl("agent-form").addEventListener("submit", (event) => {
   event.preventDefault();
@@ -369,10 +417,9 @@ agentEl("agent-switch-defect").addEventListener("click", () => {
   fillForm(currentAgentRun.config);
   const enabled = currentAgentRun.config.profile === "normal";
   agentEl("agent-defect-enabled").checked = enabled;
-  if (enabled) agentEl("agent-defect").value = currentAgentRun.config.goal_id === "victory"
-    ? "retaliate_after_death" : "potion_overheal";
+  if (enabled) agentEl("agent-defect").value = "potion_overheal";
   updateDefectFields();
-  agentFeedback("已保留目标和种子。选择缺陷后开始新测试；旧报告仍保留。", "busy");
+  agentFeedback("已保留 skill 和种子。选择缺陷后开始新测试；旧报告仍保留。", "busy");
   agentEl(enabled ? "agent-defect" : "agent-defect-enabled").focus();
 });
 
@@ -386,6 +433,12 @@ async function initializeAgentPage() {
     updateProviderFields();
   } catch {
     agentEl("agent-real-option").disabled = true;
+  }
+  try {
+    agentSkills = await agentRequest(`${AGENT_API}/skills`);
+    renderSkillChoices();
+  } catch {
+    agentFormError("无法加载 skill 列表；请检查服务状态。");
   }
   let lastId = null;
   try { lastId = localStorage.getItem(AGENT_STORAGE_KEY); } catch { /* 存储可能被禁用 */ }

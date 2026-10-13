@@ -15,16 +15,17 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from gamepilot.agent.models import BudgetSpec
 from gamepilot.agent.provider import DEFAULT_API_KEY_ENV, DEFAULT_BASE_URL, DEFAULT_MODEL
+from gamepilot.agent.skills import DEFAULT_SKILL_ID, SkillStore
 from gamepilot.persistence.models import AgentTestRunRow
 from gamepilot.testing.reporting import new_run_id, utc_now_iso
 
 WEB_BUDGET = BudgetSpec(
-    max_action_attempts=6,
-    max_model_calls=6,
+    max_action_attempts=20,
+    max_model_calls=20,
     max_format_retries=1,
     model_timeout_seconds=30,
     http_timeout_seconds=5,
-    total_timeout_seconds=60,
+    total_timeout_seconds=600,
     max_output_tokens=512,
 )
 WEB_BASE_URL = "http://gamepilot-agent-test.local"
@@ -54,6 +55,7 @@ class AgentWebRunManager:
         self._records: dict[str, dict[str, Any]] = {}
         self._start_lock = asyncio.Lock()
         self._task: asyncio.Task[None] | None = None
+        self.skills = SkillStore()
 
     def _save(self, record: dict[str, Any]) -> None:
         self._records[record["run_id"]] = record
@@ -90,10 +92,16 @@ class AgentWebRunManager:
                 raise RuntimeError("已有自动测试正在运行，请等待它结束")
             if config["provider_mode"] == "real" and real_key() is None:
                 raise ValueError("服务端未配置真实模型密钥")
+            skill = self.skills.get(config.get("skill_id", DEFAULT_SKILL_ID))
+            if skill is None:
+                raise ValueError("所选 skill 不存在，请刷新列表后重试")
+            if config["provider_mode"] == "offline" and not skill.built_in:
+                raise ValueError("上传的自定义 skill 需要真实模型执行；离线替身只支持默认策略")
             run_id = new_run_id()
             record: dict[str, Any] = {
                 "run_id": run_id,
                 "config": config,
+                "skill": skill.model_dump(),
                 "status": "queued",
                 "phase": "queued",
                 "message": "测试已创建，等待开始",
@@ -193,13 +201,22 @@ class AgentWebRunManager:
         from gamepilot.agent.provider import AnthropicCompatibleProvider
         from gamepilot.agent.report import build_agent_report, write_agent_report
         from gamepilot.benchmark.agent_eval import observation_reacting_double
-        from gamepilot.benchmark.agent_manifest import OPPORTUNITY_TARGET_RULES
         from gamepilot.lab import TriggerRecorder, create_lab_app
         from gamepilot.testing.client import GameClient
         from gamepilot.testing.replay import replay_report
         from gamepilot.testing.reporting import single_case_report, write_report
+        from gamepilot.testing.rules import (
+            R_LOOT_ITEM,
+            R_LOOT_PRESENT,
+            R_LOOT_RANGE,
+            R_NO_ACTION_AFTER_PLAYER_DEATH,
+            R_NO_RETALIATE_ON_KILL,
+            R_POTION_CAP,
+            R_POTION_DECREMENTS,
+        )
 
         config = record["config"]
+        skill = record["skill"]
         goal = resolve_goal(config["goal_id"])
         if config["provider_mode"] == "offline":
             provider = observation_reacting_double(goal.goal_id)
@@ -234,6 +251,7 @@ class AgentWebRunManager:
                 goal=goal,
                 seed=config["seed"],
                 description=f"网页 Agent 测试 {goal.goal_id}（{config['profile']}）",
+                skill_instructions=skill["instructions"],
                 timeout_provider=lambda: budget.request_timeout(WEB_BUDGET.http_timeout_seconds),
                 on_update=lambda node, current, ctx: self._progress(record, node, current, ctx),
             )
@@ -258,7 +276,13 @@ class AgentWebRunManager:
 
         trigger = recorder.get(case.session_id) if case.session_id else None
         failing = sorted({check.rule_id for check in case.checks if check.status == "fail"})
-        target = list(OPPORTUNITY_TARGET_RULES.get((config["profile"], goal.goal_id), ()))
+        target_rules = {
+            "potion_overheal": [R_POTION_CAP],
+            "potion_not_consumed": [R_POTION_DECREMENTS],
+            "retaliate_after_death": [R_NO_RETALIATE_ON_KILL, R_NO_ACTION_AFTER_PLAYER_DEATH],
+            "loot_anomaly": [R_LOOT_PRESENT, R_LOOT_RANGE, R_LOOT_ITEM],
+        }
+        target = target_rules.get(config["profile"], [])
         target_hit = sorted(set(failing) & set(target))
         replay_outcome = replay.cases[0].outcome if replay.cases else "not_executed"
         replay_status = replay.cases[0].execution.status if replay.cases else None
@@ -274,10 +298,10 @@ class AgentWebRunManager:
             verdict = "rule_failure"
         elif trigger is not None and target and not target_hit:
             verdict = "agent_missed"
-        elif not agent_report.coverage.met:
-            verdict = "goal_incomplete"
         elif config["profile"] != "normal" and trigger is None:
             verdict = "not_triggered"
+        elif not agent_report.coverage.met:
+            verdict = "goal_incomplete"
         else:
             verdict = "pass"
         result = {
@@ -304,6 +328,7 @@ class AgentWebRunManager:
             message="测试结束，报告已保存",
             result=result,
             reports={
+                "skill": skill,
                 "agent": agent_report.model_dump(mode="json"),
                 "run": run_report.model_dump(mode="json"),
                 "replay": replay.model_dump(mode="json"),
