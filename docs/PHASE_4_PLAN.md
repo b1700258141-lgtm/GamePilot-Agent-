@@ -2,8 +2,7 @@
 
 状态：2026-10-09 TASK-004A 至 TASK-004D 已实施；TASK-004E 持续集成配置和本机验收完成，
 远程工作流运行待所有者后续授权推送。
-首切片验收见 `docs/validation/TASK-004A-defect-regression-artifact.md`。
-第二切片验收见 `docs/validation/TASK-004B-batch-regression.md`。
+首两切片的原详细验收已归档，索引见 `docs/validation/ARCHIVED_REPORTS.md`。
 
 ## 背景与目标
 
@@ -44,18 +43,18 @@ TASK-004B 将多份已确认缺陷产物放入显式清单；在执行前检查�
 TASK-004E 将离线回归、临时数据库迁移/仓储测试和基础安装包演示接入 GitHub Actions。
 本机验证对应步骤，工作流采用只读权限且无需模型密钥；未推送或修改远程分支保护。
 本阶段现在具备缺陷导出、批量回归、可重复演示、修复前后对比及自动检查入口。
-说明见 `docs/CI.md`，验收见 `docs/validation/TASK-004E-ci-regression-gates.md`。
+说明见 `docs/CI.md`，验收见 `docs/validation/ARCHIVED_REPORTS.md`。
 
 TASK-004D 新增 `gamepilot.defects compare`，离线核验两次批量回归的清单、
 单项运行证据及固定分母，按指纹对应修复前后结果。错误或跳过不视为修复成功；
 规格集合改变则拒绝比较。不新增自动关闭缺陷、数据库或外部发布行为。
-验收见 `docs/validation/TASK-004D-regression-comparison.md`。
+验收见 `docs/validation/ARCHIVED_REPORTS.md`。
 
 TASK-004C 新增 `gamepilot.defects demo`：在新环境现场生成三种脚本缺陷的确认链，
 导出清单并验证正常及三个缺陷靶场。每次使用独立目录；不依赖本机 V6 历史报告，
 不调用模型，明确标识 `offline-scripted-asgi`。任务与验收分别见
 `docs/claude-tasks/TASK-004C-reproducible-demo.md` 和
-`docs/validation/TASK-004C-reproducible-demo.md`。
+`docs/validation/ARCHIVED_REPORTS.md`。
 
 先复用 `gamepilot.testing` 的 `RunReport`、`ReplayReport`、`Scenario` 和判定器，
 不重写游戏规则，不让缺陷标签进入 Agent 决策输入，不调用真实模型。

@@ -1,0 +1,222 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#f4f7fb" />
+    <title>GamePilot · 战斗测试台</title>
+    <link rel="stylesheet" href="./app.css" />
+    <script src="./app.js" defer></script>
+    <script src="./agent.js" defer></script>
+  </head>
+  <body>
+    <a class="skip-link" href="#main">跳到主要内容</a>
+    <div class="page-shell">
+      <header class="site-header">
+        <div class="brand">
+          <span class="brand-mark" aria-hidden="true">GP</span>
+          <div>
+            <strong>GamePilot</strong>
+            <span class="brand-caption">本地战斗测试台</span>
+          </div>
+        </div>
+        <div class="header-links">
+          <span id="service-status" class="service-status" role="status">正在检查服务…</span>
+          <a href="/docs">API 文档</a>
+        </div>
+      </header>
+
+      <main id="main">
+        <section class="intro" aria-labelledby="page-title">
+          <p class="eyebrow">确定性战斗 · Agent 测试</p>
+          <h1 id="page-title">战斗测试台</h1>
+          <p>手动操作战斗，或让 Agent 选择动作并查看独立规则判定与重放证据。</p>
+        </section>
+
+        <nav class="mode-switch" aria-label="测试方式">
+          <button id="mode-manual" class="mode-button active" type="button" aria-pressed="true">手动战斗</button>
+          <button id="mode-agent" class="mode-button" type="button" aria-pressed="false">Agent 自动测试</button>
+        </nav>
+
+        <section id="manual-panel" aria-label="手动战斗">
+        <div class="workspace">
+          <aside class="setup-panel card" aria-label="会话操作">
+            <section aria-labelledby="new-session-heading">
+              <h2 id="new-session-heading">新建会话</h2>
+              <p class="helper">默认使用种子 42，清空后由服务随机生成。</p>
+              <form id="create-form">
+                <label for="seed-input">随机种子</label>
+                <input id="seed-input" name="seed" type="number" step="1" value="42" inputmode="numeric" />
+                <button id="create-button" class="button button-primary" type="submit">开始新战斗</button>
+              </form>
+            </section>
+
+            <div class="divider" aria-hidden="true"></div>
+
+            <section aria-labelledby="resume-heading">
+              <h2 id="resume-heading">继续已有会话</h2>
+              <p class="helper">输入会话 ID，可读取数据库中保存的战斗。</p>
+              <form id="load-form">
+                <label for="session-input">会话 ID</label>
+                <input id="session-input" name="session_id" type="text" autocomplete="off" spellcheck="false" placeholder="粘贴 session_id" />
+                <button id="load-button" class="button button-secondary" type="submit">读取会话</button>
+              </form>
+            </section>
+          </aside>
+
+          <div class="battle-column">
+            <div id="feedback" class="feedback" role="status" aria-live="polite">页面已就绪。创建一场战斗开始测试。</div>
+
+            <section id="empty-state" class="card empty-state" aria-label="尚未选择战斗">
+              <div class="empty-orbit" aria-hidden="true"><span></span></div>
+              <h2>等待战斗开始</h2>
+              <p>创建新会话，或读取已有会话后即可使用攻击和药水。</p>
+            </section>
+
+            <section id="battle-view" class="card battle-view" aria-labelledby="battle-heading" hidden>
+              <div class="battle-topline">
+                <div>
+                  <p class="eyebrow">当前战斗</p>
+                  <h2 id="battle-heading">玩家 vs 史莱姆</h2>
+                </div>
+                <span id="battle-status" class="status-chip">进行中</span>
+              </div>
+
+              <dl class="metadata">
+                <div><dt>回合</dt><dd id="turn-value">0</dd></div>
+                <div><dt>种子</dt><dd id="seed-value">42</dd></div>
+                <div class="metadata-id"><dt>会话 ID</dt><dd id="session-value">—</dd></div>
+              </dl>
+
+              <div class="fighters">
+                <section class="fighter" aria-labelledby="player-heading">
+                  <div class="fighter-title"><h3 id="player-heading">玩家</h3><strong id="player-hp">—</strong></div>
+                  <progress id="player-progress" max="100" value="100" aria-label="玩家生命值"></progress>
+                  <p>剩余药水 <strong id="potions-value">—</strong> 瓶</p>
+                </section>
+                <section class="fighter" aria-labelledby="slime-heading">
+                  <div class="fighter-title"><h3 id="slime-heading">史莱姆</h3><strong id="slime-hp">—</strong></div>
+                  <progress id="slime-progress" max="60" value="60" aria-label="史莱姆生命值"></progress>
+                  <p>存活时会在玩家行动后反击</p>
+                </section>
+              </div>
+
+              <div class="action-row" aria-label="战斗动作">
+                <button id="attack-button" class="button button-primary" type="button" disabled>攻击</button>
+                <button id="potion-button" class="button button-secondary" type="button" disabled>使用药水</button>
+                <button id="refresh-button" class="button button-quiet" type="button" disabled>刷新状态</button>
+              </div>
+              <p id="action-hint" class="helper action-hint"></p>
+            </section>
+
+            <section id="history-section" class="card history" aria-labelledby="history-heading" hidden>
+              <div class="section-heading">
+                <div>
+                  <p class="eyebrow">执行证据</p>
+                  <h2 id="history-heading">战斗事件</h2>
+                </div>
+                <span id="event-count" class="event-count">0 条</span>
+              </div>
+              <ol id="event-list" class="event-list"></ol>
+              <p id="no-events" class="helper">还没有动作事件。</p>
+              <details class="raw-details">
+                <summary>查看原始 JSON</summary>
+                <pre id="raw-json"></pre>
+              </details>
+            </section>
+          </div>
+        </div>
+        </section>
+
+        <section id="agent-panel" aria-label="Agent 自动测试" hidden>
+          <div class="workspace">
+            <aside class="setup-panel card" aria-labelledby="agent-setup-heading">
+              <h2 id="agent-setup-heading">设置本次测试</h2>
+              <p class="helper">一次只运行一个目标、一个种子和一种缺陷配置。</p>
+              <form id="agent-form">
+                <label for="agent-goal">测试目标</label>
+                <select id="agent-goal" name="goal_id">
+                  <option value="victory">击败敌人并验证结束</option>
+                  <option value="healing">受伤后治疗</option>
+                  <option value="full-health">满血使用药水</option>
+                </select>
+
+                <label for="agent-seed">随机种子</label>
+                <input id="agent-seed" name="seed" type="number" step="1" min="-9007199254740991" max="9007199254740991" value="42" inputmode="numeric" title="请输入 -9007199254740991 至 9007199254740991 之间的整数" aria-describedby="agent-seed-hint" />
+                <p id="agent-seed-hint" class="helper field-helper">留空则随机生成一个种子；同一游戏种子可重现状态，Agent 仍可能选择不同动作。</p>
+
+                <label class="check-row" for="agent-defect-enabled">
+                  <input id="agent-defect-enabled" type="checkbox" /> 启用已知缺陷
+                </label>
+                <div id="agent-defect-fields" class="field-group" hidden>
+                  <label for="agent-defect">缺陷类型</label>
+                  <select id="agent-defect" name="profile">
+                    <option value="retaliate_after_death">死亡后反击</option>
+                    <option value="potion_overheal">治疗越过生命上限</option>
+                    <option value="potion_not_consumed">喝药不消耗药水</option>
+                  </select>
+                  <p id="agent-goal-hint" class="goal-guidance" aria-live="polite"></p>
+                  <button id="agent-use-recommended-goal" class="button button-secondary" type="button" hidden></button>
+                </div>
+
+                <label for="agent-provider">执行方式</label>
+                <select id="agent-provider" name="provider_mode">
+                  <option value="offline">离线演练（测试替身）</option>
+                  <option id="agent-real-option" value="real">deepseek-flash</option>
+                </select>
+                <p id="agent-provider-hint" class="helper field-helper">离线替身只验证工程流程，不代表真实模型能力。</p>
+                <label id="agent-paid-row" class="check-row" for="agent-paid" hidden>
+                  <input id="agent-paid" type="checkbox" />
+                  <span>我确认本次最多 6 次模型调用、每次最多请求 512 输出 Token；输入 Token 和金额无硬上限。</span>
+                </label>
+                <button id="agent-start" class="button button-primary" type="submit">开始自动测试</button>
+                <p id="agent-form-error" class="form-error" role="alert" hidden></p>
+              </form>
+            </aside>
+
+            <div class="battle-column">
+              <div id="agent-feedback" class="feedback" role="status" aria-live="polite" aria-atomic="true">设置测试目标后开始自动测试。</div>
+              <section id="agent-run-card" class="card agent-run-card" aria-labelledby="agent-run-heading" hidden>
+                <div class="section-heading">
+                  <div><p class="eyebrow">运行状态</p><h2 id="agent-run-heading">本次自动测试</h2></div>
+                  <span id="agent-run-status" class="status-chip">等待中</span>
+                </div>
+                <dl class="agent-run-metrics">
+                  <div><dt>模型调用</dt><dd id="agent-model-count">0 / 6</dd></div>
+                  <div><dt>动作尝试</dt><dd id="agent-action-count">0 / 6</dd></div>
+                  <div><dt>测试配置</dt><dd id="agent-run-config">—</dd></div>
+                  <div><dt>运行 ID</dt><dd id="agent-run-id">—</dd></div>
+                </dl>
+              </section>
+
+              <section id="agent-process-card" class="card agent-process-card" aria-labelledby="agent-process-heading" hidden>
+                <div class="section-heading"><div><p class="eyebrow">可解释过程</p><h2 id="agent-process-heading">Agent 与战斗过程</h2></div><span id="agent-step-count" class="event-count">0 项</span></div>
+                <ol id="agent-timeline" class="agent-timeline"></ol>
+                <p id="agent-no-steps" class="helper">正在等待第一条运行记录。</p>
+              </section>
+
+              <section id="agent-result-card" class="card agent-result-card" aria-labelledby="agent-result-heading" hidden>
+                <p class="eyebrow">最终判定</p>
+                <h2 id="agent-result-heading">—</h2>
+                <p id="agent-result-reason"></p>
+                <dl id="agent-result-facts" class="result-facts"></dl>
+                <div class="action-row">
+                  <button id="agent-rerun" class="button button-secondary" type="button">相同配置再测</button>
+                  <button id="agent-switch-defect" class="button button-quiet" type="button">切换缺陷再测</button>
+                  <a id="agent-report-link" class="button button-quiet" href="#" download="agent-test-report.json">下载原始报告</a>
+                </div>
+              </section>
+
+              <section id="agent-compare-card" class="card agent-result-card" aria-labelledby="agent-compare-heading" hidden>
+                <p class="eyebrow">同参对照</p><h2 id="agent-compare-heading">两次运行</h2>
+                <p id="agent-compare-text"></p>
+              </section>
+            </div>
+          </div>
+        </section>
+      </main>
+
+      <footer>GamePilot 本地演示 · 游戏规则和测试结论由服务端判定。</footer>
+    </div>
+  </body>
+</html>

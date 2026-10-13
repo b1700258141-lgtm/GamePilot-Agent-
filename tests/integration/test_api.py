@@ -48,6 +48,20 @@ async def test_health_check(client: httpx.AsyncClient) -> None:
 
 
 @pytest.mark.anyio
+async def test_local_battle_page_and_assets_are_served(client: httpx.AsyncClient) -> None:
+    home = await client.get("/")
+    assert home.status_code == 307
+    assert home.headers["location"] == "/ui/"
+
+    page = await client.get("/ui/")
+    assert page.status_code == 200
+    assert "text/html" in page.headers["content-type"]
+    assert "GamePilot · 战斗测试台" in page.text
+    assert (await client.get("/ui/app.css")).status_code == 200
+    assert (await client.get("/ui/app.js")).status_code == 200
+
+
+@pytest.mark.anyio
 async def test_memory_backend_is_ready(client: httpx.AsyncClient) -> None:
     response = await client.get("/ready")
     assert response.status_code == 200

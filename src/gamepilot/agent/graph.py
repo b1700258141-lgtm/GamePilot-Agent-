@@ -440,12 +440,27 @@ def _edge_after_route(state: AgentState) -> str:
     return "finalize" if state.get("stop_reason") else "decide"
 
 
-def build_graph(context: AgentContext) -> Any:
+def build_graph(
+    context: AgentContext,
+    on_update: Callable[[str, AgentState, AgentContext], None] | None = None,
+) -> Any:
     """按 AgentContext 组装并编译图。"""
     nodes = _make_nodes(context)
     graph = StateGraph(AgentState)
     for name, node in nodes.items():
-        graph.add_node(name, node)
+        if on_update is None:
+            graph.add_node(name, node)
+            continue
+
+        def wrap(node_name: str, current_node: Any) -> Any:
+            async def observed(state: AgentState) -> AgentState:
+                updates: AgentState = await current_node(state)
+                on_update(node_name, {**state, **updates}, context)
+                return updates
+
+            return observed
+
+        graph.add_node(name, wrap(name, node))
     graph.add_edge(START, "initialize")
     graph.add_conditional_edges(
         "initialize", _edge_after_initialize, {"decide": "decide", "finalize": "finalize"}
@@ -493,6 +508,7 @@ async def run_agent(
     seed: int,
     description: str,
     timeout_provider: Callable[[], float] | None = None,
+    on_update: Callable[[str, AgentState, AgentContext], None] | None = None,
 ) -> tuple[AgentState, AgentContext, dict[str, Any]]:
     """跑完一条 Agent 闭环，返回最终状态、运行上下文与图执行元数据。"""
     scenario = build_scenario(goal.goal_id, seed, description)
@@ -505,7 +521,7 @@ async def run_agent(
         goal=goal,
         seed=seed,
     )
-    graph = build_graph(context)
+    graph = build_graph(context, on_update=on_update)
     initial: AgentState = {
         "goal_id": goal.goal_id,
         "goal": goal.goal,

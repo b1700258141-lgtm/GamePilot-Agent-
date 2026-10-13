@@ -17,6 +17,8 @@ replay 重跑；`AgentRunReport` 是**任务结论**，记录模型决策、预�
 后者只引用前者，不改写它的任何字段。
 """
 
+from __future__ import annotations
+
 import subprocess
 from pathlib import Path
 from typing import TYPE_CHECKING

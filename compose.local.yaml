@@ -9,6 +9,7 @@ x-app: &app
   environment:
     DATABASE_URL: postgresql+psycopg://gamepilot:local-demo-only@db:5432/gamepilot
     REPOSITORY_BACKEND: postgres
+    GAMEPILOT_AGENT_API_KEY: ${GAMEPILOT_AGENT_API_KEY:-}
 
 services:
   db:

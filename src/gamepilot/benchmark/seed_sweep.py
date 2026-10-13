@@ -1,5 +1,6 @@
 """固定跨种子脚本评测：复用 HTTP 执行器、独立判定器和无模型重放。"""
 
+import hashlib
 import json
 import time
 from pathlib import Path
@@ -33,7 +34,7 @@ from gamepilot.testing.rules import (
 )
 from gamepilot.testing.runner import run_suite
 
-SEED_SWEEP_VERSION = "1.0.0"
+SEED_SWEEP_VERSION = "1.1.0"
 SEEDS = tuple(range(32))
 TRACE_ACTIONS = {
     "attack-potion": ("attack", "use_potion"),
@@ -88,6 +89,7 @@ class SweepReport(SweepModel):
     detection_counts: dict[str, int]
     run_reports: dict[str, str]
     replay_reports: dict[str, str]
+    report_sha256: dict[str, str]
     exit_code: int
     cells: list[SweepCell]
 
@@ -153,6 +155,7 @@ async def run_seed_sweep(output_dir: str | Path) -> tuple[SweepReport, Path]:
     cells: list[SweepCell] = []
     runs: dict[str, str] = {}
     replays: dict[str, str] = {}
+    digests: dict[str, str] = {}
 
     for profile in PROFILES:
         recorder = TriggerRecorder()
@@ -168,6 +171,8 @@ async def run_seed_sweep(output_dir: str | Path) -> tuple[SweepReport, Path]:
             replay_path = write_report(replayed, root / "replays" / profile)
             runs[profile] = str(run_path.relative_to(root))
             replays[profile] = str(replay_path.relative_to(root))
+            digests[runs[profile]] = hashlib.sha256(run_path.read_bytes()).hexdigest()
+            digests[replays[profile]] = hashlib.sha256(replay_path.read_bytes()).hexdigest()
             if len(report.cases) != len(scenarios) or len(replayed.cases) != len(scenarios):
                 raise ValueError("跨种子运行或重放数量不等于固定清单")
             for case, replay_case in zip(report.cases, replayed.cases):
@@ -216,6 +221,7 @@ async def run_seed_sweep(output_dir: str | Path) -> tuple[SweepReport, Path]:
         detection_counts=detections,
         run_reports=runs,
         replay_reports=replays,
+        report_sha256=digests,
         exit_code=exit_code,
         cells=cells,
     )

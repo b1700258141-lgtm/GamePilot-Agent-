@@ -35,6 +35,7 @@ from gamepilot.persistence.models import CombatEventRow, GameSessionRow
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 SESSION_TABLE = "game_sessions"
 EVENT_TABLE = "combat_events"
+AGENT_RUN_TABLE = "agent_test_runs"
 
 SESSION_COLUMNS = {
     "session_id",
@@ -105,7 +106,7 @@ def _run_probe(code: str) -> subprocess.CompletedProcess[str]:
 
 
 def test_metadata_contains_exactly_expected_tables() -> None:
-    assert set(Base.metadata.tables) == {SESSION_TABLE, EVENT_TABLE}
+    assert set(Base.metadata.tables) == {SESSION_TABLE, EVENT_TABLE, AGENT_RUN_TABLE}
 
 
 def test_game_sessions_columns_are_not_nullable() -> None:

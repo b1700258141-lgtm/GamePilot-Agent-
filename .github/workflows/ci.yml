@@ -37,8 +37,27 @@ jobs:
         run: python -m pytest -q -p no:cacheprovider -m 'not postgres' --junitxml=artifacts/ci/offline-tests.xml
       - name: Generate reproducible regression evidence
         run: python -m gamepilot.defects demo --output-dir artifacts/ci/demo
-      - name: Check fixed cross-seed scripted behavior
-        run: python -m gamepilot.benchmark seed-sweep --output-dir artifacts/ci/seed-sweeps
+      - name: Compare two independent cross-seed runs
+        run: |
+          python -m gamepilot.benchmark seed-sweep --output-dir artifacts/ci/seed-sweeps-before
+          python -m gamepilot.benchmark seed-sweep --output-dir artifacts/ci/seed-sweeps-after
+          before=(artifacts/ci/seed-sweeps-before/*/seed-sweep.json)
+          after=(artifacts/ci/seed-sweeps-after/*/seed-sweep.json)
+          test "${#before[@]}" -eq 1
+          test "${#after[@]}" -eq 1
+          python -m gamepilot.benchmark seed-compare --before "${before[0]}" --after "${after[0]}" --output-dir artifacts/ci/seed-comparisons
+      - name: Run fixed offline Agent seed preflight
+        run: python -m gamepilot.benchmark agent-seed-preflight --output-dir artifacts/ci/agent-seed-preflight
+      - name: Run fixed offline Agent seed canary
+        run: python -m gamepilot.benchmark agent-seed-canary --output-dir artifacts/ci/agent-seed-canary
+      - name: Verify fixed offline Agent seed canary evidence
+        run: |
+          shopt -s nullglob
+          reports=(artifacts/ci/agent-seed-canary/*/agent-seed-canary.json)
+          test "${#reports[@]}" -eq 1
+          python -m gamepilot.benchmark agent-seed-canary-verify --report "${reports[0]}"
+      - name: Run fixed offline four-seed victory gate
+        run: python -m gamepilot.benchmark agent-seed-gate --output-dir artifacts/ci/agent-seed-gate
       - name: Upload test and demo evidence
         if: always()
         uses: actions/upload-artifact@v4

@@ -8,7 +8,10 @@ docker compose -f compose.local.yaml up --build
 ```
 
 服务顺序是 PostgreSQL 健康 → 一次性迁移成功 → API 启动。
-就绪后访问 `http://127.0.0.1:8000/docs`；`/health` 检查进程存活，
+就绪后访问 `http://127.0.0.1:8000/` 打开战斗测试页：既可创建或恢复手动
+会话，也可在“Agent 自动测试”中选择目标、种子和缺陷，运行默认的离线演练并
+查看判定过程、报告与再测对照。页面与 API 同源，无需另启前端服务。
+`http://127.0.0.1:8000/docs` 仍可查看接口文档；`/health` 检查进程存活，
 `/ready` 检查当前依赖是否可用。容器健康检查使用 `/ready`。
 命令保持前台运行；Ctrl+C 会停止服务，命名卷仍保留。
 如果本机 Docker 通过 WSL 包装器运行，保持这个终端可避免空闲会话退出导致服务被关闭。
@@ -17,7 +20,15 @@ docker compose -f compose.local.yaml up --build
 若 Docker 由 WSL 包装器调用，Windows 环境变量默认不会传入 WSL；可在本地 `.env`
 增加 `GAMEPILOT_API_PORT=18000`（保留其他已有配置），或在 WSL 终端设置变量。
 服务只映射 IPv4 回环地址；PostgreSQL 不映射宿主端口。
-镜像默认只装基础依赖，不含 Agent 模型 SDK；命令行脚本测试和缺陷演示可运行。
+镜像已包含 Agent 依赖，默认离线演练不调用付费模型。真实模式需要由服务端
+环境变量 `GAMEPILOT_AGENT_API_KEY` 提供密钥，网页还要求每次单独确认付费
+边界；不要将密钥写入仓库文件。若密钥已在 Windows 本机环境中，可运行
+`./scripts/start_local_with_model.ps1`：脚本优先使用 `GAMEPILOT_AGENT_API_KEY`，
+也接受指向 DeepSeek Anthropic 入口的 `ANTHROPIC_AUTH_TOKEN`，只在此次启动时
+转发给 WSL Docker；已有镜像无需重建，需要重建时加 `-Build`。每次网页运行
+最多 6 次模型调用、6 次动作，每次请求最多 512 输出 Token；输入 Token 和
+金额无硬上限，费用无可靠单价时为 unknown。网页真实模式已完成一次单格
+验证，记录见 `docs/validation/AGENT-WEB-REAL-SMOKE-20261013.md`。
 
 ## 接口与持久化演示
 
@@ -47,7 +58,7 @@ python scripts/container_smoke.py --project gamepilot-local --base-url http://12
 
 ## 服务和数据边界
 
-- `Dockerfile` 用基础 wheel 安装应用，以 UID 10001 单 worker 运行；构建上下文是白名单，
+- `Dockerfile` 用包含 Agent 依赖的 wheel 安装应用，以 UID 10001 单 worker 运行；构建上下文是白名单，
   不包含 `.env`、密钥配置、`.git`、测试缓存或历史报告。
 - `migrate` 是可见的独立服务，明确执行 `alembic upgrade head`；API 自身不执行迁移。
   迁移失败时依赖条件阻止 API 启动，先检查 `docker compose -f compose.local.yaml logs migrate`。

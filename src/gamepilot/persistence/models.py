@@ -16,6 +16,7 @@ PostgreSQL 中会隐式创建同列 btree 索引，已能支撑「按会话按�
 from datetime import datetime
 
 from sqlalchemy import (
+    JSON,
     BigInteger,
     CheckConstraint,
     DateTime,
@@ -128,4 +129,16 @@ class CombatEventRow(Base):
             "potions IS NULL OR potions >= 0",
             name="ck_combat_events_potions_non_negative",
         ),
+    )
+
+
+class AgentTestRunRow(Base):
+    """本地自动测试的运行快照与完整证据；不与游戏会话共享状态。"""
+
+    __tablename__ = "agent_test_runs"
+
+    run_id: Mapped[str] = mapped_column(String(40), primary_key=True)
+    payload: Mapped[dict] = mapped_column(JSON, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
     )

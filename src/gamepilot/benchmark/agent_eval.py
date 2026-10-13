@@ -45,7 +45,7 @@ from gamepilot.agent.report import build_agent_report, estimate_cost, write_agen
 from gamepilot.agent.tools import TOOL_FINISH, TOOL_PERFORM_ACTION
 from gamepilot.lab import PROFILE_CATALOG, PROFILES, TriggerRecorder, create_lab_app
 from gamepilot.testing.client import GameClient
-from gamepilot.testing.models import CaseReport, ReplayReport, RunReport
+from gamepilot.testing.models import CaseReport, ReplayReport, RunReport, Scenario
 from gamepilot.testing.replay import ReplayInputError, load_report, replay_report
 from gamepilot.testing.reporting import (
     ReportWriteError,
@@ -532,7 +532,14 @@ async def _run_cell(
     root: Path,
     budget_spec: BudgetSpec,
     pricing: AgentPricing | None,
+    seed: int = AGENT_SEED,
+    control_scenario: Scenario | None = None,
 ) -> AgentCellEvidence:
+    scenario = control_scenario or next(
+        item for item in BASELINE_SCENARIOS if item.case_id == combination.script_case_id
+    )
+    if scenario.seed != seed or scenario.case_id != combination.script_case_id:
+        raise ValueError("Agent 与脚本对照必须使用同一 seed 和既定场景编号")
     cell_dir = root / "cells" / combination.profile / combination.goal_id
     goal = resolve_goal(combination.goal_id)
     budget = Budget(budget_spec)
@@ -545,8 +552,8 @@ async def _run_cell(
         provider=provider,
         budget=budget,
         goal=goal,
-        seed=AGENT_SEED,
-        description=f"Agent 评测 {combination.goal_id}（{combination.profile}，seed={AGENT_SEED}）",
+        seed=seed,
+        description=f"Agent 评测 {combination.goal_id}（{combination.profile}，seed={seed}）",
         timeout_provider=lambda: budget.request_timeout(budget_spec.http_timeout_seconds),
     )
     duration_ms = (time.perf_counter() - started) * 1000
@@ -629,9 +636,6 @@ async def _run_cell(
                 replay_error = result.execution.error or "重放执行失败，未提供原因"
 
     # 对照组：原脚本场景，同 seed 同 profile 的新会话，不消耗模型预算。
-    scenario = next(
-        item for item in BASELINE_SCENARIOS if item.case_id == combination.script_case_id
-    )
     control_case = await run_case(client, scenario)
     control_report = single_case_report(control_case, client, new_run_id(), CONTROL_SUITE)
     control_path: Path | None = None

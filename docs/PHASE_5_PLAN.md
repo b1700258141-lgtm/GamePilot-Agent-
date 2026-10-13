@@ -28,7 +28,7 @@
 
 真实镜像构建、迁移与非 root 运行通过；HTTP 基线 8/8、重放 8/8。
 API/数据库重启、API 重建与后续动作对照四项通过；迁移失败时 API 未启动。
-详细证据见 `docs/validation/TASK-005A-local-container-delivery.md`。
+详细证据见 `docs/validation/ARCHIVED_REPORTS.md`。
 
 ## TASK-005B：运行期就绪检查
 
@@ -37,7 +37,7 @@ API/数据库重启、API 重建与后续动作对照四项通过；迁移失败
 恢复后自动返回 200。内存模式直接就绪。容器健康检查改用 `/ready`，
 保留 `/health` 的原有语义。用独立 Compose 项目验证断库和恢复，
 不修改游戏规则或数据库 schema。验收见
-`docs/validation/TASK-005B-runtime-readiness.md`。
+`docs/validation/ARCHIVED_REPORTS.md`。
 
 ## TASK-005C：容器回归接入 CI
 
@@ -47,4 +47,4 @@ Linux runner 构建 `compose.local.yaml`，真实运行迁移与 API；从宿主
 失败时保留已生成的报告与服务日志，随后停止专用服务。
 本机等价流程已验收；GitHub runner 首次执行仍待推送后确认。
 任务与证据见 `docs/claude-tasks/TASK-005C-container-ci-gate.md` 和
-`docs/validation/TASK-005C-container-ci-gate.md`。
+`docs/validation/ARCHIVED_REPORTS.md`。

@@ -6,7 +6,7 @@
 
 | 任务 | 检查内容 | 产物 |
 | --- | --- | --- |
-| Offline tests and regression demo | 安装 dev/agent 依赖；Ruff；所有非 PostgreSQL 测试；固定脚本演示；32 seed 脚本评测 | JUnit、演示与跨种子证据 |
+| Offline tests and regression demo | 安装 dev/agent 依赖；Ruff；所有非 PostgreSQL 测试；固定脚本演示；两次独立 32 seed 脚本评测及逐格对比；四 seed 离线 Agent 预检、固定单格 canary 与证据核验、八格胜利门槛 | JUnit、演示、跨运行与 Agent 离线证据 |
 | PostgreSQL migrations and integration tests | 临时 PostgreSQL 16；空库与重复升级；模型漂移检查；真实仓储测试 | JUnit |
 | Installed wheel without Agent extras | 构建 wheel；在全新环境仅安装基础依赖；源码目录外隔离运行演示 | 演示证据 |
 | Containerized API regression and recovery | 构建应用镜像；启动独立数据库、迁移与 API；真实 HTTP 基线、重放及重启恢复 | 运行/重放/恢复报告与服务日志 |
@@ -22,8 +22,13 @@ runner 结束时其临时卷随 runner 销毁。
 
 任一步骤失败会使所在任务失败；`always()` 上传已生成证据，保存 14 天。
 跨种子检查在进程内运行四个隔离内存靶场，不请求模型；固定 0–31 种子、
-两条脚本和四个 profile 共 256 格，并逐格无模型重放。它验证的是规则判定与
-确定性，不能代表 Agent 在不同 seed 下的规划能力。
+两条脚本和四个 profile，每次 256 格并逐格无模型重放。CI 再启动第二个独立
+进程运行相同清单，严格核对摘要、原始报告及 SHA-256 指纹，逐字段比较两次
+轨迹。它验证的是规则判定与独立运行复现性，不能代表 Agent 在不同 seed 下的规划能力。
+离线 Agent 预检另跑固定 48 格，模型动作由测试替身选择，逐格保存 Agent、运行、
+重放和脚本对照报告；同时穷举动作预算内的缺陷可达性，并由 HTTP 对照与
+独立规则判定器复核可达格。其通过只验证工程链路，不能作为真实模型能力成绩。
+固定单格 canary 也使用离线测试替身，CI 没有 `--paid` 或模型密钥。
 同分支的新执行会取消旧执行，避免重复消耗 runner 时间。
 配置不包括分支保护，只有所有者将这些检查设为 required 后才会阻止未通过的合并。
 
@@ -40,7 +45,7 @@ runner 结束时其临时卷随 runner 销毁。
 不要用清空开发卷的方式解决连接问题。
 容器门禁可在本机独立项目中以前台 Compose 保持运行，另开终端运行
 `gamepilot.testing run`、`replay` 和 `scripts/container_smoke.py`；
-完整复验记录见 `docs/validation/TASK-005C-container-ci-gate.md`。
+原详细复验记录的本地归档入口见 `docs/validation/ARCHIVED_REPORTS.md`。
 
 ## 证据与限制
 
@@ -53,6 +58,24 @@ runner 结束时其临时卷随 runner 销毁。
 2026-10-12 新增的跨种子步骤在本机执行 256/256 格、重放 256/256 match，
 触发与目标规则检出详见 `docs/validation/TASK-006A-cross-seed-scripted-eval.md`；
 该新增步骤也尚未在 GitHub runner 运行。
+TASK-006B 本机两次独立运行均为 256/256、重放 256/256 match；跨运行
+256/256 一致，差异 0。新增 CI 对比步骤也尚未远程运行，详见
+`docs/validation/TASK-006B-independent-seed-reproducibility.md`。
+TASK-006C 本机离线 Agent 预检执行 48/48、重放 48/48；正常目标 12/12、
+误报 0，预定缺陷实际触发 11/12 且检出 11/11。新增 CI 步骤尚未远程运行；
+详见 `docs/validation/TASK-006C-agent-seed-preflight.md`。
+TASK-006D 将预定 12 格再区分为预算内可达 11 格、不可达 1 格；
+seed 0 的治疗越界格完成全部 126 条动作序列穷举。现有 CI 预检步骤会
+运行升级后的 1.1.0 摘要；本机记录见
+`docs/validation/TASK-006D-agent-seed-reachability.md`，远程仍未运行。
+TASK-006E 的单格离线 canary 已在本机 exit 0，四份配对证据均可读；
+另有一次真实 seed 2 单格在 CI 外完成。新增 CI 步骤尚未远程运行，
+见 `docs/validation/TASK-006E-agent-seed-canary.md`。
+TASK-006F 在离线 canary 后严格核验摘要与四份证据；本机验收见
+`docs/validation/TASK-006F-agent-seed-evidence-verifier.md`，远程仍待运行。
+TASK-006G 增加固定四 seed 八格胜利门槛的默认离线运行；CI 不传 `--paid`
+或模型密钥。本机验收见 `docs/validation/TASK-006G-victory-seed-gate.md`，
+远程仍待运行。
 本机是 Windows 环境，不能将这些结果称为 GitHub Linux runner 已通过。
 工作流首次远程运行须在所有者授权推送后观察，当前没有发布 CI 成功徽章。
 

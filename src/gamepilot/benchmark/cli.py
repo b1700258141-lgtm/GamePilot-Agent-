@@ -40,6 +40,9 @@ if TYPE_CHECKING:  # 只在类型检查时需要：运行期不导入 agent extr
 DEFAULT_OUTPUT_DIR = "artifacts/benchmarks"
 DEFAULT_AGENT_OUTPUT_DIR = "artifacts/agent-benchmarks"
 DEFAULT_SEED_SWEEP_OUTPUT_DIR = "artifacts/seed-sweeps"
+DEFAULT_SEED_COMPARE_OUTPUT_DIR = "artifacts/seed-comparisons"
+DEFAULT_AGENT_SEED_PREFLIGHT_OUTPUT_DIR = "artifacts/agent-seed-preflights"
+DEFAULT_AGENT_SEED_CANARY_OUTPUT_DIR = "artifacts/agent-seed-canaries"
 
 AGENT_PROVIDER_OFFLINE = "offline"
 AGENT_PROVIDER_REAL = "anthropic-compatible"
@@ -83,6 +86,84 @@ def build_parser() -> argparse.ArgumentParser:
         default=DEFAULT_SEED_SWEEP_OUTPUT_DIR,
         help=f"证据输出目录（默认 {DEFAULT_SEED_SWEEP_OUTPUT_DIR}）",
     )
+
+    compare_parser = subparsers.add_parser(
+        "seed-compare", help="严格核对两次独立跨种子运行并逐字段比较 256 格"
+    )
+    compare_parser.add_argument("--before", required=True, help="首次 seed-sweep.json")
+    compare_parser.add_argument("--after", required=True, help="第二次 seed-sweep.json")
+    compare_parser.add_argument(
+        "--output-dir",
+        default=DEFAULT_SEED_COMPARE_OUTPUT_DIR,
+        help=f"对比输出目录（默认 {DEFAULT_SEED_COMPARE_OUTPUT_DIR}）",
+    )
+
+    preflight_parser = subparsers.add_parser(
+        "agent-seed-preflight", help="离线测试替身预检固定四种 seed 的 Agent 工程链路"
+    )
+    preflight_parser.add_argument(
+        "--output-dir",
+        default=DEFAULT_AGENT_SEED_PREFLIGHT_OUTPUT_DIR,
+        help=f"证据输出目录（默认 {DEFAULT_AGENT_SEED_PREFLIGHT_OUTPUT_DIR}）",
+    )
+
+    canary_parser = subparsers.add_parser(
+        "agent-seed-canary",
+        help="固定 seed 2 的单格 Agent 配对 canary；默认离线，真实模型需显式 --paid",
+    )
+    canary_parser.add_argument(
+        "--output-dir",
+        default=DEFAULT_AGENT_SEED_CANARY_OUTPUT_DIR,
+        help=f"证据输出目录（默认 {DEFAULT_AGENT_SEED_CANARY_OUTPUT_DIR}）",
+    )
+    canary_parser.add_argument(
+        "--provider",
+        default=AGENT_PROVIDER_OFFLINE,
+        choices=sorted((AGENT_PROVIDER_OFFLINE, AGENT_PROVIDER_REAL)),
+        help="默认 offline 测试替身；真实供应商必须同时给出 --paid",
+    )
+    canary_parser.add_argument("--paid", action="store_true", help="显式允许最多 6 次真实模型调用")
+    canary_parser.add_argument(
+        "--api-key-env",
+        default=None,
+        help="存放密钥的环境变量名；不接受密钥值",
+    )
+    canary_parser.add_argument(
+        "--input-price", type=float, default=None, help="每百万输入 Token 的显式单价"
+    )
+    canary_parser.add_argument(
+        "--output-price", type=float, default=None, help="每百万输出 Token 的显式单价"
+    )
+    canary_parser.add_argument("--currency", default=None, help="计价币种；与两个单价必须同时给出")
+    canary_parser.set_defaults(model=None, model_base_url=None)
+
+    verify_canary_parser = subparsers.add_parser(
+        "agent-seed-canary-verify", help="只读核验单格 canary 的摘要与四份原始证据"
+    )
+    verify_canary_parser.add_argument("--report", required=True, help="已有 agent-seed-canary.json")
+
+    seed_gate_parser = subparsers.add_parser(
+        "agent-seed-gate",
+        help="固定四 seed × normal/死亡后反击胜利目标；默认离线，真实模型需显式 --paid",
+    )
+    seed_gate_parser.add_argument("--output-dir", default="artifacts/agent-seed-gates")
+    seed_gate_parser.add_argument(
+        "--provider",
+        default=AGENT_PROVIDER_OFFLINE,
+        choices=sorted((AGENT_PROVIDER_OFFLINE, AGENT_PROVIDER_REAL)),
+    )
+    seed_gate_parser.add_argument(
+        "--paid", action="store_true", help="显式允许最多 48 次真实模型调用"
+    )
+    seed_gate_parser.add_argument(
+        "--api-key-env", default=None, help="密钥环境变量名，不接受密钥值"
+    )
+    seed_gate_parser.add_argument("--input-price", type=float, default=None)
+    seed_gate_parser.add_argument("--output-price", type=float, default=None)
+    seed_gate_parser.add_argument("--currency", default=None)
+    from .agent_seed_gate import GATE_BASE_URL, GATE_MODEL
+
+    seed_gate_parser.set_defaults(model=GATE_MODEL, model_base_url=GATE_BASE_URL)
 
     agent_parser = subparsers.add_parser(
         "agent",
@@ -291,6 +372,100 @@ async def _run_seed_sweep_command(args: argparse.Namespace) -> int:
     return report.exit_code
 
 
+def _run_seed_compare_command(args: argparse.Namespace) -> int:
+    from .seed_compare import compare_sweeps
+
+    report, path = compare_sweeps(args.before, args.after, args.output_dir)
+    print(
+        f"跨独立运行对比：{report.compared}/{report.planned} 格，"
+        f"差异 {report.drift_count}，来源退出码 {report.source_exit_codes}，"
+        f"结论 {report.status}"
+    )
+    print(f"摘要：{path}")
+    return report.exit_code
+
+
+async def _run_agent_seed_preflight_command(args: argparse.Namespace) -> int:
+    from .agent_seed_preflight import run_agent_seed_preflight
+
+    report, path = await run_agent_seed_preflight(args.output_dir)
+    print(
+        f"Agent 跨 seed 离线预检（测试替身）：执行 {report.executed}/{report.planned}，"
+        f"重放一致 {report.replay_matches}/{report.planned}，"
+        f"正常目标完成 {report.normal_goals_met}/{report.normal_goals_planned}，"
+        f"预定缺陷可达 {report.designated_reachable}/{report.designated_planned}，"
+        f"测试替身实际触发 {report.designated_triggered}/{report.designated_reachable}，"
+        f"其中目标规则检出 {report.designated_detected}/{report.designated_triggered}，"
+        f"执行错误 {report.execution_errors}，偏差 {report.deviations}"
+    )
+    print("此结果只验证离线工程链路，不代表真实模型能力。")
+    print(f"摘要：{path}")
+    return report.exit_code
+
+
+async def _run_agent_seed_canary_command(args: argparse.Namespace) -> int:
+    from .agent_seed_canary import CANARY_GOAL_ID, run_agent_seed_canary
+
+    if args.provider == AGENT_PROVIDER_OFFLINE and args.paid:
+        raise ValueError("离线测试替身不接受 --paid")
+    args.thinking = "disabled" if args.provider == AGENT_PROVIDER_REAL else "provider-default"
+    pricing = _agent_pricing(args)
+    provider = _make_agent_provider_factory(args)(CANARY_GOAL_ID)
+    report, path = await run_agent_seed_canary(args.output_dir, provider=provider, pricing=pricing)
+    calls = report.evidence.spend.model_calls if report.evidence is not None else "unknown"
+    usage = report.evidence.spend.usage.label if report.evidence is not None else "unknown"
+    cost = report.evidence.spend.cost.label if report.evidence is not None else "unknown"
+    print(
+        f"Agent 跨 seed 单格 canary：seed={report.seed}，"
+        f"{report.profile} × {report.goal_id}，状态={report.status}，"
+        f"模型调用={calls}/{report.budget['max_model_calls']}，"
+        f"Token={usage}，费用={cost}"
+    )
+    print(
+        f"供应商={report.provider['provider_id']}，"
+        f"测试替身={report.provider['is_test_double']}，"
+        f"最多输出 Token={report.completion_token_upper_bound}；摘要：{path}"
+    )
+    return report.exit_code
+
+
+def _verify_agent_seed_canary_command(args: argparse.Namespace) -> int:
+    from .agent_seed_verify import verify_agent_seed_canary
+
+    report = verify_agent_seed_canary(args.report)
+    evidence = report.evidence
+    calls = evidence.spend.model_calls if evidence is not None else "unknown"
+    usage = evidence.spend.usage.label if evidence is not None else "unknown"
+    print(
+        f"单格证据核验通过：seed={report.seed}，状态={report.status}，"
+        f"模型调用={calls}，Token={usage}；摘要：{args.report}"
+    )
+    return report.exit_code
+
+
+async def _run_agent_seed_gate_command(args: argparse.Namespace) -> int:
+    from .agent_seed_gate import run_agent_seed_gate
+
+    if args.provider == AGENT_PROVIDER_OFFLINE and args.paid:
+        raise ValueError("离线测试替身不接受 --paid")
+    args.thinking = "disabled" if args.provider == AGENT_PROVIDER_REAL else "provider-default"
+    pricing = _agent_pricing(args)
+    factory = _make_agent_provider_factory(args)
+    report, path = await run_agent_seed_gate(
+        args.output_dir, provider_factory=factory, pricing=pricing
+    )
+    calls = report.model_calls_observed if report.model_calls_observed is not None else "unknown"
+    print(
+        f"Agent 跨 seed 胜利门槛：执行 {report.executed}/{report.planned}，"
+        f"正常目标 {report.normal_goals_met}/4，预定缺陷检出 "
+        f"{report.designated_detected}/{report.designated_reachable}，"
+        f"重放一致 {report.replay_matches}/{report.planned}，"
+        f"状态={report.status}，模型调用={calls}/{report.max_model_calls}，"
+        f"Token={report.usage.label}，费用={report.cost.label}；摘要：{path}"
+    )
+    return report.exit_code
+
+
 # ------------------------------------------------------------- agent 子命令
 
 
@@ -496,6 +671,16 @@ def main(argv: Sequence[str] | None = None) -> int:
             return asyncio.run(_run_agent_command(args))
         if args.command == "seed-sweep":
             return asyncio.run(_run_seed_sweep_command(args))
+        if args.command == "seed-compare":
+            return _run_seed_compare_command(args)
+        if args.command == "agent-seed-preflight":
+            return asyncio.run(_run_agent_seed_preflight_command(args))
+        if args.command == "agent-seed-canary":
+            return asyncio.run(_run_agent_seed_canary_command(args))
+        if args.command == "agent-seed-canary-verify":
+            return _verify_agent_seed_canary_command(args)
+        if args.command == "agent-seed-gate":
+            return asyncio.run(_run_agent_seed_gate_command(args))
         return asyncio.run(_run_command(args))
     except ReplayInputError as exc:
         print(f"输入错误：{exc}", file=sys.stderr)

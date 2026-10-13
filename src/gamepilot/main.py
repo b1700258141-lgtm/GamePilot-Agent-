@@ -17,12 +17,16 @@ PostgreSQL 后端必须在启动前显式执行 `alembic upgrade head`。
 
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import FastAPI
+from fastapi.responses import RedirectResponse
+from fastapi.staticfiles import StaticFiles
 from sqlalchemy import text
 from sqlalchemy.engine import Engine
 from sqlalchemy.exc import SQLAlchemyError
 
+from .api.agent_test_routes import router as agent_test_router
 from .api.errors import register_exception_handlers
 from .api.routes import router
 from .config import RepositoryBackend, get_settings, require_database_url
@@ -32,6 +36,7 @@ from .persistence.errors import PersistenceUnavailableError
 from .repositories.base import SessionRepository
 from .repositories.memory import InMemorySessionRepository
 from .repositories.postgres import PostgresSessionRepository
+from .web_runs import AgentWebRunManager
 
 API_TITLE = "GamePilot"
 API_VERSION = "0.1.0"
@@ -42,12 +47,15 @@ def create_app(repository: SessionRepository | None = None) -> FastAPI:
     engine: Engine | None = None
     if repository is not None:
         resolved: SessionRepository = repository
+        agent_db_factory = None
     else:
         settings = get_settings()
         if settings.repository_backend is RepositoryBackend.POSTGRES:
             engine = create_db_engine(require_database_url())
-            resolved = PostgresSessionRepository(create_session_factory(engine))
+            agent_db_factory = create_session_factory(engine)
+            resolved = PostgresSessionRepository(agent_db_factory)
         else:
+            agent_db_factory = None
             resolved = InMemorySessionRepository()
 
     @asynccontextmanager
@@ -68,6 +76,7 @@ def create_app(repository: SessionRepository | None = None) -> FastAPI:
         lifespan=lifespan,
     )
     app.state.repository = resolved
+    app.state.agent_run_manager = AgentWebRunManager(agent_db_factory)
 
     # 注入仓储时不推断其底层类型；由调用方持有的依赖不在此处探测。
     def readiness_probe() -> None:
@@ -79,6 +88,15 @@ def create_app(repository: SessionRepository | None = None) -> FastAPI:
     app.state.session_factory = create_combat_session
     register_exception_handlers(app)
     app.include_router(router)
+    app.include_router(agent_test_router)
+
+    # 本地手动测试页与 API 同源，无需额外前端服务或跨域配置。
+    app.mount("/ui", StaticFiles(directory=Path(__file__).parent / "web", html=True), name="ui")
+
+    @app.get("/", include_in_schema=False)
+    def home() -> RedirectResponse:
+        return RedirectResponse(url="/ui/")
+
     return app
 
 

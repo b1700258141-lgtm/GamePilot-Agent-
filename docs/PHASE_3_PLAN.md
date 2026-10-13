@@ -81,8 +81,8 @@ Ruff（119 个文件）和开启 fail-fast 的离线 12 格均通过。2026-09-2
 参数，`potion_not_consumed × healing` 真实单格已通过（规则缺陷检出、无模型重放一致）；
 V6 已获独立授权并完成第二次真实固定 12 格：exit 0、六项门槛 6/6、
 replay 12/12 match、实际 7,216 Token，费用 unknown。
-详见 `docs/validation/TASK-003C-V4-format-exhaustion-diagnostic.md`、
-`docs/validation/TASK-003C-V5-thinking-mode-canary.md` 与
+早期诊断与单格记录的原文已归档，索引见
+`docs/validation/ARCHIVED_REPORTS.md`；最终固定小样本见
 `docs/validation/TASK-003C-V6-second-real-gate-c.md`。
 
 ## 5. 学习与范围
