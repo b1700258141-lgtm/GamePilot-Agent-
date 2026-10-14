@@ -64,10 +64,15 @@ class GameClient:
     def timeout(self) -> float:
         return self._timeout
 
-    async def create_session(self, seed: int, *, timeout: float | None = None) -> HttpObservation:
+    async def create_session(
+        self, seed: int, *, battle_count: int = 1, timeout: float | None = None
+    ) -> HttpObservation:
         """POST /api/v1/game-sessions"""
         return await self._send(
-            "POST", "/api/v1/game-sessions", json_body={"seed": seed}, timeout=timeout
+            "POST",
+            "/api/v1/game-sessions",
+            json_body={"seed": seed, "battle_count": battle_count},
+            timeout=timeout,
         )
 
     async def get_session(

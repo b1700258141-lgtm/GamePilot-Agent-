@@ -18,6 +18,7 @@ FAULT_POTION_OVERHEAL = "potion_overheal"
 FAULT_POTION_NOT_CONSUMED = "potion_not_consumed"
 FAULT_RETALIATE_AFTER_DEATH = "retaliate_after_death"
 FAULT_LOOT_ANOMALY = "loot_anomaly"
+FAULT_LEVEL_ANOMALY = "level_anomaly"
 
 # 缺陷编号：与 profile 同名，评测清单用它标记「这一列属于哪个缺陷」。
 FAULT_IDS: tuple[str, ...] = (
@@ -25,6 +26,7 @@ FAULT_IDS: tuple[str, ...] = (
     FAULT_POTION_NOT_CONSUMED,
     FAULT_RETALIATE_AFTER_DEATH,
     FAULT_LOOT_ANOMALY,
+    FAULT_LEVEL_ANOMALY,
 )
 
 # 合法 profile 全集：normal 在前，其后是三个单缺陷变体。
@@ -72,7 +74,12 @@ PROFILE_CATALOG: dict[str, FaultProfile] = {
     FAULT_LOOT_ANOMALY: FaultProfile(
         profile_id=FAULT_LOOT_ANOMALY,
         fault_id=FAULT_LOOT_ANOMALY,
-        summary="击杀后金币不掉落、数量越界或掉落错误物品（按种子取模选择）",
+        summary="击杀后金币或经验掉落缺失、种类错误或数量异常（按种子选择）",
+    ),
+    FAULT_LEVEL_ANOMALY: FaultProfile(
+        profile_id=FAULT_LEVEL_ANOMALY,
+        fault_id=FAULT_LEVEL_ANOMALY,
+        summary="经验达标后不升级，或经验未达标却提前升级",
     ),
 }
 

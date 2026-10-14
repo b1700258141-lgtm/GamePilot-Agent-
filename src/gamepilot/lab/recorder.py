@@ -24,21 +24,31 @@ class FaultTrigger:
 
 
 class TriggerRecorder:
-    """按 session_id 保存触发记录；同一会话只保留首个记录。"""
+    """按会话和缺陷分别保存首个真实触发，支持一次测试注入多条缺陷。"""
 
     def __init__(self) -> None:
-        self._records: dict[str, FaultTrigger] = {}
+        self._records: dict[tuple[str, str], FaultTrigger] = {}
 
     def record(self, session_id: str, fault_id: str, detail: str) -> None:
         self._records.setdefault(
-            session_id, FaultTrigger(session_id=session_id, fault_id=fault_id, detail=detail)
+            (session_id, fault_id),
+            FaultTrigger(session_id=session_id, fault_id=fault_id, detail=detail),
         )
 
     def get(self, session_id: str | None) -> FaultTrigger | None:
         """取出某次会话的触发记录；没有触发时返回 None。"""
         if session_id is None:
             return None
-        return self._records.get(session_id)
+        return next((item for item in self.for_session(session_id)), None)
+
+    def for_session(self, session_id: str | None) -> tuple[FaultTrigger, ...]:
+        if session_id is None:
+            return ()
+        return tuple(
+            item
+            for (stored_session, _), item in self._records.items()
+            if stored_session == session_id
+        )
 
     def all(self) -> tuple[FaultTrigger, ...]:
         return tuple(self._records.values())

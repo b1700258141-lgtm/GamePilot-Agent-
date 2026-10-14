@@ -47,6 +47,12 @@
               <form id="create-form">
                 <label for="seed-input">随机种子</label>
                 <input id="seed-input" name="seed" type="number" step="1" inputmode="numeric" placeholder="留空随机生成" />
+                <label for="battle-count-input">连战次数</label>
+                <select id="battle-count-input" name="battle_count">
+                  <option value="1">1 场</option><option value="2">2 场</option>
+                  <option value="3">3 场</option><option value="4">4 场</option>
+                  <option value="5">5 场</option><option value="6">6 场</option>
+                </select>
                 <button id="create-button" class="button button-primary" type="submit">开始新战斗</button>
               </form>
             </section>
@@ -85,6 +91,7 @@
               <dl class="metadata">
                 <div><dt>回合</dt><dd id="turn-value">0</dd></div>
                 <div><dt>种子</dt><dd id="seed-value">42</dd></div>
+                <div><dt>连战进度</dt><dd id="battle-progress-value">1 / 1</dd></div>
                 <div class="metadata-id"><dt>会话 ID</dt><dd id="session-value">—</dd></div>
               </dl>
 
@@ -94,10 +101,12 @@
                   <progress id="player-progress" max="100" value="100" aria-label="玩家生命值"></progress>
                   <p>剩余药水 <strong id="potions-value">—</strong> 瓶</p>
                   <p>金币 <strong id="gold-value">—</strong></p>
+                  <p>等级 <strong id="player-level-value">1</strong> · 经验 <strong id="player-exp-value">0 / 15</strong></p>
                 </section>
                 <section class="fighter" aria-labelledby="slime-heading">
                   <div class="fighter-title"><h3 id="slime-heading">史莱姆</h3><strong id="slime-hp">—</strong></div>
                   <progress id="slime-progress" max="60" value="60" aria-label="史莱姆生命值"></progress>
+                  <p>等级 <strong id="enemy-level-value">1</strong></p>
                   <p>存活时会在玩家行动后反击</p>
                 </section>
               </div>
@@ -105,6 +114,7 @@
               <div class="action-row" aria-label="战斗动作">
                 <button id="attack-button" class="button button-primary" type="button" disabled>攻击</button>
                 <button id="potion-button" class="button button-secondary" type="button" disabled>使用药水</button>
+                <button id="next-battle-button" class="button button-secondary" type="button" disabled>进入下一场</button>
                 <button id="refresh-button" class="button button-quiet" type="button" disabled>刷新状态</button>
               </div>
               <p id="action-hint" class="helper action-hint"></p>
@@ -139,28 +149,30 @@
                 <select id="agent-skill" name="skill_id">
                   <option value="injured-potion-then-attack">受伤喝药，随后持续攻击</option>
                 </select>
-                <p id="agent-skill-hint" class="helper field-helper">默认策略：开局满血喝药，受伤后补药，药水耗尽持续攻击；终态后再验证一次行动限制。</p>
+                <p id="agent-skill-hint" class="helper field-helper">默认策略：开局满血喝药，受伤后补药，持续攻击；当前场获胜后进入下一场，最终终态再验证一次行动限制。</p>
                 <label for="agent-skill-upload">上传自定义 skill（Markdown 或纯文本）</label>
                 <input id="agent-skill-upload" type="file" accept=".md,.txt,text/markdown,text/plain" aria-describedby="agent-upload-hint" />
                 <p id="agent-upload-hint" class="helper field-helper">文件最多 4,000 字符，上传后可选择。自定义策略由真实模型执行；上传内容不会作为程序代码运行。</p>
 
                 <label for="agent-seed">随机种子</label>
-                <input id="agent-seed" name="seed" type="number" step="1" min="-9007199254740991" max="9007199254740991" value="42" inputmode="numeric" title="请输入 -9007199254740991 至 9007199254740991 之间的整数" aria-describedby="agent-seed-hint" />
-                <p id="agent-seed-hint" class="helper field-helper">留空则随机生成一个种子；同一游戏种子可重现状态，Agent 仍可能选择不同动作。</p>
+                <input id="agent-seed" name="seed" type="number" step="1" min="-9007199254740991" max="9007199254740991" placeholder="留空随机生成" inputmode="numeric" title="请输入 -9007199254740991 至 9007199254740991 之间的整数" aria-describedby="agent-seed-hint" />
+                <p id="agent-seed-hint" class="helper field-helper">留空由服务端随机生成；同一 seed 会重现敌人和缺陷选择。</p>
+                <label for="agent-battle-count">连战次数</label>
+                <select id="agent-battle-count" name="battle_count">
+                  <option value="1">1 场</option><option value="2">2 场</option>
+                  <option value="3">3 场</option><option value="4">4 场</option>
+                  <option value="5">5 场</option><option value="6">6 场</option>
+                </select>
 
-                <label class="check-row" for="agent-defect-enabled">
-                  <input id="agent-defect-enabled" type="checkbox" /> 启用已知缺陷
-                </label>
-                <div id="agent-defect-fields" class="field-group" hidden>
-                  <label for="agent-defect">缺陷类型</label>
-                  <select id="agent-defect" name="profile">
-                    <option value="retaliate_after_death">死亡后反击</option>
-                    <option value="potion_overheal">治疗越过生命上限</option>
-                    <option value="potion_not_consumed">喝药不消耗药水</option>
-                    <option value="loot_anomaly">掉落物品异常</option>
-                  </select>
-                  <p id="agent-defect-hint" class="goal-guidance" aria-live="polite">所选缺陷仅作用于本次隔离战斗；是否触发和检出以实际战斗证据为准。</p>
-                </div>
+                <fieldset class="fault-picker">
+                  <legend>必现缺陷（可多选）</legend>
+                  <label class="check-row"><input class="agent-force-fault" type="checkbox" value="retaliate_after_death" />死亡后反击</label>
+                  <label class="check-row"><input class="agent-force-fault" type="checkbox" value="potion_overheal" />治疗越过生命上限</label>
+                  <label class="check-row"><input class="agent-force-fault" type="checkbox" value="potion_not_consumed" />喝药不消耗药水</label>
+                  <label class="check-row"><input class="agent-force-fault" type="checkbox" value="loot_anomaly" />掉落物品异常</label>
+                  <label class="check-row"><input class="agent-force-fault" type="checkbox" value="level_anomaly" />玩家升级异常</label>
+                </fieldset>
+                <p id="agent-defect-hint" class="goal-guidance" aria-live="polite">不勾选时：70% 不注入缺陷，30% 随机注入一种；同一 seed 结果固定。</p>
 
                 <label for="agent-provider">执行方式</label>
                 <select id="agent-provider" name="provider_mode">
@@ -170,7 +182,7 @@
                 <p id="agent-provider-hint" class="helper field-helper">离线替身只验证工程流程，不代表真实模型能力。</p>
                 <label id="agent-paid-row" class="check-row" for="agent-paid" hidden>
                   <input id="agent-paid" type="checkbox" />
-                  <span>我确认本次最多 20 步、20 次模型调用，每次最多请求 512 输出 Token；输入 Token 和金额无硬上限。</span>
+                  <span>我确认本次最多 50 步、50 次模型调用，每次最多请求 512 输出 Token；输入 Token 和金额无硬上限。</span>
                 </label>
                 <button id="agent-start" class="button button-primary" type="submit">开始自动测试</button>
                 <p id="agent-form-error" class="form-error" role="alert" hidden></p>
@@ -185,8 +197,8 @@
                   <span id="agent-run-status" class="status-chip">等待中</span>
                 </div>
                 <dl class="agent-run-metrics">
-                  <div><dt>模型调用</dt><dd id="agent-model-count">0 / 20</dd></div>
-                  <div><dt>动作尝试</dt><dd id="agent-action-count">0 / 20</dd></div>
+                  <div><dt>模型调用</dt><dd id="agent-model-count">0 / 50</dd></div>
+                  <div><dt>动作尝试</dt><dd id="agent-action-count">0 / 50</dd></div>
                   <div><dt>测试配置</dt><dd id="agent-run-config">—</dd></div>
                   <div><dt>运行 ID</dt><dd id="agent-run-id">—</dd></div>
                 </dl>
@@ -205,7 +217,7 @@
                 <dl id="agent-result-facts" class="result-facts"></dl>
                 <div class="action-row">
                   <button id="agent-rerun" class="button button-secondary" type="button">相同配置再测</button>
-                  <button id="agent-switch-defect" class="button button-quiet" type="button">切换缺陷再测</button>
+                  <button id="agent-switch-defect" class="button button-quiet" type="button">调整缺陷再测</button>
                   <a id="agent-report-link" class="button button-quiet" href="#" download="agent-test-report.json">下载原始报告</a>
                 </div>
               </section>

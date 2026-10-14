@@ -4,17 +4,20 @@ import secrets
 from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Request
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from gamepilot.agent.goals import GOAL_BATTLE_END, GOAL_FULL_HEALTH, GOAL_HEALING, GOAL_VICTORY
 from gamepilot.agent.skills import DEFAULT_SKILL_ID
 from gamepilot.lab.profiles import (
+    FAULT_IDS,
+    FAULT_LEVEL_ANOMALY,
     FAULT_LOOT_ANOMALY,
     FAULT_POTION_NOT_CONSUMED,
     FAULT_POTION_OVERHEAL,
     FAULT_RETALIATE_AFTER_DEATH,
     PROFILE_NORMAL,
 )
+from gamepilot.lab.selection import RANDOM_FAULT_PERCENT
 from gamepilot.web_runs import WEB_BUDGET, AgentWebRunManager, real_key
 
 router = APIRouter(prefix="/api/v1/agent-test-runs", tags=["Agent 自动测试"])
@@ -28,15 +31,42 @@ class StartAgentTestRequest(BaseModel):
     )
     skill_id: str = DEFAULT_SKILL_ID
     seed: int | None = Field(default=None, ge=-(2**53 - 1), le=2**53 - 1)
-    profile: Literal[
-        PROFILE_NORMAL,
-        FAULT_POTION_OVERHEAL,
-        FAULT_POTION_NOT_CONSUMED,
-        FAULT_RETALIATE_AFTER_DEATH,
-        FAULT_LOOT_ANOMALY,
-    ] = PROFILE_NORMAL
+    battle_count: int = Field(default=1, ge=1, le=6)
+    profile: (
+        Literal[
+            PROFILE_NORMAL,
+            FAULT_POTION_OVERHEAL,
+            FAULT_POTION_NOT_CONSUMED,
+            FAULT_RETALIATE_AFTER_DEATH,
+            FAULT_LOOT_ANOMALY,
+            FAULT_LEVEL_ANOMALY,
+        ]
+        | None
+    ) = None
+    forced_faults: list[
+        Literal[
+            FAULT_POTION_OVERHEAL,
+            FAULT_POTION_NOT_CONSUMED,
+            FAULT_RETALIATE_AFTER_DEATH,
+            FAULT_LOOT_ANOMALY,
+            FAULT_LEVEL_ANOMALY,
+        ]
+    ] = Field(default_factory=list, max_length=5)
     provider_mode: Literal["offline", "real"] = "offline"
     paid_ack: bool = False
+
+    @field_validator("forced_faults")
+    @classmethod
+    def distinct_faults(cls, value: list[str]) -> list[str]:
+        if len(value) != len(set(value)):
+            raise ValueError("不能重复勾选同一缺陷")
+        return value
+
+    @model_validator(mode="after")
+    def one_fault_configuration(self) -> "StartAgentTestRequest":
+        if self.profile is not None and self.forced_faults:
+            raise ValueError("profile 与 forced_faults 不能同时指定")
+        return self
 
 
 def get_manager(request: Request) -> AgentWebRunManager:
@@ -48,6 +78,8 @@ def config() -> dict[str, object]:
     return {
         "real_available": real_key() is not None,
         "budget": WEB_BUDGET.model_dump(),
+        "random_fault_percent": RANDOM_FAULT_PERCENT,
+        "fault_ids": FAULT_IDS,
     }
 
 

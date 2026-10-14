@@ -16,6 +16,8 @@ Agent 只负责**选择动作**；这个动作的 `expected_status` / `expected_
 from .models import ActionName, ActionStep, SnapshotView
 from .rules import (
     CODE_BATTLE_NOT_ACTIVE,
+    CODE_BATTLE_NOT_WON,
+    CODE_CAMPAIGN_COMPLETE,
     CODE_NO_POTIONS,
     CODE_PLAYER_FULL_HP,
     HTTP_CONFLICT,
@@ -29,6 +31,16 @@ def derive_expectation(snapshot: SnapshotView, action: ActionName) -> ActionStep
     推导只使用快照里的 `status` 与玩家 `hp`/`max_hp`/`potions`，
     不使用敌人生命值或事件历史——后者与这三种拒绝条件的判定无关。
     """
+    if action == "next_battle":
+        if snapshot.ruleset != "v3" or snapshot.status != "won":
+            return ActionStep(
+                action=action, expected_status=HTTP_CONFLICT, expected_code=CODE_BATTLE_NOT_WON
+            )
+        if snapshot.battle_index >= snapshot.battle_count:
+            return ActionStep(
+                action=action, expected_status=HTTP_CONFLICT, expected_code=CODE_CAMPAIGN_COMPLETE
+            )
+        return ActionStep(action=action, expected_status=HTTP_OK)
     if snapshot.status != "active":
         # 「战斗结束后不允许继续操作」，与具体是 won 还是 lost 无关。
         return ActionStep(

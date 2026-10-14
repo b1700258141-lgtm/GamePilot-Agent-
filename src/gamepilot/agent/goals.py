@@ -127,7 +127,12 @@ def _healing_conditions(steps: Sequence[StepReport]) -> list[GoalCondition]:
 def _victory_conditions(steps: Sequence[StepReport]) -> list[GoalCondition]:
     won_at: int | None = None
     for step in steps:
-        if step.after is not None and step.after.status == "won" and step.status == "pass":
+        if (
+            step.after is not None
+            and step.after.status == "won"
+            and step.after.battle_index == step.after.battle_count
+            and step.status == "pass"
+        ):
             won_at = step.index
             break
     rejected_after_win = [
@@ -170,6 +175,7 @@ def _battle_end_conditions(steps: Sequence[StepReport]) -> list[GoalCondition]:
             for step in steps
             if step.after is not None
             and step.after.status in ("won", "lost")
+            and (step.after.status == "lost" or step.after.battle_index == step.after.battle_count)
             and step.status == "pass"
         ),
         None,

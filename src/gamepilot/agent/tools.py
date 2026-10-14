@@ -41,10 +41,11 @@ PERFORM_ACTION_SCHEMA: dict[str, object] = {
         "properties": {
             "action": {
                 "type": "string",
-                "enum": ["attack", "use_potion"],
+                "enum": ["attack", "use_potion", "next_battle"],
                 "description": (
                     "attack：攻击敌人，敌人存活时会反击；"
-                    "use_potion：恢复 25 点生命（不超过上限）并消耗 1 瓶药水，随后敌人反击。"
+                    "use_potion：恢复 25 点生命（不超过上限）并消耗 1 瓶药水，随后敌人反击；"
+                    "next_battle：当前场获胜且还有剩余场次时，进入下一场。"
                 ),
             }
         },
@@ -144,7 +145,7 @@ def validate_choice(
                 reason=REJECT_INVALID_ARGUMENTS,
                 detail=(
                     f"{TOOL_PERFORM_ACTION} 的参数不合法（{len(exc.errors())} 处）："
-                    "只接受 action=attack|use_potion，不要附加其他字段。"
+                    "只接受 action=attack|use_potion|next_battle，不要附加其他字段。"
                 ),
                 tool=call.name,
                 tool_call_id=call.tool_call_id,

@@ -24,6 +24,7 @@ from .rules import (
     POTION_HEAL,
     R_ATTACK_DAMAGE,
     R_ATTACK_HP_APPLY,
+    R_BATTLE_ADVANCE,
     R_CONTROL_MATCH,
     R_CREATE_GET_IDENTICAL,
     R_CREATE_SEED,
@@ -31,6 +32,8 @@ from .rules import (
     R_EVENT_ACTOR_ORDER,
     R_EVENT_COUNT,
     R_EVENT_TURN,
+    R_EXP_BALANCE,
+    R_EXP_REWARD,
     R_EXPECTED_CODE,
     R_EXPECTED_STATUS,
     R_FINAL_STATUS,
@@ -39,6 +42,7 @@ from .rules import (
     R_INIT_STATE,
     R_INVARIANTS,
     R_LAST_EVENT_MATCHES_SNAPSHOT,
+    R_LEVEL_UP,
     R_LOOT_BALANCE,
     R_LOOT_ITEM,
     R_LOOT_PRESENT,
@@ -144,6 +148,22 @@ def check_initial_state(created: SnapshotView, fetched: SnapshotView) -> list[Ru
             created.player.potions,
         ),
         _equality_rule(R_INIT_STATE, None, 0, created.player.gold),
+        _equality_rule(R_INIT_STATE, None, 1, created.player.level),
+        _equality_rule(R_INIT_STATE, None, 0, created.player.exp),
+        _equality_rule(R_INIT_STATE, None, 1, created.battle_index),
+        _boolean_rule(
+            R_INIT_STATE,
+            None,
+            1 <= created.battle_count <= 6,
+            "battle_count in [1, 6]",
+            str(created.battle_count),
+        ),
+        _equality_rule(
+            R_INIT_STATE,
+            None,
+            {"slime": 1, "goblin": 2, "troll": 5}.get(created.enemy_type),
+            created.enemy_level,
+        ),
         _boolean_rule(
             R_INIT_STATE,
             None,
@@ -222,11 +242,14 @@ def check_step(
         )
     )
 
-    if plan.action == "attack":
+    if plan.action == "next_battle":
+        checks.extend(_advance_checks(step, before, after, new_events))
+    elif plan.action == "attack":
         checks.extend(_attack_checks(step, before, after, new_events))
-        checks.append(
-            _equality_rule(R_ATTACK_HP_APPLY, step, before.player.potions, after.player.potions)
-        )
+        if before.ruleset != "v3" or after.slime.hp != 0:
+            checks.append(
+                _equality_rule(R_ATTACK_HP_APPLY, step, before.player.potions, after.player.potions)
+            )
     else:
         checks.extend(_potion_checks(step, before, new_events))
         checks.append(
@@ -236,8 +259,8 @@ def check_step(
         )
 
     events_in_bounds = all(
-        0 <= event.player_hp <= before.player.max_hp
-        and 0 <= event.slime_hp <= before.slime.max_hp
+        0 <= event.player_hp <= after.player.max_hp
+        and 0 <= event.slime_hp <= max(before.slime.max_hp, after.slime.max_hp)
         and (event.potions is None or event.potions >= 0)
         for event in new_events
     )
@@ -258,6 +281,8 @@ def check_step(
 def _attack_checks(
     step: int, before: SnapshotView, after: SnapshotView, new_events: Sequence
 ) -> list[RuleCheck]:
+    if before.ruleset == "v3":
+        return _v3_attack_checks(step, before, after, new_events)
     if not new_events:
         return [
             _boolean_rule(
@@ -342,6 +367,181 @@ def _attack_checks(
         checks.extend(_retaliate_checks(step, before, new_events, previous_hp=attack.player_hp))
         checks.append(_equality_rule(R_LOOT_BALANCE, step, before.player.gold, after.player.gold))
     return checks
+
+
+def _v3_attack_checks(
+    step: int, before: SnapshotView, after: SnapshotView, new_events: Sequence
+) -> list[RuleCheck]:
+    if not new_events:
+        return [_boolean_rule(R_EVENT_COUNT, step, False, "至少一条攻击事件", "无事件")]
+    attack = new_events[0]
+    bonus = (before.player.level - 1) * 10
+    defeated = attack.slime_hp == 0
+    checks = [
+        _boolean_rule(
+            R_EVENT_ACTOR_ORDER,
+            step,
+            attack.actor == "player" and attack.kind == "attack",
+            "首条事件为玩家攻击",
+            f"{attack.actor}/{attack.kind}",
+        ),
+        _boolean_rule(
+            R_ATTACK_DAMAGE,
+            step,
+            PLAYER_DAMAGE_MIN + bonus <= attack.value <= PLAYER_DAMAGE_MAX + bonus,
+            f"伤害在 {PLAYER_DAMAGE_MIN + bonus}～{PLAYER_DAMAGE_MAX + bonus}",
+            str(attack.value),
+        ),
+        _boolean_rule(
+            R_ATTACK_HP_APPLY,
+            step,
+            attack.slime_hp == max(0, before.slime.hp - attack.value)
+            and attack.player_hp == before.player.hp
+            and attack.potions == before.player.potions,
+            "攻击事件按伤害扣敌人生命，玩家生命和药水不变",
+            f"敌人 {attack.slime_hp} 玩家 {attack.player_hp} 药水 {attack.potions}",
+        ),
+        _equality_rule(R_BATTLE_ADVANCE, step, before.battle_index, after.battle_index),
+    ]
+    if not defeated:
+        checks.extend(_retaliate_checks(step, before, new_events, previous_hp=attack.player_hp))
+        checks.extend(
+            [
+                _equality_rule(R_EVENT_COUNT, step, 2, len(new_events)),
+                _equality_rule(R_LOOT_BALANCE, step, before.player.gold, after.player.gold),
+                _equality_rule(R_EXP_BALANCE, step, before.player.exp, after.player.exp),
+                _equality_rule(R_LEVEL_UP, step, before.player.level, after.player.level),
+                _equality_rule(R_LEVEL_UP, step, before.player.max_hp, after.player.max_hp),
+                _equality_rule(R_LEVEL_UP, step, before.player.potions, after.player.potions),
+            ]
+        )
+        return checks
+
+    checks.append(
+        _boolean_rule(
+            R_NO_RETALIATE_ON_KILL,
+            step,
+            not any(event.kind == "retaliate" for event in new_events[1:]),
+            "击杀后不反击",
+            str([event.kind for event in new_events[1:]]),
+        )
+    )
+    drops = [event for event in new_events[1:] if event.kind == "drop"]
+    gold_expected = before.enemy_type in ("slime", "goblin")
+    gold_drops = [event for event in drops if event.item != "exp"]
+    checks.append(_equality_rule(R_LOOT_PRESENT, step, int(gold_expected), len(gold_drops)))
+    if gold_drops:
+        gold = gold_drops[0]
+        low, high = (1, 3) if before.enemy_type == "slime" else (10, 20)
+        checks.extend(
+            [
+                _equality_rule(R_LOOT_ITEM, step, "gold", gold.item),
+                _boolean_rule(
+                    R_LOOT_RANGE,
+                    step,
+                    low <= gold.value <= high,
+                    f"金币 {low}～{high}",
+                    str(gold.value),
+                ),
+            ]
+        )
+    expected_gold = gold_drops[0].value if gold_drops and gold_drops[0].item == "gold" else 0
+    checks.append(
+        _equality_rule(R_LOOT_BALANCE, step, before.player.gold + expected_gold, after.player.gold)
+    )
+    exp_expected = {"slime": 10, "goblin": 30, "troll": 60}[before.enemy_type]
+    exp_drops = [event for event in drops if event.item == "exp"]
+    checks.append(
+        _boolean_rule(
+            R_EXP_REWARD,
+            step,
+            len(exp_drops) == 1 and exp_drops[0].value == exp_expected,
+            f"恰好一次 exp 掉落，数量 {exp_expected}",
+            str([(event.item, event.value) for event in drops]),
+        )
+    )
+    total_exp = before.player.exp + exp_expected
+    levels = total_exp // 15
+    remainder = total_exp % 15
+    level_events = [event for event in new_events[1:] if event.kind == "level_up"]
+    checks.extend(
+        [
+            _equality_rule(R_EXP_BALANCE, step, remainder, after.player.exp),
+            _equality_rule(R_LEVEL_UP, step, before.player.level + levels, after.player.level),
+            _equality_rule(
+                R_LEVEL_UP, step, before.player.max_hp + 20 * levels, after.player.max_hp
+            ),
+            _equality_rule(
+                R_LEVEL_UP,
+                step,
+                before.player.max_hp + 20 * levels if levels else before.player.hp,
+                after.player.hp,
+            ),
+            _equality_rule(R_LEVEL_UP, step, before.player.potions + levels, after.player.potions),
+            _equality_rule(
+                R_LEVEL_UP,
+                step,
+                list(range(before.player.level + 1, before.player.level + levels + 1)),
+                [event.value for event in level_events],
+            ),
+            _equality_rule(
+                R_LEVEL_UP,
+                step,
+                [before.player.max_hp + 20 * index for index in range(1, levels + 1)],
+                [event.player_hp for event in level_events],
+            ),
+            _equality_rule(
+                R_LEVEL_UP,
+                step,
+                [before.player.potions + index for index in range(1, levels + 1)],
+                [event.potions for event in level_events],
+            ),
+            _equality_rule(
+                R_EVENT_COUNT, step, 1 + int(gold_expected) + 1 + levels, len(new_events)
+            ),
+        ]
+    )
+    return checks
+
+
+def _advance_checks(
+    step: int, before: SnapshotView, after: SnapshotView, new_events: Sequence
+) -> list[RuleCheck]:
+    event = new_events[0] if new_events else None
+    enemy_hp = ENEMY_MAX_HP.get(after.enemy_type)
+    return [
+        _equality_rule(R_EVENT_COUNT, step, 1, len(new_events)),
+        _boolean_rule(
+            R_EVENT_ACTOR_ORDER,
+            step,
+            event is not None
+            and event.actor == "player"
+            and event.kind == "next_battle"
+            and event.value == before.battle_index + 1,
+            "玩家进入下一场事件",
+            str(event),
+        ),
+        _boolean_rule(
+            R_BATTLE_ADVANCE,
+            step,
+            before.status == "won"
+            and before.battle_index < before.battle_count
+            and after.status == "active"
+            and after.battle_index == before.battle_index + 1
+            and after.battle_count == before.battle_count
+            and after.slime.hp == enemy_hp == after.slime.max_hp
+            and after.enemy_level == {"slime": 1, "goblin": 2, "troll": 5}.get(after.enemy_type),
+            "下一场开始，敌人按固定属性满血登场",
+            str(after.battle_index),
+        ),
+        _boolean_rule(
+            R_BATTLE_ADVANCE,
+            step,
+            before.player == after.player,
+            "玩家生命、药水、金币、等级和经验完整继承",
+            str(after.player),
+        ),
+    ]
 
 
 def _potion_checks(step: int, before: SnapshotView, new_events: Sequence) -> list[RuleCheck]:
@@ -473,8 +673,14 @@ def _invariant_checks(step: int, before: SnapshotView, after: SnapshotView) -> l
             R_INVARIANTS, step, before.session_id, after.session_id, "动作前后的 session_id"
         ),
         _equality_rule(R_INVARIANTS, step, before.seed, after.seed),
-        _equality_rule(R_INVARIANTS, step, before.player.max_hp, after.player.max_hp),
-        _equality_rule(R_INVARIANTS, step, before.slime.max_hp, after.slime.max_hp),
+        *(
+            []
+            if before.ruleset == "v3"
+            else [
+                _equality_rule(R_INVARIANTS, step, before.player.max_hp, after.player.max_hp),
+                _equality_rule(R_INVARIANTS, step, before.slime.max_hp, after.slime.max_hp),
+            ]
+        ),
         _boolean_rule(
             R_INVARIANTS,
             step,
@@ -492,9 +698,17 @@ def _invariant_checks(step: int, before: SnapshotView, after: SnapshotView) -> l
         _boolean_rule(
             R_INVARIANTS,
             step,
-            0 <= after.player.potions <= before.player.potions,
-            f"0 <= potions <= {before.player.potions}（只减不增）",
+            0 <= after.player.potions
+            and (before.ruleset == "v3" or after.player.potions <= before.player.potions),
+            "药水非负，旧规则下只减不增",
             str(after.player.potions),
+        ),
+        _boolean_rule(
+            R_INVARIANTS,
+            step,
+            after.player.level >= 1 and after.player.exp >= 0,
+            "等级至少1且经验非负",
+            f"等级{after.player.level}经验{after.player.exp}",
         ),
     ]
     return checks

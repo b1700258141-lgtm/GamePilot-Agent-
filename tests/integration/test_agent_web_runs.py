@@ -1,6 +1,7 @@
 """网页入口在隔离靶场运行，证据、付费守卫与手动会话互不混淆。"""
 
 import asyncio
+import json
 
 import httpx
 import pytest
@@ -12,6 +13,7 @@ pytest.importorskip("langgraph", reason='未安装 agent extra：pip install -e 
 
 from gamepilot.agent.provider import FakeProvider, scripted_responder
 from gamepilot.agent.skills import DEFAULT_SKILL_ID, SkillStore
+from gamepilot.lab.selection import select_faults
 from gamepilot.main import create_app
 from gamepilot.persistence.models import AgentTestRunRow
 from gamepilot.repositories.memory import InMemorySessionRepository
@@ -314,3 +316,86 @@ async def test_uploaded_skill_reaches_graph_without_paid_call(tmp_path, monkeypa
         assert run["result"]["provider_is_test_double"] is True
         assert report["skill"]["instructions"] == "先攻击一次，再结束。"
         assert "先攻击一次，再结束。" in report["agent"]["model_calls"][0]["messages"][2]["content"]
+
+
+@pytest.mark.anyio
+async def test_random_fault_selection_is_saved_and_replays_same_seed(
+    tmp_path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr("gamepilot.web_runs.WEB_REPORT_ROOT", tmp_path)
+    clean_seed = next(seed for seed in range(100) if not select_faults(seed).fault_ids)
+    fault_seed = next(seed for seed in range(100) if select_faults(seed).fault_ids)
+    app = create_app(InMemorySessionRepository())
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app), base_url="http://test"
+    ) as http:
+        for seed in (clean_seed, fault_seed, clean_seed):
+            started = await http.post("/api/v1/agent-test-runs", json={"seed": seed})
+            assert started.status_code == 202
+            config = started.json()["config"]
+            assert config["fault_selection_mode"] == "random"
+            assert config["selected_faults"] == list(select_faults(seed).fault_ids)
+            await app.state.agent_run_manager._task
+            run = (await http.get(f"/api/v1/agent-test-runs/{started.json()['run_id']}")).json()
+            assert run["status"] == "completed"
+            assert run["config"]["selected_faults"] == config["selected_faults"]
+            assert run["result"]["replay_outcome"] == "match"
+
+
+@pytest.mark.anyio
+async def test_forced_faults_trigger_and_are_independently_detected(
+    tmp_path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr("gamepilot.web_runs.WEB_REPORT_ROOT", tmp_path)
+    app = create_app(InMemorySessionRepository())
+    faults = ["potion_not_consumed", "potion_overheal"]
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app), base_url="http://test"
+    ) as http:
+        invalid = await http.post(
+            "/api/v1/agent-test-runs", json={"seed": 42, "forced_faults": faults * 2}
+        )
+        assert invalid.status_code == 422
+        conflict = await http.post(
+            "/api/v1/agent-test-runs",
+            json={"seed": 42, "profile": "normal", "forced_faults": faults},
+        )
+        assert conflict.status_code == 422
+        started = await http.post(
+            "/api/v1/agent-test-runs", json={"seed": 42, "forced_faults": faults}
+        )
+        assert started.status_code == 202
+        await app.state.agent_run_manager._task
+        run = (await http.get(f"/api/v1/agent-test-runs/{started.json()['run_id']}")).json()
+        result = run["result"]
+        assert run["status"] == "completed"
+        assert run["config"]["fault_selection_mode"] == "forced"
+        assert set(run["config"]["selected_faults"]) == set(faults)
+        assert set(result["detected_faults"]) == set(faults)
+        assert {item["fault_id"] for item in result["trigger_details"]} == set(faults)
+        assert result["verdict"] == "defect_detected"
+        assert result["replay_outcome"] == "match"
+        report = (
+            await http.get(f"/api/v1/agent-test-runs/{started.json()['run_id']}/report")
+        ).json()
+        model_messages = json.dumps(report["agent"]["model_calls"][0]["messages"])
+        assert all(fault not in model_messages for fault in faults)
+
+
+@pytest.mark.anyio
+async def test_clean_campaign_ending_in_loss_still_meets_battle_end_goal(
+    tmp_path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr("gamepilot.web_runs.WEB_REPORT_ROOT", tmp_path)
+    app = create_app(InMemorySessionRepository())
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app), base_url="http://test"
+    ) as http:
+        started = await http.post("/api/v1/agent-test-runs", json={"seed": 8, "battle_count": 6})
+        assert started.status_code == 202
+        assert started.json()["config"]["selected_faults"] == []
+        await app.state.agent_run_manager._task
+        run = (await http.get(f"/api/v1/agent-test-runs/{started.json()['run_id']}")).json()
+        assert run["status"] == "completed"
+        assert run["result"]["verdict"] == "pass"
+        assert run["result"]["goal_met"] is True

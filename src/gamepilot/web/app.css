@@ -68,6 +68,10 @@ input:disabled { background: #edf1f5; }
 .goal-guidance.warning { border-color: #e5c48b; background: #fff7e9; color: #754800; }
 .check-row { display: flex; align-items: flex-start; gap: 10px; min-height: 46px; font-weight: 500; }
 .check-row input { width: 20px; min-width: 20px; height: 20px; min-height: 20px; margin: 3px 0 0; accent-color: var(--primary); }
+.fault-picker { display: grid; gap: 2px; margin: 8px 0 0; padding: 10px 14px; border: 1px solid var(--line); border-radius: 9px; }
+.fault-picker legend { padding: 0 5px; font-size: 14px; font-weight: 700; }
+.fault-picker .check-row { align-items: center; }
+.fault-picker .check-row input { margin-top: 0; }
 .form-error { margin: 0; color: #992634; font-size: 14px; }
 .divider { height: 1px; margin: 28px 0; background: var(--line); }
 .button { min-height: 46px; padding: 10px 16px; border: 1px solid transparent; border-radius: 9px; font-weight: 700; transition: background-color .16s ease, border-color .16s ease, box-shadow .16s ease; }

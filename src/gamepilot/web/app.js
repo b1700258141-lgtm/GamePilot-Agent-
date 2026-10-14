@@ -40,14 +40,19 @@ function controls() {
   $("create-button").disabled = busy;
   $("load-button").disabled = busy;
   $("seed-input").disabled = busy;
+  $("battle-count-input").disabled = busy;
   $("session-input").disabled = busy;
   $("attack-button").disabled = busy || !active;
   $("potion-button").disabled = busy || !active || snapshot.player.potions < 1 ||
     (snapshot.ruleset === "v1" && snapshot.player.hp >= snapshot.player.max_hp);
+  $("next-battle-button").disabled = busy || snapshot?.ruleset !== "v3" ||
+    snapshot.status !== "won" || snapshot.battle_index >= snapshot.battle_count;
   $("refresh-button").disabled = busy || !snapshot;
   if (!snapshot) return;
   $("action-hint").textContent = !active
-    ? "战斗已结束。可以创建新会话，或读取另一场战斗。"
+    ? snapshot.status === "won" && snapshot.battle_index < snapshot.battle_count
+      ? "当前场已获胜，点击“进入下一场”继续连战。"
+      : "连战已结束。可以创建新会话，或读取另一场战斗。"
     : snapshot.player.potions < 1
         ? "药水已用完。"
         : "药水固定效力 25，实际回血不超过生命上限；行动后存活的敌人会反击。";
@@ -63,6 +68,8 @@ function renderEvents(events) {
     potion: "玩家使用药水",
     retaliate: "敌人反击",
     drop: "击杀掉落",
+    level_up: "玩家升级",
+    next_battle: "进入下一场",
   };
   for (const event of events) {
     const item = document.createElement("li");
@@ -77,8 +84,10 @@ function renderEvents(events) {
     summary.append(name, meta);
     const value = document.createElement("strong");
     value.textContent = event.kind === "drop"
-      ? `+${event.value} ${event.item === "gold" ? "金币" : event.item || "物品"}`
-      : event.kind === "potion" && snapshot?.ruleset === "v2"
+      ? `+${event.value} ${event.item === "gold" ? "金币" : event.item === "exp" ? "经验" : event.item || "物品"}`
+      : event.kind === "level_up" ? `Lv.${event.value}`
+      : event.kind === "next_battle" ? `第 ${event.value} 场`
+      : event.kind === "potion" && snapshot?.ruleset !== "v1"
         ? `效力 ${event.value} · 实际 +${Math.max(0, event.player_hp - (events[events.indexOf(event) - 1]?.player_hp ?? 100))}`
         : `${event.kind === "potion" ? "+" : "−"}${event.value}`;
     item.append(summary, value);
@@ -98,6 +107,7 @@ function render(next) {
   $("session-input").value = next.session_id;
   $("session-value").textContent = next.session_id;
   $("seed-value").textContent = next.seed;
+  $("battle-progress-value").textContent = `${next.battle_index} / ${next.battle_count}`;
   $("turn-value").textContent = next.turn;
   $("battle-status").textContent = { active: "进行中", won: "玩家获胜", lost: "玩家失败" }[next.status] || next.status;
   $("battle-status").className = `status-chip ${next.status}`;
@@ -113,6 +123,9 @@ function render(next) {
   $("slime-progress").value = next.slime.hp;
   $("potions-value").textContent = next.player.potions;
   $("gold-value").textContent = next.player.gold ?? 0;
+  $("player-level-value").textContent = next.player.level ?? 1;
+  $("player-exp-value").textContent = `${next.player.exp ?? 0} / 15`;
+  $("enemy-level-value").textContent = next.enemy_level ?? 1;
   $("raw-json").textContent = JSON.stringify(next, null, 2);
   renderEvents(next.events);
   controls();
@@ -144,7 +157,8 @@ $("create-form").addEventListener("submit", (event) => {
     feedback("随机种子必须是安全范围内的整数，或留空由服务生成。", "error");
     return;
   }
-  const payload = raw ? { seed: Number(raw) } : {};
+  const payload = { ...(raw ? { seed: Number(raw) } : {}),
+    battle_count: Number($("battle-count-input").value) };
   void run("创建会话", () => request(API_ROOT, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -165,6 +179,7 @@ $("load-form").addEventListener("submit", (event) => {
 for (const [button, action, label] of [
   ["attack-button", "attack", "攻击"],
   ["potion-button", "use_potion", "使用药水"],
+  ["next-battle-button", "next_battle", "进入下一场"],
 ]) {
   $(button).addEventListener("click", () => {
     if (!snapshot) return;

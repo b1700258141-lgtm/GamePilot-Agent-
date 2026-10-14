@@ -118,7 +118,7 @@ class BattleV2Tests(unittest.TestCase):
                 self.assertIn(rule, failures(before, after, "attack"))
 
     def test_goblin_drops_ten_to_twenty_gold(self) -> None:
-        session = CombatSession("goblin", 12)
+        session = CombatSession("goblin", 12, ruleset="v2")
         self.assertEqual("goblin", session.snapshot().enemy_type)
         session.use_potion()
         while session.snapshot().status.value == "active":

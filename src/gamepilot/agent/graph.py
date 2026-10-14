@@ -493,13 +493,19 @@ def recursion_limit_for(spec_budget: Any) -> int:
     return 5 * (spec_budget.max_model_calls + spec_budget.max_action_attempts) + 20
 
 
-def build_scenario(goal_id: str, seed: int, description: str) -> Scenario:
+def build_scenario(goal_id: str, seed: int, description: str, battle_count: int = 1) -> Scenario:
     """Agent 场景：动作由模型逐步决定，因此初始步骤为空。
 
     `expected_final_status` 刻意不设：目标是「验证某个行为」，
     不是「必须打到某个终态」，强加终态要求就等于伪造游戏事实。
     """
-    return Scenario(case_id=f"agent-{goal_id}", description=description, seed=seed, steps=[])
+    return Scenario(
+        case_id=f"agent-{goal_id}",
+        description=description,
+        seed=seed,
+        battle_count=battle_count,
+        steps=[],
+    )
 
 
 async def run_agent(
@@ -509,13 +515,14 @@ async def run_agent(
     budget: Budget,
     goal: GoalSpec,
     seed: int,
+    battle_count: int = 1,
     description: str,
     skill_instructions: str | None = None,
     timeout_provider: Callable[[], float] | None = None,
     on_update: Callable[[str, AgentState, AgentContext], None] | None = None,
 ) -> tuple[AgentState, AgentContext, dict[str, Any]]:
     """跑完一条 Agent 闭环，返回最终状态、运行上下文与图执行元数据。"""
-    scenario = build_scenario(goal.goal_id, seed, description)
+    scenario = build_scenario(goal.goal_id, seed, description, battle_count)
     execution = CaseExecution(client, scenario, timeout_provider=timeout_provider)
     context = AgentContext(
         client=client,

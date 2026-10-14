@@ -15,7 +15,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from .rules import SCHEMA_VERSION
 
-ActionName = Literal["attack", "use_potion"]
+ActionName = Literal["attack", "use_potion", "next_battle"]
 CheckStatus = Literal["pass", "fail", "error"]
 CaseStatus = Literal["pass", "fail", "error"]
 
@@ -60,6 +60,7 @@ class Scenario(EvidenceModel):
     case_id: str
     description: str
     seed: int
+    battle_count: int = Field(default=1, ge=1, le=6)
     steps: list[ActionStep] = Field(default_factory=list)
     expected_final_status: str | None = None
     control: ControlSpec | None = None
@@ -89,6 +90,8 @@ class CombatantView(EvidenceModel):
 class PlayerView(CombatantView):
     potions: int
     gold: int = 0
+    level: int = 1
+    exp: int = 0
 
 
 class SnapshotView(EvidenceModel):
@@ -102,6 +105,9 @@ class SnapshotView(EvidenceModel):
     slime: CombatantView
     enemy_type: str = "slime"
     ruleset: str = "v1"
+    battle_count: int = 1
+    battle_index: int = 1
+    enemy_level: int = 1
     events: list[EventView]
 
 

@@ -26,22 +26,31 @@ ENEMY_SPECS = {
     "goblin": (80, (18, 27)),
     "troll": (170, (35, 45)),
 }
+ENEMY_LEVELS = {"slime": 1, "goblin": 2, "troll": 5}
+ENEMY_EXP = {"slime": 10, "goblin": 30, "troll": 60}
+EXP_PER_LEVEL = 15
+LEVEL_DAMAGE_BONUS = 10
+LEVEL_HP_BONUS = 20
+MAX_BATTLES = 6
 
 
 class CombatSession:
-    """一场玩家对战史莱姆的回合制战斗。"""
+    """按固定种子运行的单场或多场回合制战斗。"""
 
-    def __init__(self, session_id: str, seed: int, *, ruleset: str = "v2") -> None:
+    def __init__(
+        self, session_id: str, seed: int, *, ruleset: str = "v3", battle_count: int = 1
+    ) -> None:
         self._session_id = session_id
         self._seed = seed
-        if ruleset not in ("v1", "v2"):
+        if ruleset not in ("v1", "v2", "v3"):
             raise ValueError(f"unsupported ruleset: {ruleset}")
+        if not 1 <= battle_count <= MAX_BATTLES or (ruleset != "v3" and battle_count != 1):
+            raise ValueError("battle_count must be 1..6 for v3 and 1 for legacy rules")
         self._ruleset = ruleset
+        self._battle_count = battle_count
+        self._battle_index = 1
         self._rng = random.Random(seed)
-        roll = random.Random(seed + 7).random()
-        self._enemy_type = (
-            "slime" if ruleset == "v1" or roll < 0.6 else "goblin" if roll < 0.9 else "troll"
-        )
+        self._enemy_type = self._choose_enemy(1)
         enemy_hp, self._enemy_damage_range = ENEMY_SPECS[self._enemy_type]
         if ruleset == "v1":
             self._enemy_damage_range = (20, 35)
@@ -66,10 +75,12 @@ class CombatSession:
         return self._seed
 
     def attack(self) -> None:
-        """玩家攻击史莱姆；若史莱姆存活，立即反击。"""
+        """玩家攻击当前敌人；若敌人存活，立即反击。"""
         self._ensure_active()
         turn = self._next_turn()
         damage = self._rng.randint(*PLAYER_DAMAGE_RANGE)
+        if self._ruleset == "v3":
+            damage += LEVEL_DAMAGE_BONUS * (self._player.level - 1)
         self._slime.hp = max(0, self._slime.hp - damage)
         self._append_event(
             CombatEvent(
@@ -88,12 +99,39 @@ class CombatSession:
             self._status = BattleStatus.WON
         if self._should_retaliate(enemy_defeated):
             self._retaliate(turn)
-        if enemy_defeated and self._ruleset == "v2":
+        if enemy_defeated and self._ruleset in ("v2", "v3"):
             self._award_drop(turn)
+        if enemy_defeated and self._ruleset == "v3":
+            self._award_experience(turn)
+        self._turn = turn
+
+    def next_battle(self) -> None:
+        """获胜后主动进入下一场；玩家状态完整继承。"""
+        if self._ruleset != "v3" or self._status is not BattleStatus.WON:
+            raise InvalidCombatAction("battle_not_won", "win the current battle first")
+        if self._battle_index >= self._battle_count:
+            raise InvalidCombatAction("campaign_complete", "all battles are complete")
+        self._battle_index += 1
+        self._enemy_type = self._choose_enemy(self._battle_index)
+        enemy_hp, self._enemy_damage_range = ENEMY_SPECS[self._enemy_type]
+        self._slime = CombatantState(hp=enemy_hp, max_hp=enemy_hp)
+        self._status = BattleStatus.ACTIVE
+        turn = self._next_turn()
+        self._append_event(
+            CombatEvent(
+                turn=turn,
+                actor="player",
+                kind="next_battle",
+                value=self._battle_index,
+                player_hp=self._player.hp,
+                slime_hp=self._slime.hp,
+                potions=self._player.potions,
+            )
+        )
         self._turn = turn
 
     def use_potion(self) -> None:
-        """玩家使用药水恢复 25 点生命（不超过上限），随后史莱姆反击。"""
+        """玩家使用药水恢复 25 点生命（不超过上限），随后敌人反击。"""
         self._ensure_active()
         if self._ruleset == "v1" and self._player.hp == self._player.max_hp:
             raise InvalidCombatAction("player_full_hp", "player is already at full HP")
@@ -127,7 +165,10 @@ class CombatSession:
             player=self._player.model_copy(deep=True),
             slime=self._slime.model_copy(deep=True),
             enemy_type=self._enemy_type,
+            enemy_level=ENEMY_LEVELS[self._enemy_type],
             ruleset=self._ruleset,
+            battle_count=self._battle_count,
+            battle_index=self._battle_index,
             events=[event.model_copy(deep=True) for event in self._events],
         )
 
@@ -163,7 +204,7 @@ class CombatSession:
         return not enemy_defeated
 
     def _retaliate(self, turn: int) -> None:
-        """史莱姆反击；玩家生命降至 0 则战斗失败。"""
+        """当前敌人反击；玩家生命降至 0 则战斗失败。"""
         damage = self._rng.randint(*self._enemy_damage_range)
         self._player.hp = max(0, self._player.hp - damage)
         self._append_event(
@@ -186,6 +227,59 @@ class CombatSession:
         if self._enemy_type == "goblin":
             return "gold", self._rng.randint(10, 20)
         return None
+
+    def _experience_reward(self) -> tuple[str, int] | None:
+        """v3 击杀经验奖励；靶场只可在此窄扩展点制造掉落异常。"""
+        return "exp", ENEMY_EXP[self._enemy_type]
+
+    def _levels_after_experience(self, gained: int) -> int:
+        """返回本次应升级次数，供靶场注入升级异常。"""
+        return (self._player.exp + gained) // EXP_PER_LEVEL
+
+    def _award_experience(self, turn: int) -> None:
+        reward = self._experience_reward()
+        if reward is None:
+            return
+        item, amount = reward
+        self._append_event(
+            CombatEvent(
+                turn=turn,
+                actor=self._enemy_type,
+                kind="drop",
+                value=amount,
+                item=item,
+                player_hp=self._player.hp,
+                slime_hp=self._slime.hp,
+            )
+        )
+        if item != "exp":
+            return
+        levels = self._levels_after_experience(amount)
+        total_exp = self._player.exp + amount
+        # 经验余量按真实达到的门槛顺延；异常靶场可故意升级次数不符。
+        self._player.exp = total_exp - min(levels, total_exp // EXP_PER_LEVEL) * EXP_PER_LEVEL
+        for _ in range(levels):
+            self._player.level += 1
+            self._player.max_hp += LEVEL_HP_BONUS
+            self._player.hp = self._player.max_hp
+            self._player.potions += 1
+            self._append_event(
+                CombatEvent(
+                    turn=turn,
+                    actor="player",
+                    kind="level_up",
+                    value=self._player.level,
+                    player_hp=self._player.hp,
+                    slime_hp=self._slime.hp,
+                    potions=self._player.potions,
+                )
+            )
+
+    def _choose_enemy(self, battle_index: int) -> str:
+        if self._ruleset == "v1":
+            return "slime"
+        roll = random.Random(self._seed + 7 + (battle_index - 1) * 104729).random()
+        return "slime" if roll < 0.6 else "goblin" if roll < 0.9 else "troll"
 
     def _award_drop(self, turn: int) -> None:
         reward = self._drop_reward()
@@ -220,7 +314,7 @@ def new_session_identity(seed: int | None) -> tuple[str, int]:
     return uuid.uuid4().hex, secrets.randbits(31) if seed is None else seed
 
 
-def create_combat_session(seed: int | None = None) -> CombatSession:
+def create_combat_session(seed: int | None = None, battle_count: int = 1) -> CombatSession:
     """创建新战斗会话（正常规则）。"""
     session_id, resolved_seed = new_session_identity(seed)
-    return CombatSession(session_id=session_id, seed=resolved_seed)
+    return CombatSession(session_id=session_id, seed=resolved_seed, battle_count=battle_count)

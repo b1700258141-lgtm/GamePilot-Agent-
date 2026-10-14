@@ -34,7 +34,7 @@ from .database import Base
 # 与领域枚举保持一致的取值集合，通过检查约束在数据库层兜底。
 SESSION_STATUSES = ("active", "won", "lost")
 EVENT_ACTORS = ("player", "slime", "goblin", "troll")
-EVENT_KINDS = ("attack", "potion", "retaliate", "drop")
+EVENT_KINDS = ("attack", "potion", "retaliate", "drop", "level_up", "next_battle")
 
 # 用于生成 IN (...) 检查约束的取值列表；顺序固定，保证迁移可复现。
 _STATUS_LIST = ", ".join(f"'{value}'" for value in SESSION_STATUSES)
@@ -63,6 +63,10 @@ class GameSessionRow(Base):
     player_max_hp: Mapped[int] = mapped_column(Integer, nullable=False)
     potions: Mapped[int] = mapped_column(Integer, nullable=False)
     gold: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
+    level: Mapped[int] = mapped_column(Integer, nullable=False, server_default="1")
+    exp: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
+    battle_count: Mapped[int] = mapped_column(Integer, nullable=False, server_default="1")
+    battle_index: Mapped[int] = mapped_column(Integer, nullable=False, server_default="1")
     enemy_type: Mapped[str] = mapped_column(String(16), nullable=False, server_default="slime")
     ruleset: Mapped[str] = mapped_column(String(8), nullable=False, server_default="v1")
     slime_hp: Mapped[int] = mapped_column(Integer, nullable=False)
@@ -85,7 +89,12 @@ class GameSessionRow(Base):
         CheckConstraint(
             "enemy_type IN ('slime', 'goblin', 'troll')", name="ck_game_sessions_enemy_type_valid"
         ),
-        CheckConstraint("ruleset IN ('v1', 'v2')", name="ck_game_sessions_ruleset_valid"),
+        CheckConstraint("ruleset IN ('v1', 'v2', 'v3')", name="ck_game_sessions_ruleset_valid"),
+        CheckConstraint("level >= 1 AND exp >= 0", name="ck_game_sessions_level_exp_valid"),
+        CheckConstraint(
+            "battle_count BETWEEN 1 AND 6 AND battle_index BETWEEN 1 AND battle_count",
+            name="ck_game_sessions_battle_range",
+        ),
         CheckConstraint("player_max_hp > 0", name="ck_game_sessions_player_max_hp_positive"),
         CheckConstraint(
             "player_hp >= 0 AND player_hp <= player_max_hp",

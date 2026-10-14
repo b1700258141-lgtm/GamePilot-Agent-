@@ -98,19 +98,30 @@ CONTROL_SUITE = "agent-control"
 
 STATUS_PATTERN = re.compile(r"状态：(\S+)")
 PLAYER_PATTERN = re.compile(r"玩家：生命 (\d+)/(\d+)，药水 (\d+)")
-SLIME_PATTERN = re.compile(r"(?:史莱姆|哥布林|巨魔)：生命 (\d+)/(\d+)")
+SLIME_PATTERN = re.compile(r"(?:史莱姆|哥布林|巨魔)：(?:等级 \d+，)?生命 (\d+)/(\d+)")
+BATTLE_PATTERN = re.compile(r"连战：第 (\d+)/(\d+) 场")
 
 
 class Observation:
     """从**渲染后的观测文本**里读出的公开快照。"""
 
-    __slots__ = ("status", "hp", "max_hp", "potions")
+    __slots__ = ("status", "hp", "max_hp", "potions", "battle_index", "battle_count")
 
-    def __init__(self, status: str, hp: int, max_hp: int, potions: int) -> None:
+    def __init__(
+        self,
+        status: str,
+        hp: int,
+        max_hp: int,
+        potions: int,
+        battle_index: int = 1,
+        battle_count: int = 1,
+    ) -> None:
         self.status = status
         self.hp = hp
         self.max_hp = max_hp
         self.potions = potions
+        self.battle_index = battle_index
+        self.battle_count = battle_count
 
 
 def read_observation(content: str) -> Observation | None:
@@ -122,6 +133,7 @@ def read_observation(content: str) -> Observation | None:
     status = STATUS_PATTERN.search(content)
     player = PLAYER_PATTERN.search(content)
     slime = SLIME_PATTERN.search(content)
+    battle = BATTLE_PATTERN.search(content)
     if status is None or player is None or slime is None:
         return None
     return Observation(
@@ -129,6 +141,8 @@ def read_observation(content: str) -> Observation | None:
         hp=int(player.group(1)),
         max_hp=int(player.group(2)),
         potions=int(player.group(3)),
+        battle_index=int(battle.group(1)) if battle else 1,
+        battle_count=int(battle.group(2)) if battle else 1,
     )
 
 
@@ -168,6 +182,9 @@ def observation_reacting_double(goal_id: str) -> ModelProvider:
             # 观测读不出来就不猜：返回空输出，由本地校验按格式错误处理，
             # 不会产生任何游戏请求。
             return ModelReply(text="（读不到可用观测）")
+
+        if observation.status == "won" and observation.battle_index < observation.battle_count:
+            return _action("next_battle", step)
 
         if (
             (goal_id == GOAL_VICTORY and observation.status == "won")

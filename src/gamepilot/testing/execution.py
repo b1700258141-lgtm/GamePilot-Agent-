@@ -251,7 +251,9 @@ class CaseExecution:
         """
         try:
             created_observation = await self._client.create_session(
-                self._scenario.seed, timeout=self._timeout()
+                self._scenario.seed,
+                battle_count=self._scenario.battle_count,
+                timeout=self._timeout(),
             )
             self._evidence.create_observation = created_observation
             ensure_available(created_observation, "创建会话失败")
@@ -412,7 +414,7 @@ class CaseExecution:
             self._require(checks)
 
         observation = await self._client.create_session(
-            self._scenario.seed, timeout=self._timeout()
+            self._scenario.seed, battle_count=self._scenario.battle_count, timeout=self._timeout()
         )
         report.create_observation = observation
         ensure_available(observation, "对照会话创建失败")

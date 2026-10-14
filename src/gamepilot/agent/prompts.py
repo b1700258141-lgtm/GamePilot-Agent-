@@ -2,7 +2,7 @@
 
 模型可见的东西就是这里渲染出来的全部，**没有别的通道**：
 
-- 固定公开规则（来自 `docs/PHASE_1_PLAN.md` 第 5 节，与判定器同源）；
+- 固定公开规则（对应 `docs/BATTLE_RULES_V3.md`，与判定器逐项核对）；
 - 自然语言测试目标；
 - 最新公开快照（线上响应的业务字段）与上一步的动作结果；
 - 简短的规则检查反馈；
@@ -23,15 +23,15 @@ from gamepilot.testing.models import RuleCheck, SnapshotView
 
 from .models import BudgetSpec, ChatMessage, ToolCallRequest, ToolResult
 
-PROMPT_VERSION = "2.0.0"
-RULES_PROMPT_VERSION = "2.0.0"
+PROMPT_VERSION = "3.0.0"
+RULES_PROMPT_VERSION = "3.0.0"
 
 # 公开规则正文：逐条对应规则文档，不含任何实现细节、seed 提示或缺陷信息。
 PUBLIC_RULES = """\
-游戏是一场玩家对随机敌人的回合制战斗，规则如下：
+游戏是玩家对随机敌人的回合制连战，规则如下：
 
 初始状态
-- 玩家：生命 100/100，3 瓶药水，0 金币
+- 玩家：1 级，经验 0/15，生命 100/100，3 瓶药水，0 金币
 - 敌人按种子确定：史莱姆 60%（60 HP）、哥布林 30%（80 HP）、巨魔 10%（170 HP）
 - 状态 active，回合 0，没有历史事件
 
@@ -46,7 +46,13 @@ PUBLIC_RULES = """\
 - 敌人生命降到 0 时状态变为 won，且该回合不再反击。击杀史莱姆掉落 1~3 金币，哥布林掉落 10~20 金币
 - 玩家生命降到 0 时状态变为 lost
 - 每个成功执行的玩家动作使回合数加 1
-- 战斗结束后不允许继续操作
+- 当前场结束后不可继续攻击或喝药；若已获胜且仍有剩余场次，可进入下一场。
+- 连战目标为 1～6 场；当前场获胜后若还有剩余场次，调用 next_battle 进入下一场。
+  玩家当前生命、药水、金币、等级和经验继承；最后一场获胜后不可再进入下一场。
+- 敌人等级：史莱姆 1、哥布林 2、巨魔 5；敌人的生命与伤害范围不因等级改变。
+- 击杀经验：史莱姆 10、哥布林 30、巨魔 60。玩家初始 1 级、0 经验，
+  每满 15 经验升一级，多余经验顺延；每升一级攻击伤害 +10、最大生命 +20，
+  随即回满至新的生命上限，剩余药水再加 1 瓶。连续升级逐级结算。
 - 没有药水时使用药水属于无效动作：不得修改状态，返回 HTTP 409
 - 无效动作的具体错误码：战斗已结束 battle_not_active；没有药水 no_potions
 """
@@ -54,6 +60,7 @@ PUBLIC_RULES = """\
 PROTOCOL = """\
 工作方式
 - 每一轮你必须且只能调用一个工具：perform_action 或 finish。
+- perform_action 可选 attack、use_potion、next_battle。
 - 选择动作时不要试图预测随机数值；程序会在发送前用公开规则核对这次动作的预期结果。
 - 每次动作的真实结果会作为下一条观测返回给你，包括状态快照和规则检查结论。
 - 当你认为测试目标已经被当前观测充分覆盖时，调用 finish 并说明依据。
@@ -87,12 +94,17 @@ def render_snapshot(snapshot: SnapshotView) -> str:
     )
     lines = [
         f"状态：{snapshot.status}",
+        f"连战：第 {snapshot.battle_index}/{snapshot.battle_count} 场",
         f"回合：{snapshot.turn}",
         (
             f"玩家：生命 {snapshot.player.hp}/{snapshot.player.max_hp}，"
-            f"药水 {snapshot.player.potions}，金币 {snapshot.player.gold}"
+            f"药水 {snapshot.player.potions}，金币 {snapshot.player.gold}，"
+            f"等级 {snapshot.player.level}，经验 {snapshot.player.exp}/15"
         ),
-        f"{enemy_name}：生命 {snapshot.slime.hp}/{snapshot.slime.max_hp}",
+        (
+            f"{enemy_name}：等级 {snapshot.enemy_level}，"
+            f"生命 {snapshot.slime.hp}/{snapshot.slime.max_hp}"
+        ),
     ]
     if snapshot.events:
         lines.append(f"事件历史（共 {len(snapshot.events)} 条）：")

@@ -1,6 +1,6 @@
 """规则规格：判定所用的数值与规则编号，独立于被测实现。
 
-来源是规则文档 `docs/PHASE_1_PLAN.md` 第 5 节「最小游戏规则」，
+当前数值来源是 `docs/BATTLE_RULES_V3.md`，
 不是 `gamepilot.domain.combat`：如果判定器导入被测实现的常量，
 就等于让被测代码生成自己的「正确答案」，缺陷会一起被搬进期望值里。
 
@@ -11,8 +11,8 @@
 """
 
 # 规则规格版本：数值或判定语义变化时必须递增，报告用它判断能否重跑比较。
-RULES_VERSION = "2.0.0"
-RULES_SOURCE = "docs/PHASE_1_PLAN.md#5-最小游戏规则"
+RULES_VERSION = "3.0.0"
+RULES_SOURCE = "docs/BATTLE_RULES_V3.md"
 
 # 初始状态（规则文档「初始状态」）。
 PLAYER_MAX_HP = 100
@@ -30,7 +30,7 @@ POTION_HEAL = 25
 
 # 执行器约束。
 DEFAULT_TIMEOUT_SECONDS = 5.0
-MAX_ACTION_ATTEMPTS = 20
+MAX_ACTION_ATTEMPTS = 50
 
 # 接口层常量：公开规则文档「无效动作返回明确的领域错误，并由 API 映射为 HTTP 409」。
 # 动作预期推导（`planning.derive_expectation`）用它们描述「服务应该返回什么」，
@@ -40,10 +40,12 @@ HTTP_CONFLICT = 409
 CODE_BATTLE_NOT_ACTIVE = "battle_not_active"
 CODE_PLAYER_FULL_HP = "player_full_hp"
 CODE_NO_POTIONS = "no_potions"
+CODE_BATTLE_NOT_WON = "battle_not_won"
+CODE_CAMPAIGN_COMPLETE = "campaign_complete"
 
 # 报告 schema 版本；重跑只接受明确支持的版本。
-SCHEMA_VERSION = "1.1"
-SUPPORTED_SCHEMA_VERSIONS = ("1.1",)
+SCHEMA_VERSION = "2.0"
+SUPPORTED_SCHEMA_VERSIONS = ("2.0",)
 
 # 基础设施类错误码：出现这些码说明问题不在游戏规则本身，
 # 必须归类为执行错误（error），不能记成「已确认的游戏缺陷」（fail）。
@@ -78,6 +80,10 @@ R_LOOT_PRESENT = "R-LOOT-PRESENT"
 R_LOOT_RANGE = "R-LOOT-RANGE"
 R_LOOT_ITEM = "R-LOOT-ITEM"
 R_LOOT_BALANCE = "R-LOOT-BALANCE"
+R_EXP_REWARD = "R-EXP-REWARD"
+R_EXP_BALANCE = "R-EXP-BALANCE"
+R_LEVEL_UP = "R-LEVEL-UP"
+R_BATTLE_ADVANCE = "R-BATTLE-ADVANCE"
 R_RETALIATE_ONCE = "R-RETALIATE-ONCE"
 R_RETALIATE_POTIONS_NULL = "R-RETALIATE-POTIONS-NULL"
 R_POTION_HEAL = "R-POTION-HEAL"
@@ -94,10 +100,13 @@ R_STEP_LIMIT = "R-STEP-LIMIT"
 RULE_CATALOG: dict[str, str] = {
     R_CREATE_SEED: "创建响应 seed 等于本次请求",
     R_GET_STATUS: "查询会话返回 HTTP 200",
-    R_INIT_STATE: "初始状态：玩家 HP 100、3 瓶药水、0 金币、种子选定敌人、active、turn 0、无事件",
+    R_INIT_STATE: (
+        "初始状态：玩家 1 级、0 经验、HP 100、3 瓶药水、0 金币，"
+        "敌人按种子确定，active、turn 0、无事件"
+    ),
     R_CREATE_STATUS: "创建会话返回 201",
     R_CREATE_GET_IDENTICAL: "创建后 GET 返回与创建响应完全一致的状态",
-    R_INVARIANTS: "HP 在 [0, max_hp] 内、药水非负递减，且动作不改变 session_id/seed/max_hp",
+    R_INVARIANTS: "HP 在 [0, max_hp] 内、药水非负，动作不改变会话标识与种子；生命上限仅随升级增加",
     R_EXPECTED_STATUS: "步骤 HTTP 状态符合场景预期",
     R_EXPECTED_CODE: "步骤错误码符合场景预期",
     R_TURN_INCREMENT: "成功动作使 turn 恰好 +1",
@@ -105,14 +114,18 @@ RULE_CATALOG: dict[str, str] = {
     R_EVENT_COUNT: "每个成功动作新增的事件数量符合规则",
     R_EVENT_ACTOR_ORDER: "新事件中玩家事件在前，且类型与动作一致",
     R_EVENT_TURN: "新事件的回合号等于新 turn",
-    R_ATTACK_DAMAGE: "攻击伤害在 18～25 之间",
-    R_ATTACK_HP_APPLY: "攻击按事件值扣减敌人 HP 并截断到 0，玩家 HP 与药水不变",
+    R_ATTACK_DAMAGE: "攻击伤害在 18～25 加上每级 10 点加成的范围内",
+    R_ATTACK_HP_APPLY: "攻击按事件值扣减敌人 HP 并截断到 0；升级奖励在击杀后另行结算",
     R_NO_RETALIATE_ON_KILL: "致死攻击本回合不反击",
     R_NO_ACTION_AFTER_PLAYER_DEATH: "玩家死亡后不能再执行动作",
     R_LOOT_PRESENT: "击杀史莱姆或哥布林后应有一次掉落",
     R_LOOT_RANGE: "金币掉落数量在敌人对应的范围内",
-    R_LOOT_ITEM: "击杀奖励只能是金币",
+    R_LOOT_ITEM: "金币掉落的物品类型必须为 gold",
     R_LOOT_BALANCE: "金币余额按掉落数量增加",
+    R_EXP_REWARD: "击杀后经验掉落与敌人类型一致",
+    R_EXP_BALANCE: "经验每15点升级，超出部分顺延",
+    R_LEVEL_UP: "每升一级伤害+10、生命上限+20、回满生命且药水+1",
+    R_BATTLE_ADVANCE: "获胜后可进入下一场，玩家状态继承且敌人属性不变",
     R_RETALIATE_ONCE: "敌人存活时恰好一次反击，伤害在敌人对应范围且按值扣血",
     R_RETALIATE_POTIONS_NULL: "反击事件的 potions 为 null",
     R_POTION_HEAL: "药水固定效力 25，实际回血为 min(25, max_hp - 动作前 HP)",

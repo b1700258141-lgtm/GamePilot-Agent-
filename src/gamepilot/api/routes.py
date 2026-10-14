@@ -20,7 +20,7 @@ router = APIRouter()
 # 创建会话的工厂：按种子返回一个战斗会话。
 # 正常装配注入领域层的 create_combat_session；缺陷靶场注入自己的实现，
 # 从而在不改动路由逻辑的前提下让新会话继承靶场 profile。
-SessionFactory = Callable[[int | None], CombatSession]
+SessionFactory = Callable[[int | None, int], CombatSession]
 
 # OpenAPI 错误声明；实际映射见 api/errors.py。
 _NOT_FOUND_RESPONSE: dict[str, Any] = {
@@ -90,7 +90,7 @@ def create_session(
     session_factory: Annotated[SessionFactory, Depends(get_session_factory)],
 ) -> GameSnapshot:
     """创建一场玩家对史莱姆的战斗，返回完整初始快照。"""
-    session = session_factory(payload.seed)
+    session = session_factory(payload.seed, payload.battle_count)
     repository.save(session)
     return session.snapshot()
 
@@ -128,7 +128,9 @@ def perform_action(
     session = repository.get(session_id)
     if payload.action == "attack":
         session.attack()
-    else:
+    elif payload.action == "use_potion":
         session.use_potion()
+    else:
+        session.next_battle()
     repository.save(session)
     return session.snapshot()

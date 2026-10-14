@@ -24,7 +24,7 @@ from gamepilot.api.errors import register_exception_handlers
 from gamepilot.api.routes import router
 from gamepilot.repositories.memory import InMemorySessionRepository
 
-from .profiles import FaultProfile, resolve_profile
+from .profiles import FAULT_IDS, FaultProfile, resolve_profile
 from .recorder import TriggerRecorder
 from .session import make_session_factory
 
@@ -35,13 +35,20 @@ LAB_API_DESCRIPTION = (
 )
 
 
-def create_lab_app(profile: str, *, recorder: TriggerRecorder | None = None) -> FastAPI:
+def create_lab_app(
+    profile: str,
+    *,
+    recorder: TriggerRecorder | None = None,
+    fault_ids: frozenset[str] | None = None,
+) -> FastAPI:
     """创建一个只跑指定 profile 的靶场应用。
 
     `recorder` 由宿主提供时，触发记录会写进调用方持有的对象里，
     评测器据此核对标准答案；不提供时应用内部自建一个（`serve` 用）。
     """
     resolved = resolve_profile(profile)
+    if fault_ids is not None and not fault_ids <= set(FAULT_IDS):
+        raise ValueError("unknown fault ID in fault_ids")
     trigger_recorder = recorder if recorder is not None else TriggerRecorder()
 
     app = FastAPI(
@@ -52,10 +59,13 @@ def create_lab_app(profile: str, *, recorder: TriggerRecorder | None = None) -> 
     app.state.repository = InMemorySessionRepository()
     # 与正常服务的内存后端一致；公共 /ready 路由需要此探针。
     app.state.readiness_probe = lambda: None
-    app.state.session_factory = make_session_factory(resolved, trigger_recorder)
+    app.state.session_factory = make_session_factory(
+        resolved, trigger_recorder, fault_ids=fault_ids
+    )
     # 下面两项只供宿主（CLI、评测器、测试）自省，不参与任何 HTTP 响应，
     # 也不出现在 OpenAPI 文档里；正常服务的应用没有这两个属性。
     app.state.lab_profile = resolved
+    app.state.lab_fault_ids = fault_ids
     app.state.trigger_recorder = trigger_recorder
     register_exception_handlers(app)
     app.include_router(router)

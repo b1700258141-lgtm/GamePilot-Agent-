@@ -30,10 +30,12 @@ class PlayerState(CombatantState):
 
     potions: int
     gold: int = 0
+    level: int = 1
+    exp: int = 0
 
 
 EventActor = Literal["player", "slime", "goblin", "troll"]
-EventKind = Literal["attack", "potion", "retaliate", "drop"]
+EventKind = Literal["attack", "potion", "retaliate", "drop", "level_up", "next_battle"]
 
 
 class CombatEvent(BaseModel):
@@ -67,5 +69,8 @@ class GameSnapshot(BaseModel):
     player: PlayerState
     slime: CombatantState
     enemy_type: Literal["slime", "goblin", "troll"] = "slime"
-    ruleset: Literal["v1", "v2"] = "v2"
+    ruleset: Literal["v1", "v2", "v3"] = "v3"
+    battle_count: int = 1
+    battle_index: int = 1
+    enemy_level: int = 1
     events: list[CombatEvent] = Field(default_factory=list)

@@ -16,12 +16,13 @@ from sqlalchemy.orm import Session, sessionmaker
 from gamepilot.agent.models import BudgetSpec
 from gamepilot.agent.provider import DEFAULT_API_KEY_ENV, DEFAULT_BASE_URL, DEFAULT_MODEL
 from gamepilot.agent.skills import DEFAULT_SKILL_ID, SkillStore
+from gamepilot.lab.selection import select_faults
 from gamepilot.persistence.models import AgentTestRunRow
 from gamepilot.testing.reporting import new_run_id, utc_now_iso
 
 WEB_BUDGET = BudgetSpec(
-    max_action_attempts=20,
-    max_model_calls=20,
+    max_action_attempts=50,
+    max_model_calls=50,
     max_format_retries=1,
     model_timeout_seconds=30,
     http_timeout_seconds=5,
@@ -97,6 +98,16 @@ class AgentWebRunManager:
                 raise ValueError("所选 skill 不存在，请刷新列表后重试")
             if config["provider_mode"] == "offline" and not skill.built_in:
                 raise ValueError("上传的自定义 skill 需要真实模型执行；离线替身只支持默认策略")
+            config = dict(config)
+            legacy_profile = config.get("profile")
+            if legacy_profile is not None:
+                selected = () if legacy_profile == "normal" else (legacy_profile,)
+                config["fault_selection_mode"] = "legacy"
+                config["selected_faults"] = list(selected)
+            else:
+                selection = select_faults(config["seed"], tuple(config.get("forced_faults") or ()))
+                config["fault_selection_mode"] = selection.mode
+                config["selected_faults"] = list(selection.fault_ids)
             run_id = new_run_id()
             record: dict[str, Any] = {
                 "run_id": run_id,
@@ -206,6 +217,8 @@ class AgentWebRunManager:
         from gamepilot.testing.replay import replay_report
         from gamepilot.testing.reporting import single_case_report, write_report
         from gamepilot.testing.rules import (
+            R_EXP_REWARD,
+            R_LEVEL_UP,
             R_LOOT_ITEM,
             R_LOOT_PRESENT,
             R_LOOT_RANGE,
@@ -232,7 +245,11 @@ class AgentWebRunManager:
                 thinking="disabled",
             )
         recorder = TriggerRecorder()
-        lab_app = create_lab_app(config["profile"], recorder=recorder)
+        lab_app = create_lab_app(
+            config.get("profile") or "normal",
+            recorder=recorder,
+            fault_ids=frozenset(config["selected_faults"]),
+        )
         budget = Budget(WEB_BUDGET)
         self._update(record, status="running", phase="initialize", message="正在创建隔离战斗")
         started_at = utc_now_iso()
@@ -250,7 +267,8 @@ class AgentWebRunManager:
                 budget=budget,
                 goal=goal,
                 seed=config["seed"],
-                description=f"网页 Agent 测试 {goal.goal_id}（{config['profile']}）",
+                battle_count=config.get("battle_count", 1),
+                description=f"网页 Agent 连战测试 {goal.goal_id}",
                 skill_instructions=skill["instructions"],
                 timeout_provider=lambda: budget.request_timeout(WEB_BUDGET.http_timeout_seconds),
                 on_update=lambda node, current, ctx: self._progress(record, node, current, ctx),
@@ -274,15 +292,29 @@ class AgentWebRunManager:
             replay = await replay_report(client, run_report, source_report=str(run_path))
             write_report(replay, output_dir / "replay")
 
-        trigger = recorder.get(case.session_id) if case.session_id else None
+        triggers = recorder.for_session(case.session_id)
         failing = sorted({check.rule_id for check in case.checks if check.status == "fail"})
         target_rules = {
             "potion_overheal": [R_POTION_CAP],
             "potion_not_consumed": [R_POTION_DECREMENTS],
             "retaliate_after_death": [R_NO_RETALIATE_ON_KILL, R_NO_ACTION_AFTER_PLAYER_DEATH],
-            "loot_anomaly": [R_LOOT_PRESENT, R_LOOT_RANGE, R_LOOT_ITEM],
+            "loot_anomaly": [R_LOOT_PRESENT, R_LOOT_RANGE, R_LOOT_ITEM, R_EXP_REWARD],
+            "level_anomaly": [R_LEVEL_UP],
         }
-        target = target_rules.get(config["profile"], [])
+        selected_faults = config["selected_faults"]
+        triggered_faults = {item.fault_id for item in triggers}
+        detected_faults = [
+            fault
+            for fault in selected_faults
+            if fault in triggered_faults and set(failing) & set(target_rules[fault])
+        ]
+        missed_faults = [
+            fault
+            for fault in selected_faults
+            if fault in triggered_faults and fault not in detected_faults
+        ]
+        untriggered_faults = [fault for fault in selected_faults if fault not in triggered_faults]
+        target = sorted({rule for fault in selected_faults for rule in target_rules[fault]})
         target_hit = sorted(set(failing) & set(target))
         replay_outcome = replay.cases[0].outcome if replay.cases else "not_executed"
         replay_status = replay.cases[0].execution.status if replay.cases else None
@@ -292,22 +324,29 @@ class AgentWebRunManager:
             or replay_status == "error"
         ):
             verdict = "execution_error"
-        elif trigger is not None and target_hit:
+        elif missed_faults:
+            verdict = "agent_missed"
+        elif untriggered_faults:
+            verdict = "not_triggered"
+        elif detected_faults:
             verdict = "defect_detected"
         elif failing:
             verdict = "rule_failure"
-        elif trigger is not None and target and not target_hit:
-            verdict = "agent_missed"
-        elif config["profile"] != "normal" and trigger is None:
-            verdict = "not_triggered"
         elif not agent_report.coverage.met:
             verdict = "goal_incomplete"
         else:
             verdict = "pass"
         result = {
             "verdict": verdict,
-            "triggered": trigger is not None,
-            "trigger_detail": trigger.detail if trigger else None,
+            "triggered": bool(triggers),
+            "trigger_detail": triggers[0].detail if triggers else None,
+            "trigger_details": [
+                {"fault_id": item.fault_id, "detail": item.detail} for item in triggers
+            ],
+            "selected_faults": selected_faults,
+            "detected_faults": detected_faults,
+            "missed_faults": missed_faults,
+            "untriggered_faults": untriggered_faults,
             "failing_rules": failing,
             "target_rules": target,
             "target_rules_hit": target_hit,

@@ -64,6 +64,10 @@ class StoredSession:
     slime_hp: int
     slime_max_hp: int
     gold: int = 0
+    level: int = 1
+    exp: int = 0
+    battle_count: int = 1
+    battle_index: int = 1
     enemy_type: str = "slime"
     ruleset: str = "v1"
 
@@ -79,6 +83,10 @@ class StoredSession:
             player_max_hp=snapshot.player.max_hp,
             potions=snapshot.player.potions,
             gold=snapshot.player.gold,
+            level=snapshot.player.level,
+            exp=snapshot.player.exp,
+            battle_count=snapshot.battle_count,
+            battle_index=snapshot.battle_index,
             enemy_type=snapshot.enemy_type,
             ruleset=snapshot.ruleset,
             slime_hp=snapshot.slime.hp,
@@ -141,7 +149,12 @@ def rebuild_session(state: StoredSession, events: Sequence[StoredEvent]) -> Comb
     seed = parse_seed(state.seed, session_id=session_id)
     ensure_contiguous_sequences(session_id, [stored.sequence for stored in events])
 
-    session = CombatSession(session_id=session_id, seed=seed, ruleset=state.ruleset)
+    session = CombatSession(
+        session_id=session_id,
+        seed=seed,
+        ruleset=state.ruleset,
+        battle_count=state.battle_count,
+    )
     for stored in events:
         _replay_player_action(session, stored.event, session_id=session_id)
 
@@ -161,7 +174,7 @@ def _replay_player_action(session: CombatSession, event: CombatEvent, *, session
                 f"slime event kind {event.kind!r}"
             )
         return
-    if event.actor != "player" or event.kind not in ("attack", "potion"):
+    if event.actor != "player" or event.kind not in ("attack", "potion", "next_battle", "level_up"):
         raise PersistenceInconsistentError(
             f"session {session_id}: turn {event.turn} recorded unsupported event "
             f"{event.actor}/{event.kind}"
@@ -170,8 +183,11 @@ def _replay_player_action(session: CombatSession, event: CombatEvent, *, session
     try:
         if event.kind == "attack":
             session.attack()
-        else:
+        elif event.kind == "potion":
             session.use_potion()
+        elif event.kind == "next_battle":
+            session.next_battle()
+        # level_up 由上一击杀动作产生，不单独重放。
     except InvalidCombatAction as exc:
         # 领域层拒绝这个动作，说明存储的历史本身不可能发生。
         raise PersistenceInconsistentError(
