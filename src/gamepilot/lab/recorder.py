@@ -21,6 +21,9 @@ class FaultTrigger:
     session_id: str
     fault_id: str
     detail: str
+    battle_index: int | None = None
+    turn: int | None = None
+    opportunity: int | None = None
 
 
 class TriggerRecorder:
@@ -29,10 +32,26 @@ class TriggerRecorder:
     def __init__(self) -> None:
         self._records: dict[tuple[str, str], FaultTrigger] = {}
 
-    def record(self, session_id: str, fault_id: str, detail: str) -> None:
+    def record(
+        self,
+        session_id: str,
+        fault_id: str,
+        detail: str,
+        *,
+        battle_index: int | None = None,
+        turn: int | None = None,
+        opportunity: int | None = None,
+    ) -> None:
         self._records.setdefault(
             (session_id, fault_id),
-            FaultTrigger(session_id=session_id, fault_id=fault_id, detail=detail),
+            FaultTrigger(
+                session_id=session_id,
+                fault_id=fault_id,
+                detail=detail,
+                battle_index=battle_index,
+                turn=turn,
+                opportunity=opportunity,
+            ),
         )
 
     def get(self, session_id: str | None) -> FaultTrigger | None:

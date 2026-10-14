@@ -10,6 +10,8 @@
 那时「正常规则」就不止一份了。
 """
 
+from typing import Literal
+
 from gamepilot.api.routes import SessionFactory
 from gamepilot.domain.combat import (
     POTION_HEAL,
@@ -27,6 +29,7 @@ from .profiles import (
     FaultProfile,
 )
 from .recorder import TriggerRecorder
+from .selection import activation_opportunity
 
 
 class LabCombatSession(CombatSession):
@@ -41,8 +44,12 @@ class LabCombatSession(CombatSession):
         recorder: TriggerRecorder,
         battle_count: int = 1,
         fault_ids: frozenset[str] | None = None,
+        timing_mode: Literal["immediate", "seeded"] = "immediate",
     ) -> None:
         super().__init__(session_id=session_id, seed=seed, battle_count=battle_count)
+        if timing_mode not in ("immediate", "seeded"):
+            raise ValueError("unknown fault timing mode")
+        self._timing_mode = timing_mode
         self._fault_profile = profile
         self._active_faults = (
             fault_ids
@@ -52,9 +59,32 @@ class LabCombatSession(CombatSession):
             else frozenset()
         )
         self._recorder = recorder
+        self._opportunity_counts = {fault_id: 0 for fault_id in self._active_faults}
+        self._activation_targets = {
+            fault_id: (
+                activation_opportunity(seed, battle_count, fault_id)
+                if timing_mode == "seeded"
+                else 1
+            )
+            for fault_id in self._active_faults
+        }
 
-    def _has_fault(self, fault_id: str) -> bool:
-        return fault_id in self._active_faults
+    def _is_due(self, fault_id: str) -> bool:
+        """只对真正有机会偏离规则的节点计数，到目标节点后持续生效。"""
+        if fault_id not in self._active_faults:
+            return False
+        self._opportunity_counts[fault_id] += 1
+        return self._opportunity_counts[fault_id] >= self._activation_targets[fault_id]
+
+    def _record_trigger(self, fault_id: str, detail: str) -> None:
+        self._recorder.record(
+            self.session_id,
+            fault_id,
+            detail,
+            battle_index=self._battle_index,
+            turn=self._turn + 1,
+            opportunity=self._opportunity_counts[fault_id],
+        )
 
     @property
     def fault_profile(self) -> FaultProfile:
@@ -62,11 +92,10 @@ class LabCombatSession(CombatSession):
         return self._fault_profile
 
     def _heal_amount(self, missing_hp: int) -> int:
-        if self._has_fault(FAULT_POTION_OVERHEAL) and missing_hp < POTION_HEAL:
+        if missing_hp < POTION_HEAL and self._is_due(FAULT_POTION_OVERHEAL):
             # 只有缺失生命值小于治疗量时才真的会超过上限；缺失等于治疗量时
             # 缺陷值与正常值相同，不算偏离，因此不记录。
-            self._recorder.record(
-                self.session_id,
+            self._record_trigger(
                 FAULT_POTION_OVERHEAL,
                 f"缺失生命值 {missing_hp} < {POTION_HEAL}，仍治疗 {POTION_HEAL}",
             )
@@ -74,9 +103,8 @@ class LabCombatSession(CombatSession):
         return super()._heal_amount(missing_hp)
 
     def _potions_after_use(self) -> int:
-        if self._has_fault(FAULT_POTION_NOT_CONSUMED):
-            self._recorder.record(
-                self.session_id,
+        if self._is_due(FAULT_POTION_NOT_CONSUMED):
+            self._record_trigger(
                 FAULT_POTION_NOT_CONSUMED,
                 f"成功喝药后药水仍为 {self._player.potions} 瓶",
             )
@@ -84,9 +112,8 @@ class LabCombatSession(CombatSession):
         return super()._potions_after_use()
 
     def _should_retaliate(self, enemy_defeated: bool) -> bool:
-        if self._has_fault(FAULT_RETALIATE_AFTER_DEATH) and enemy_defeated:
-            self._recorder.record(
-                self.session_id,
+        if enemy_defeated and self._is_due(FAULT_RETALIATE_AFTER_DEATH):
+            self._record_trigger(
                 FAULT_RETALIATE_AFTER_DEATH,
                 f"敌人生命值已为 {self._slime.hp} 仍执行反击",
             )
@@ -94,9 +121,8 @@ class LabCombatSession(CombatSession):
         return super()._should_retaliate(enemy_defeated)
 
     def _ensure_active(self) -> None:
-        if self._has_fault(FAULT_RETALIATE_AFTER_DEATH) and self._status is BattleStatus.LOST:
-            self._recorder.record(
-                self.session_id,
+        if self._status is BattleStatus.LOST and self._is_due(FAULT_RETALIATE_AFTER_DEATH):
+            self._record_trigger(
                 FAULT_RETALIATE_AFTER_DEATH,
                 "玩家死亡后仍允许执行动作",
             )
@@ -104,13 +130,15 @@ class LabCombatSession(CombatSession):
         super()._ensure_active()
 
     def _drop_reward(self) -> tuple[str, int] | None:
-        if not self._has_fault(FAULT_LOOT_ANOMALY):
-            return super()._drop_reward()
         variant = self.seed % (6 if self._ruleset == "v3" else 3)
-        if variant >= 3:
+        # 巨魔本来不掉金币：仅“缺失金币”变体在新排程中不算有效候选。
+        # 旧即时 profile 保留既有行为，避免改动历史评测口径。
+        no_gold_to_remove = (
+            self._timing_mode == "seeded" and variant == 0 and self._enemy_type == "troll"
+        )
+        if variant >= 3 or no_gold_to_remove or not self._is_due(FAULT_LOOT_ANOMALY):
             return super()._drop_reward()
-        self._recorder.record(
-            self.session_id,
+        self._record_trigger(
             FAULT_LOOT_ANOMALY,
             ("击杀后不掉落金币", "金币数量超出范围", "击杀后掉落错误物品")[variant],
         )
@@ -121,10 +149,8 @@ class LabCombatSession(CombatSession):
         return "stone", 1
 
     def _experience_reward(self) -> tuple[str, int] | None:
-        if not self._has_fault(FAULT_LOOT_ANOMALY):
-            return super()._experience_reward()
         variant = self.seed % 6
-        if variant < 3:
+        if variant < 3 or not self._is_due(FAULT_LOOT_ANOMALY):
             return super()._experience_reward()
         expected = super()._experience_reward()
         assert expected is not None
@@ -134,7 +160,7 @@ class LabCombatSession(CombatSession):
             4: "经验奖励使用了其他敌人的数值",
             5: "经验掉落数量异常",
         }[variant]
-        self._recorder.record(self.session_id, FAULT_LOOT_ANOMALY, detail)
+        self._record_trigger(FAULT_LOOT_ANOMALY, detail)
         if variant == 3:
             return None
         if variant == 4:
@@ -143,13 +169,11 @@ class LabCombatSession(CombatSession):
 
     def _levels_after_experience(self, gained: int) -> int:
         normal = super()._levels_after_experience(gained)
-        if not self._has_fault(FAULT_LEVEL_ANOMALY):
-            return normal
-        if self.seed % 2 == 0 and normal > 0:
-            self._recorder.record(self.session_id, FAULT_LEVEL_ANOMALY, "经验达标但未升级")
+        if self.seed % 2 == 0 and normal > 0 and self._is_due(FAULT_LEVEL_ANOMALY):
+            self._record_trigger(FAULT_LEVEL_ANOMALY, "经验达标但未升级")
             return 0
-        if self.seed % 2 == 1 and normal == 0:
-            self._recorder.record(self.session_id, FAULT_LEVEL_ANOMALY, "经验未达标却提前升级")
+        if self.seed % 2 == 1 and normal == 0 and self._is_due(FAULT_LEVEL_ANOMALY):
+            self._record_trigger(FAULT_LEVEL_ANOMALY, "经验未达标却提前升级")
             return 1
         return normal
 
@@ -159,6 +183,7 @@ def make_session_factory(
     recorder: TriggerRecorder,
     *,
     fault_ids: frozenset[str] | None = None,
+    timing_mode: Literal["immediate", "seeded"] = "immediate",
 ) -> SessionFactory:
     """生成「新会话固定绑定某个 profile」的工厂。"""
 
@@ -171,6 +196,7 @@ def make_session_factory(
             recorder=recorder,
             battle_count=battle_count,
             fault_ids=fault_ids,
+            timing_mode=timing_mode,
         )
 
     return factory

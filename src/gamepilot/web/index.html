@@ -165,14 +165,14 @@
                 </select>
 
                 <fieldset class="fault-picker">
-                  <legend>必现缺陷（可多选）</legend>
+                  <legend>指定缺陷（可多选）</legend>
                   <label class="check-row"><input class="agent-force-fault" type="checkbox" value="retaliate_after_death" />死亡后反击</label>
                   <label class="check-row"><input class="agent-force-fault" type="checkbox" value="potion_overheal" />治疗越过生命上限</label>
                   <label class="check-row"><input class="agent-force-fault" type="checkbox" value="potion_not_consumed" />喝药不消耗药水</label>
                   <label class="check-row"><input class="agent-force-fault" type="checkbox" value="loot_anomaly" />掉落物品异常</label>
                   <label class="check-row"><input class="agent-force-fault" type="checkbox" value="level_anomaly" />玩家升级异常</label>
                 </fieldset>
-                <p id="agent-defect-hint" class="goal-guidance" aria-live="polite">不勾选时：70% 不注入缺陷，30% 随机注入一种；同一 seed 结果固定。</p>
+                <p id="agent-defect-hint" class="goal-guidance" aria-live="polite">不勾选时：70% 不注入缺陷，30% 随机注入一种；出现时也按 seed 安排生效节点。</p>
 
                 <label for="agent-provider">执行方式</label>
                 <select id="agent-provider" name="provider_mode">

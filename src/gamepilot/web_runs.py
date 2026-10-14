@@ -16,7 +16,7 @@ from sqlalchemy.orm import Session, sessionmaker
 from gamepilot.agent.models import BudgetSpec
 from gamepilot.agent.provider import DEFAULT_API_KEY_ENV, DEFAULT_BASE_URL, DEFAULT_MODEL
 from gamepilot.agent.skills import DEFAULT_SKILL_ID, SkillStore
-from gamepilot.lab.selection import select_faults
+from gamepilot.lab.selection import activation_opportunity, select_faults
 from gamepilot.persistence.models import AgentTestRunRow
 from gamepilot.testing.reporting import new_run_id, utc_now_iso
 
@@ -108,6 +108,19 @@ class AgentWebRunManager:
                 selection = select_faults(config["seed"], tuple(config.get("forced_faults") or ()))
                 config["fault_selection_mode"] = selection.mode
                 config["selected_faults"] = list(selection.fault_ids)
+            config["fault_timing_mode"] = (
+                "immediate" if config["fault_selection_mode"] == "legacy" else "seeded"
+            )
+            config["fault_schedule"] = {
+                fault_id: (
+                    1
+                    if config["fault_timing_mode"] == "immediate"
+                    else activation_opportunity(
+                        config["seed"], config.get("battle_count", 1), fault_id
+                    )
+                )
+                for fault_id in config["selected_faults"]
+            }
             run_id = new_run_id()
             record: dict[str, Any] = {
                 "run_id": run_id,
@@ -249,6 +262,7 @@ class AgentWebRunManager:
             config.get("profile") or "normal",
             recorder=recorder,
             fault_ids=frozenset(config["selected_faults"]),
+            timing_mode=config["fault_timing_mode"],
         )
         budget = Budget(WEB_BUDGET)
         self._update(record, status="running", phase="initialize", message="正在创建隔离战斗")
@@ -326,10 +340,10 @@ class AgentWebRunManager:
             verdict = "execution_error"
         elif missed_faults:
             verdict = "agent_missed"
-        elif untriggered_faults:
-            verdict = "not_triggered"
         elif detected_faults:
             verdict = "defect_detected"
+        elif untriggered_faults:
+            verdict = "not_triggered"
         elif failing:
             verdict = "rule_failure"
         elif not agent_report.coverage.met:
@@ -341,7 +355,14 @@ class AgentWebRunManager:
             "triggered": bool(triggers),
             "trigger_detail": triggers[0].detail if triggers else None,
             "trigger_details": [
-                {"fault_id": item.fault_id, "detail": item.detail} for item in triggers
+                {
+                    "fault_id": item.fault_id,
+                    "detail": item.detail,
+                    "battle_index": item.battle_index,
+                    "turn": item.turn,
+                    "opportunity": item.opportunity,
+                }
+                for item in triggers
             ],
             "selected_faults": selected_faults,
             "detected_faults": detected_faults,
@@ -368,6 +389,18 @@ class AgentWebRunManager:
             result=result,
             reports={
                 "skill": skill,
+                "lab": {
+                    "seed": config["seed"],
+                    "battle_count": config.get("battle_count", 1),
+                    "selection_mode": config["fault_selection_mode"],
+                    "timing_mode": config["fault_timing_mode"],
+                    "selected_faults": selected_faults,
+                    "fault_schedule": config["fault_schedule"],
+                    "trigger_details": result["trigger_details"],
+                    "detected_faults": detected_faults,
+                    "untriggered_faults": untriggered_faults,
+                    "verdict": verdict,
+                },
                 "agent": agent_report.model_dump(mode="json"),
                 "run": run_report.model_dump(mode="json"),
                 "replay": replay.model_dump(mode="json"),

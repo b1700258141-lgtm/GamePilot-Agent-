@@ -90,11 +90,18 @@ function faultLabel(config) {
   return `${config.fault_selection_mode === "random" ? "随机：" : "指定："}${faults.map((fault) => defectNames[fault] || fault).join("、")}`;
 }
 
+function faultScheduleLabel(config) {
+  const faults = selectedFaults(config);
+  if (!faults.length) return "无";
+  if (!config.fault_schedule) return "旧报告未记录";
+  return faults.map((fault) => `${defectNames[fault] || fault}：第 ${config.fault_schedule[fault]} 个候选节点`).join("；");
+}
+
 function updateDefectHint() {
   const faults = checkedFaults();
   agentEl("agent-defect-hint").textContent = faults.length
-    ? `已指定 ${faults.length} 种缺陷：每种都会被植入本次隔离战斗；是否实际触发取决于战斗动作。`
-    : `不勾选时：${100 - randomFaultPercent}% 不注入缺陷，${randomFaultPercent}% 随机注入一种；同一 seed 结果固定。`;
+    ? `已指定 ${faults.length} 种缺陷：每种按 seed 安排生效节点，不固定在首次机会；未走到该节点则记为未触发。`
+    : `不勾选时：${100 - randomFaultPercent}% 不注入缺陷，${randomFaultPercent}% 随机注入一种；出现时也按 seed 安排生效节点。`;
 }
 
 function updateProviderFields() {
@@ -286,8 +293,12 @@ function resultReason(run) {
   const stop = result.stop_detail ? ` ${result.stop_detail}` : "";
   const earlyStop = result.goal_met ? "" : "检出缺陷后测试已停止，因此完整目标覆盖显示未满足。";
   switch (result.verdict) {
-    case "defect_detected":
-      return `已检出 ${detectedFaults(run).map((fault) => defectNames[fault]).join("、")}；独立规则 ${result.target_rules_hit.join("、")} 失败。${earlyStop}`;
+    case "defect_detected": {
+      const pending = result.untriggered_faults?.length
+        ? `另有 ${result.untriggered_faults.map((fault) => defectNames[fault]).join("、")} 尚未到生效节点。`
+        : "";
+      return `已检出 ${detectedFaults(run).map((fault) => defectNames[fault]).join("、")}；独立规则 ${result.target_rules_hit.join("、")} 失败。${pending}${earlyStop}`;
+    }
     case "rule_failure":
       return `独立规则 ${result.failing_rules.join("、")} 失败；请查看动作详情中的期望与实际。${stop}`;
     case "agent_missed":
@@ -295,7 +306,7 @@ function resultReason(run) {
     case "goal_incomplete":
       return `测试目标尚未覆盖。${stop}`;
     case "not_triggered":
-      return `未实际触发：${(result.untriggered_faults || selectedFaults(run.config)).map((fault) => defectNames[fault]).join("、")}。已植入规则变异，但本次动作未走到触发条件；不能据此判断 Agent 漏检。${stop}`;
+      return `未实际触发：${(result.untriggered_faults || selectedFaults(run.config)).map((fault) => defectNames[fault]).join("、")}。本次未走到预定的候选节点；不能据此判断 Agent 漏检。${stop}`;
     case "execution_error":
       return result.replay_outcome !== "match"
         ? `无模型重放结果为 ${result.replay_outcome}，本次测试不能判定通过。${stop}`
@@ -322,13 +333,20 @@ function renderResult(run) {
     ? `${name}：${detectedFaults(run).map((fault) => defectNames[fault]).join("、")}` : name;
   agentEl("agent-result-reason").textContent = resultReason(run);
   addFact("缺陷选择", faultLabel(run.config));
+  addFact("计划生效节点", faultScheduleLabel(run.config));
   addFact("目标覆盖", result.goal_met ? "已满足" : "未满足");
   const triggerDetails = result.trigger_details || (result.triggered
     ? [{ fault_id: selectedFaults(run.config)[0] }] : []);
   addFact("缺陷触发", triggerDetails.length
-    ? triggerDetails.map((item) => defectNames[item.fault_id] || item.fault_id).join("、") : "未触发");
+    ? triggerDetails.map((item) => {
+      const name = defectNames[item.fault_id] || item.fault_id;
+      return item.battle_index == null ? name
+        : `${name}（第 ${item.battle_index} 场、回合 ${item.turn}）`;
+    }).join("、") : "未触发");
   addFact("已检出缺陷", detectedFaults(run).length
     ? detectedFaults(run).map((fault) => defectNames[fault]).join("、") : "无");
+  addFact("未触发缺陷", result.untriggered_faults?.length
+    ? result.untriggered_faults.map((fault) => defectNames[fault]).join("、") : "无");
   addFact("规则失败", result.failing_rules.length ? result.failing_rules.join("、") : "无");
   addFact("无模型重放", result.replay_outcome === "match" ? "一致" : result.replay_outcome);
   const usage = result.usage;

@@ -133,3 +133,81 @@ def test_level_anomaly_covers_premature_and_missing_upgrade(seed: int, expected_
     defeat_current(session)
     assert session.snapshot().player.level == expected_level
     assert recorder.get("test") is not None
+
+
+def test_seeded_potion_fault_skips_first_eligible_action_then_replays() -> None:
+    def run() -> tuple[list[int], object, object]:
+        recorder = TriggerRecorder()
+        session = LabCombatSession(
+            session_id="timed",
+            seed=42,
+            battle_count=2,
+            profile=resolve_profile("normal"),
+            fault_ids=frozenset({"potion_not_consumed"}),
+            timing_mode="seeded",
+            recorder=recorder,
+        )
+        potions = []
+        session.use_potion()
+        potions.append(session.snapshot().player.potions)
+        assert recorder.get("timed") is None
+        session.use_potion()
+        potions.append(session.snapshot().player.potions)
+        return potions, recorder.get("timed"), session.snapshot()
+
+    first = run()
+    assert first[0] == [2, 2]
+    assert first[1].fault_id == "potion_not_consumed"
+    assert (first[1].battle_index, first[1].turn, first[1].opportunity) == (1, 2, 2)
+    assert run() == first
+
+
+def test_seeded_loot_fault_can_first_appear_in_second_battle() -> None:
+    recorder = TriggerRecorder()
+    session = LabCombatSession(
+        session_id="timed-loot",
+        seed=5,
+        battle_count=2,
+        profile=resolve_profile("normal"),
+        fault_ids=frozenset({"loot_anomaly"}),
+        timing_mode="seeded",
+        recorder=recorder,
+    )
+    defeat_current(session)
+    first_exp = [e.value for e in session.snapshot().events if e.item == "exp"]
+    assert first_exp == [10]
+    assert recorder.get("timed-loot") is None
+    session.next_battle()
+    defeat_current(session)
+    exp = [e.value for e in session.snapshot().events if e.item == "exp"]
+    assert exp == [10, 17]
+    trigger = recorder.get("timed-loot")
+    assert (trigger.battle_index, trigger.opportunity) == (2, 2)
+
+
+def test_gold_fault_does_not_count_troll_without_gold_as_trigger() -> None:
+    recorder = TriggerRecorder()
+    session = LabCombatSession(
+        session_id="troll-gold",
+        seed=96,
+        profile=resolve_profile("loot_anomaly"),
+        timing_mode="seeded",
+        recorder=recorder,
+    )
+    assert session.snapshot().enemy_type == "troll"
+    assert session._drop_reward() is None
+    assert recorder.get("troll-gold") is None
+
+
+def test_seeded_gold_fault_can_add_invalid_item_to_troll_drop() -> None:
+    recorder = TriggerRecorder()
+    session = LabCombatSession(
+        session_id="troll-stone",
+        seed=8,
+        profile=resolve_profile("loot_anomaly"),
+        timing_mode="seeded",
+        recorder=recorder,
+    )
+    assert session.snapshot().enemy_type == "troll"
+    assert session._drop_reward() == ("stone", 1)
+    assert recorder.get("troll-stone") is not None

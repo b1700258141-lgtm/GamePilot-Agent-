@@ -26,7 +26,7 @@ docker compose -f compose.local.yaml up --build
 `./scripts/start_local_with_model.ps1`：脚本优先使用 `GAMEPILOT_AGENT_API_KEY`，
 也接受指向 DeepSeek Anthropic 入口的 `ANTHROPIC_AUTH_TOKEN`，只在此次启动时
 转发给 WSL Docker；已有镜像无需重建，需要重建时加 `-Build`。每次网页运行
-最多 20 次模型调用、20 次动作，每次请求最多 512 输出 Token；输入 Token 和
+最多 50 次模型调用、50 次动作，每次请求最多 512 输出 Token；输入 Token 和
 金额无硬上限，费用无可靠单价时为 unknown。网页真实模式已完成一次单格
 验证，记录见 `docs/validation/AGENT-WEB-REAL-SMOKE-20261013.md`。
 

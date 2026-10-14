@@ -18,6 +18,8 @@
 是无效值，靶场也只使用内存，不会创建数据库 Engine。
 """
 
+from typing import Literal
+
 from fastapi import FastAPI
 
 from gamepilot.api.errors import register_exception_handlers
@@ -40,6 +42,7 @@ def create_lab_app(
     *,
     recorder: TriggerRecorder | None = None,
     fault_ids: frozenset[str] | None = None,
+    timing_mode: Literal["immediate", "seeded"] = "immediate",
 ) -> FastAPI:
     """创建一个只跑指定 profile 的靶场应用。
 
@@ -60,12 +63,13 @@ def create_lab_app(
     # 与正常服务的内存后端一致；公共 /ready 路由需要此探针。
     app.state.readiness_probe = lambda: None
     app.state.session_factory = make_session_factory(
-        resolved, trigger_recorder, fault_ids=fault_ids
+        resolved, trigger_recorder, fault_ids=fault_ids, timing_mode=timing_mode
     )
     # 下面两项只供宿主（CLI、评测器、测试）自省，不参与任何 HTTP 响应，
     # 也不出现在 OpenAPI 文档里；正常服务的应用没有这两个属性。
     app.state.lab_profile = resolved
     app.state.lab_fault_ids = fault_ids
+    app.state.lab_timing_mode = timing_mode
     app.state.trigger_recorder = trigger_recorder
     register_exception_handlers(app)
     app.include_router(router)

@@ -4,7 +4,7 @@ import pytest
 
 from gamepilot.domain.combat import create_combat_session
 from gamepilot.lab.profiles import FAULT_IDS
-from gamepilot.lab.selection import select_faults
+from gamepilot.lab.selection import activation_opportunity, select_faults
 
 
 def test_seeded_selection_is_reproducible_and_has_at_least_sixty_percent_clean_seeds() -> None:
@@ -23,6 +23,17 @@ def test_forced_faults_are_distinct_and_return_in_catalog_order() -> None:
         select_faults(42, (FAULT_IDS[0], FAULT_IDS[0]))
     with pytest.raises(ValueError):
         select_faults(42, ("not_a_fault",))
+
+
+def test_seeded_activation_can_delay_each_fault_without_changing_selection() -> None:
+    for fault_id in FAULT_IDS:
+        targets = [activation_opportunity(seed, 6, fault_id) for seed in range(100)]
+        assert targets == [activation_opportunity(seed, 6, fault_id) for seed in range(100)]
+        assert all(1 <= target <= 6 for target in targets)
+        assert any(target > 1 for target in targets)
+    assert activation_opportunity(42, 2, "potion_not_consumed") == 2
+    with pytest.raises(ValueError):
+        activation_opportunity(42, 2, "not_a_fault")
 
 
 def test_clean_six_battle_seeds_can_reach_a_terminal_state_within_action_budget() -> None:
