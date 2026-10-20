@@ -5,7 +5,12 @@ const STORAGE_KEY = "gamepilot:last-session-id";
 const $ = (id) => document.getElementById(id);
 let snapshot = null;
 let busy = false;
-const enemyNames = { slime: "史莱姆", goblin: "哥布林", troll: "巨魔" };
+const enemyNames = {
+  slime: "史莱姆", goblin: "哥布林", skeleton: "骷髅", wolf: "野狼",
+  orc: "兽人", troll: "巨魔", wraith: "幽灵", dragon: "巨龙",
+};
+const spellCosts = { "cast-spark-button": 20, "cast-flame-button": 40,
+  "cast-meteor-button": 70, "cast-heal-button": 30 };
 
 function feedback(message, kind = "success") {
   const node = $("feedback");
@@ -43,9 +48,16 @@ function controls() {
   $("battle-count-input").disabled = busy;
   $("session-input").disabled = busy;
   $("attack-button").disabled = busy || !active;
+  $("power-strike-button").disabled = busy || !active || !["v3", "v4", "v5"].includes(snapshot.ruleset) ||
+    snapshot.player.power_strike_cooldown > 0;
+  for (const [button, cost] of Object.entries(spellCosts)) {
+    $(button).disabled = busy || !active || !["v4", "v5"].includes(snapshot.ruleset) || snapshot.player.ep < cost;
+    $(button).title = !["v4", "v5"].includes(snapshot?.ruleset) ? "当前会话不支持魔法"
+      : snapshot.player.ep < cost ? `EP 不足，需要 ${cost} 点` : "魔法无冷却";
+  }
   $("potion-button").disabled = busy || !active || snapshot.player.potions < 1 ||
     (snapshot.ruleset === "v1" && snapshot.player.hp >= snapshot.player.max_hp);
-  $("next-battle-button").disabled = busy || snapshot?.ruleset !== "v3" ||
+  $("next-battle-button").disabled = busy || !["v3", "v4", "v5"].includes(snapshot?.ruleset) ||
     snapshot.status !== "won" || snapshot.battle_index >= snapshot.battle_count;
   $("refresh-button").disabled = busy || !snapshot;
   if (!snapshot) return;
@@ -65,6 +77,11 @@ function renderEvents(events) {
   $("no-events").hidden = events.length > 0;
   const descriptions = {
     attack: "玩家攻击",
+    power_strike: "玩家重击",
+    cast_spark: "玩家施放魔法飞弹",
+    cast_flame: "玩家施放火球",
+    cast_meteor: "玩家施放陨石",
+    cast_heal: "玩家施放治疗魔法",
     potion: "玩家使用药水",
     retaliate: "敌人反击",
     drop: "击杀掉落",
@@ -87,7 +104,7 @@ function renderEvents(events) {
       ? `+${event.value} ${event.item === "gold" ? "金币" : event.item === "exp" ? "经验" : event.item || "物品"}`
       : event.kind === "level_up" ? `Lv.${event.value}`
       : event.kind === "next_battle" ? `第 ${event.value} 场`
-      : event.kind === "potion" && snapshot?.ruleset !== "v1"
+      : (event.kind === "potion" && snapshot?.ruleset !== "v1") || event.kind === "cast_heal"
         ? `效力 ${event.value} · 实际 +${Math.max(0, event.player_hp - (events[events.indexOf(event) - 1]?.player_hp ?? 100))}`
         : `${event.kind === "potion" ? "+" : "−"}${event.value}`;
     item.append(summary, value);
@@ -124,7 +141,17 @@ function render(next) {
   $("potions-value").textContent = next.player.potions;
   $("gold-value").textContent = next.player.gold ?? 0;
   $("player-level-value").textContent = next.player.level ?? 1;
-  $("player-exp-value").textContent = `${next.player.exp ?? 0} / 15`;
+  $("player-exp-value").textContent = `${next.player.exp ?? 0} / ${next.ruleset === "v5" ? 15 * next.player.level : 15}`;
+  $("player-ep-value").textContent = `${next.player.ep ?? 100} / ${next.player.max_ep ?? 100}`;
+  $("player-ep-progress").max = next.player.max_ep ?? 100;
+  $("player-ep-progress").value = next.player.ep ?? 100;
+  $("player-magic-value").textContent = next.player.magic ?? 10;
+  const cooldown = next.player.power_strike_cooldown ?? 0;
+  $("skill-status").textContent = !["v3", "v4", "v5"].includes(next.ruleset)
+    ? "重击：旧规则会话不可用"
+    : cooldown > 0
+      ? `重击：还需 ${cooldown} 次其他战斗动作（攻击、药水或魔法）`
+      : "重击：可用；比普通攻击多 12 点伤害，使用后冷却 2 次动作";
   $("enemy-level-value").textContent = next.enemy_level ?? 1;
   $("raw-json").textContent = JSON.stringify(next, null, 2);
   renderEvents(next.events);
@@ -178,6 +205,11 @@ $("load-form").addEventListener("submit", (event) => {
 
 for (const [button, action, label] of [
   ["attack-button", "attack", "攻击"],
+  ["power-strike-button", "power_strike", "重击"],
+  ["cast-spark-button", "cast_spark", "魔法飞弹"],
+  ["cast-flame-button", "cast_flame", "火球"],
+  ["cast-meteor-button", "cast_meteor", "陨石"],
+  ["cast-heal-button", "cast_heal", "治疗魔法"],
   ["potion-button", "use_potion", "使用药水"],
   ["next-battle-button", "next_battle", "进入下一场"],
 ]) {

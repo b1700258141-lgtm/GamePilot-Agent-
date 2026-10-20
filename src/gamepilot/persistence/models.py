@@ -33,8 +33,20 @@ from .database import Base
 
 # 与领域枚举保持一致的取值集合，通过检查约束在数据库层兜底。
 SESSION_STATUSES = ("active", "won", "lost")
-EVENT_ACTORS = ("player", "slime", "goblin", "troll")
-EVENT_KINDS = ("attack", "potion", "retaliate", "drop", "level_up", "next_battle")
+EVENT_ACTORS = ("player", "slime", "goblin", "skeleton", "wolf", "orc", "troll", "wraith", "dragon")
+EVENT_KINDS = (
+    "attack",
+    "power_strike",
+    "cast_spark",
+    "cast_flame",
+    "cast_meteor",
+    "cast_heal",
+    "potion",
+    "retaliate",
+    "drop",
+    "level_up",
+    "next_battle",
+)
 
 # 用于生成 IN (...) 检查约束的取值列表；顺序固定，保证迁移可复现。
 _STATUS_LIST = ", ".join(f"'{value}'" for value in SESSION_STATUSES)
@@ -65,6 +77,9 @@ class GameSessionRow(Base):
     gold: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
     level: Mapped[int] = mapped_column(Integer, nullable=False, server_default="1")
     exp: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
+    ep: Mapped[int] = mapped_column(Integer, nullable=False, server_default="100")
+    max_ep: Mapped[int] = mapped_column(Integer, nullable=False, server_default="100")
+    magic: Mapped[int] = mapped_column(Integer, nullable=False, server_default="10")
     battle_count: Mapped[int] = mapped_column(Integer, nullable=False, server_default="1")
     battle_index: Mapped[int] = mapped_column(Integer, nullable=False, server_default="1")
     enemy_type: Mapped[str] = mapped_column(String(16), nullable=False, server_default="slime")
@@ -87,10 +102,18 @@ class GameSessionRow(Base):
         CheckConstraint("potions >= 0", name="ck_game_sessions_potions_non_negative"),
         CheckConstraint("gold >= 0", name="ck_game_sessions_gold_non_negative"),
         CheckConstraint(
-            "enemy_type IN ('slime', 'goblin', 'troll')", name="ck_game_sessions_enemy_type_valid"
+            "enemy_type IN ('slime', 'goblin', 'skeleton', 'wolf', "
+            "'orc', 'troll', 'wraith', 'dragon')",
+            name="ck_game_sessions_enemy_type_valid",
         ),
-        CheckConstraint("ruleset IN ('v1', 'v2', 'v3')", name="ck_game_sessions_ruleset_valid"),
+        CheckConstraint(
+            "ruleset IN ('v1', 'v2', 'v3', 'v4', 'v5')", name="ck_game_sessions_ruleset_valid"
+        ),
         CheckConstraint("level >= 1 AND exp >= 0", name="ck_game_sessions_level_exp_valid"),
+        CheckConstraint(
+            "max_ep >= 100 AND ep >= 0 AND ep <= max_ep AND magic >= 10",
+            name="ck_game_sessions_ep_magic_valid",
+        ),
         CheckConstraint(
             "battle_count BETWEEN 1 AND 6 AND battle_index BETWEEN 1 AND battle_count",
             name="ck_game_sessions_battle_range",

@@ -19,6 +19,7 @@ FAULT_POTION_NOT_CONSUMED = "potion_not_consumed"
 FAULT_RETALIATE_AFTER_DEATH = "retaliate_after_death"
 FAULT_LOOT_ANOMALY = "loot_anomaly"
 FAULT_LEVEL_ANOMALY = "level_anomaly"
+FAULT_SKILL_POWER_ANOMALY = "skill_power_anomaly"
 
 # 缺陷编号：与 profile 同名，评测清单用它标记「这一列属于哪个缺陷」。
 FAULT_IDS: tuple[str, ...] = (
@@ -27,9 +28,10 @@ FAULT_IDS: tuple[str, ...] = (
     FAULT_RETALIATE_AFTER_DEATH,
     FAULT_LOOT_ANOMALY,
     FAULT_LEVEL_ANOMALY,
+    FAULT_SKILL_POWER_ANOMALY,
 )
 
-# 合法 profile 全集：normal 在前，其后是三个单缺陷变体。
+# 合法 profile 全集：normal 在前，其后是各单缺陷变体。
 PROFILES: tuple[str, ...] = (PROFILE_NORMAL, *FAULT_IDS)
 
 
@@ -80,6 +82,11 @@ PROFILE_CATALOG: dict[str, FaultProfile] = {
         profile_id=FAULT_LEVEL_ANOMALY,
         fault_id=FAULT_LEVEL_ANOMALY,
         summary="经验达标后不升级，或经验未达标却提前升级",
+    ),
+    FAULT_SKILL_POWER_ANOMALY: FaultProfile(
+        profile_id=FAULT_SKILL_POWER_ANOMALY,
+        fault_id=FAULT_SKILL_POWER_ANOMALY,
+        summary="重击或伤害魔法的威力低于或高于规则范围（治疗魔法不造成伤害）",
     ),
 }
 

@@ -2,7 +2,7 @@
 
 白名单只有两项：
 
-- `perform_action(action)`：`action` 只能是 `attack` 或 `use_potion`；
+- `perform_action(action)`：`action` 只能是公开白名单中的战斗动作；
 - `finish(summary)`：申请结束；`summary` 只是模型自述，不是判定事实。
 
 每轮最多接受**一个**工具调用，且必须通过下面的校验才可能触发游戏请求。
@@ -41,9 +41,21 @@ PERFORM_ACTION_SCHEMA: dict[str, object] = {
         "properties": {
             "action": {
                 "type": "string",
-                "enum": ["attack", "use_potion", "next_battle"],
+                "enum": [
+                    "attack",
+                    "power_strike",
+                    "cast_spark",
+                    "cast_flame",
+                    "cast_meteor",
+                    "cast_heal",
+                    "use_potion",
+                    "next_battle",
+                ],
                 "description": (
                     "attack：攻击敌人，敌人存活时会反击；"
+                    "power_strike：重击，伤害较高，使用后冷却两次其他战斗动作；"
+                    "cast_spark/cast_flame/cast_meteor：分别消耗 20/40/70 EP 的伤害魔法；"
+                    "cast_heal：消耗 30 EP 治疗自己；魔法没有冷却；"
                     "use_potion：恢复 25 点生命（不超过上限）并消耗 1 瓶药水，随后敌人反击；"
                     "next_battle：当前场获胜且还有剩余场次时，进入下一场。"
                 ),
@@ -145,7 +157,7 @@ def validate_choice(
                 reason=REJECT_INVALID_ARGUMENTS,
                 detail=(
                     f"{TOOL_PERFORM_ACTION} 的参数不合法（{len(exc.errors())} 处）："
-                    "只接受 action=attack|use_potion|next_battle，不要附加其他字段。"
+                    "只接受工具定义列出的 action，不要附加其他字段。"
                 ),
                 tool=call.name,
                 tool_call_id=call.tool_call_id,

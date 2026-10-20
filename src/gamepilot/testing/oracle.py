@@ -16,12 +16,22 @@ from collections.abc import Sequence
 from .models import ActionStep, HttpObservation, RuleCheck, SnapshotView, normalize_snapshot
 from .rules import (
     ENEMY_DAMAGE_RANGES,
+    ENEMY_EXP,
+    ENEMY_GOLD,
+    ENEMY_LEVELS,
     ENEMY_MAX_HP,
+    EP_PER_LEVEL,
+    HEAL_SPELL_BASE,
+    HEAL_SPELL_COST,
+    INITIAL_EP,
+    INITIAL_MAGIC,
     INITIAL_POTIONS,
     PLAYER_DAMAGE_MAX,
     PLAYER_DAMAGE_MIN,
     PLAYER_MAX_HP,
     POTION_HEAL,
+    POWER_STRIKE_BONUS,
+    POWER_STRIKE_COOLDOWN,
     R_ATTACK_DAMAGE,
     R_ATTACK_HP_APPLY,
     R_BATTLE_ADVANCE,
@@ -29,6 +39,7 @@ from .rules import (
     R_CREATE_GET_IDENTICAL,
     R_CREATE_SEED,
     R_CREATE_STATUS,
+    R_EP_COST,
     R_EVENT_ACTOR_ORDER,
     R_EVENT_COUNT,
     R_EVENT_TURN,
@@ -47,6 +58,8 @@ from .rules import (
     R_LOOT_ITEM,
     R_LOOT_PRESENT,
     R_LOOT_RANGE,
+    R_MAGIC_GROWTH,
+    R_MAGIC_HEAL,
     R_NO_ACTION_AFTER_PLAYER_DEATH,
     R_NO_RETALIATE_ON_KILL,
     R_POTION_CAP,
@@ -55,9 +68,12 @@ from .rules import (
     R_REJECT_NO_STATE_CHANGE,
     R_RETALIATE_ONCE,
     R_RETALIATE_POTIONS_NULL,
+    R_SKILL_COOLDOWN,
+    R_SKILL_POWER,
     R_STATUS_CONSISTENT,
     R_TURN_INCREMENT,
     RULE_CATALOG,
+    SPELL_DAMAGE,
 )
 
 
@@ -70,6 +86,18 @@ def _fmt(value: object) -> str:
     if isinstance(value, dict):
         return "{" + ", ".join(f"{key}: {_fmt(item)}" for key, item in value.items()) + "}"
     return str(value)
+
+
+def _experience_outcome(level: int, exp: int, gained: int, ruleset: str) -> tuple[int, int]:
+    """独立按公开门槛计算升级次数与余量，不读取游戏实现。"""
+    remaining = exp + gained
+    levels = 0
+    threshold = 15 if ruleset != "v5" else 15 * level
+    while remaining >= threshold:
+        remaining -= threshold
+        levels += 1
+        threshold = 15 if ruleset != "v5" else 15 * (level + levels)
+    return levels, remaining
 
 
 def _equality_rule(rule_id: str, step: int | None, expected: object, actual: object) -> RuleCheck:
@@ -150,6 +178,10 @@ def check_initial_state(created: SnapshotView, fetched: SnapshotView) -> list[Ru
         _equality_rule(R_INIT_STATE, None, 0, created.player.gold),
         _equality_rule(R_INIT_STATE, None, 1, created.player.level),
         _equality_rule(R_INIT_STATE, None, 0, created.player.exp),
+        _equality_rule(R_INIT_STATE, None, INITIAL_EP, created.player.ep),
+        _equality_rule(R_INIT_STATE, None, INITIAL_EP, created.player.max_ep),
+        _equality_rule(R_INIT_STATE, None, INITIAL_MAGIC, created.player.magic),
+        _equality_rule(R_INIT_STATE, None, 0, created.player.power_strike_cooldown),
         _equality_rule(R_INIT_STATE, None, 1, created.battle_index),
         _boolean_rule(
             R_INIT_STATE,
@@ -161,7 +193,7 @@ def check_initial_state(created: SnapshotView, fetched: SnapshotView) -> list[Ru
         _equality_rule(
             R_INIT_STATE,
             None,
-            {"slime": 1, "goblin": 2, "troll": 5}.get(created.enemy_type),
+            ENEMY_LEVELS.get(created.enemy_type),
             created.enemy_level,
         ),
         _boolean_rule(
@@ -244,12 +276,14 @@ def check_step(
 
     if plan.action == "next_battle":
         checks.extend(_advance_checks(step, before, after, new_events))
-    elif plan.action == "attack":
-        checks.extend(_attack_checks(step, before, after, new_events))
-        if before.ruleset != "v3" or after.slime.hp != 0:
+    elif plan.action in ("attack", "power_strike", "cast_spark", "cast_flame", "cast_meteor"):
+        checks.extend(_attack_checks(step, before, after, new_events, plan.action))
+        if before.ruleset not in ("v3", "v4", "v5") or after.slime.hp != 0:
             checks.append(
                 _equality_rule(R_ATTACK_HP_APPLY, step, before.player.potions, after.player.potions)
             )
+    elif plan.action == "cast_heal":
+        checks.extend(_heal_spell_checks(step, before, after, new_events))
     else:
         checks.extend(_potion_checks(step, before, new_events))
         checks.append(
@@ -257,6 +291,9 @@ def check_step(
                 R_POTION_DECREMENTS, step, before.player.potions - 1, after.player.potions
             )
         )
+
+    if plan.action != "next_battle":
+        checks.extend(_resource_checks(step, plan.action, before, after))
 
     events_in_bounds = all(
         0 <= event.player_hp <= after.player.max_hp
@@ -279,10 +316,10 @@ def check_step(
 
 
 def _attack_checks(
-    step: int, before: SnapshotView, after: SnapshotView, new_events: Sequence
+    step: int, before: SnapshotView, after: SnapshotView, new_events: Sequence, action: str
 ) -> list[RuleCheck]:
-    if before.ruleset == "v3":
-        return _v3_attack_checks(step, before, after, new_events)
+    if before.ruleset in ("v3", "v4", "v5"):
+        return _v3_attack_checks(step, before, after, new_events, action)
     if not new_events:
         return [
             _boolean_rule(
@@ -370,26 +407,37 @@ def _attack_checks(
 
 
 def _v3_attack_checks(
-    step: int, before: SnapshotView, after: SnapshotView, new_events: Sequence
+    step: int, before: SnapshotView, after: SnapshotView, new_events: Sequence, action: str
 ) -> list[RuleCheck]:
     if not new_events:
         return [_boolean_rule(R_EVENT_COUNT, step, False, "至少一条攻击事件", "无事件")]
     attack = new_events[0]
     bonus = (before.player.level - 1) * 10
+    if action == "attack":
+        low, high = PLAYER_DAMAGE_MIN + bonus, PLAYER_DAMAGE_MAX + bonus
+        damage_rule = R_ATTACK_DAMAGE
+    elif action == "power_strike":
+        low = PLAYER_DAMAGE_MIN + bonus + POWER_STRIKE_BONUS
+        high = PLAYER_DAMAGE_MAX + bonus + POWER_STRIKE_BONUS
+        damage_rule = R_SKILL_POWER
+    else:
+        base_low, base_high = SPELL_DAMAGE[action][1]
+        low, high = base_low + before.player.magic, base_high + before.player.magic
+        damage_rule = R_SKILL_POWER
     defeated = attack.slime_hp == 0
     checks = [
         _boolean_rule(
             R_EVENT_ACTOR_ORDER,
             step,
-            attack.actor == "player" and attack.kind == "attack",
-            "首条事件为玩家攻击",
+            attack.actor == "player" and attack.kind == action,
+            f"首条事件为玩家 {action}",
             f"{attack.actor}/{attack.kind}",
         ),
         _boolean_rule(
-            R_ATTACK_DAMAGE,
+            damage_rule,
             step,
-            PLAYER_DAMAGE_MIN + bonus <= attack.value <= PLAYER_DAMAGE_MAX + bonus,
-            f"伤害在 {PLAYER_DAMAGE_MIN + bonus}～{PLAYER_DAMAGE_MAX + bonus}",
+            low <= attack.value <= high,
+            f"伤害在 {low}～{high}",
             str(attack.value),
         ),
         _boolean_rule(
@@ -427,12 +475,16 @@ def _v3_attack_checks(
         )
     )
     drops = [event for event in new_events[1:] if event.kind == "drop"]
-    gold_expected = before.enemy_type in ("slime", "goblin")
+    gold_expected = (
+        before.enemy_type in ENEMY_GOLD
+        if before.ruleset in ("v4", "v5")
+        else before.enemy_type in ("slime", "goblin")
+    )
     gold_drops = [event for event in drops if event.item != "exp"]
     checks.append(_equality_rule(R_LOOT_PRESENT, step, int(gold_expected), len(gold_drops)))
     if gold_drops:
         gold = gold_drops[0]
-        low, high = (1, 3) if before.enemy_type == "slime" else (10, 20)
+        low, high = ENEMY_GOLD.get(before.enemy_type, (10, 20))
         checks.extend(
             [
                 _equality_rule(R_LOOT_ITEM, step, "gold", gold.item),
@@ -449,7 +501,7 @@ def _v3_attack_checks(
     checks.append(
         _equality_rule(R_LOOT_BALANCE, step, before.player.gold + expected_gold, after.player.gold)
     )
-    exp_expected = {"slime": 10, "goblin": 30, "troll": 60}[before.enemy_type]
+    exp_expected = ENEMY_EXP[before.enemy_type]
     exp_drops = [event for event in drops if event.item == "exp"]
     checks.append(
         _boolean_rule(
@@ -460,9 +512,9 @@ def _v3_attack_checks(
             str([(event.item, event.value) for event in drops]),
         )
     )
-    total_exp = before.player.exp + exp_expected
-    levels = total_exp // 15
-    remainder = total_exp % 15
+    levels, remainder = _experience_outcome(
+        before.player.level, before.player.exp, exp_expected, before.ruleset
+    )
     level_events = [event for event in new_events[1:] if event.kind == "level_up"]
     checks.extend(
         [
@@ -478,6 +530,21 @@ def _v3_attack_checks(
                 after.player.hp,
             ),
             _equality_rule(R_LEVEL_UP, step, before.player.potions + levels, after.player.potions),
+            *(
+                [
+                    _equality_rule(
+                        R_MAGIC_GROWTH,
+                        step,
+                        before.player.max_ep + EP_PER_LEVEL * levels,
+                        after.player.max_ep,
+                    ),
+                    _equality_rule(
+                        R_MAGIC_GROWTH, step, before.player.magic + 5 * levels, after.player.magic
+                    ),
+                ]
+                if before.ruleset in ("v4", "v5")
+                else []
+            ),
             _equality_rule(
                 R_LEVEL_UP,
                 step,
@@ -530,7 +597,7 @@ def _advance_checks(
             and after.battle_index == before.battle_index + 1
             and after.battle_count == before.battle_count
             and after.slime.hp == enemy_hp == after.slime.max_hp
-            and after.enemy_level == {"slime": 1, "goblin": 2, "troll": 5}.get(after.enemy_type),
+            and after.enemy_level == ENEMY_LEVELS.get(after.enemy_type),
             "下一场开始，敌人按固定属性满血登场",
             str(after.battle_index),
         ),
@@ -589,6 +656,87 @@ def _potion_checks(step: int, before: SnapshotView, new_events: Sequence) -> lis
     ]
     # 喝药的反击按「治疗之后」的 HP 计算，不能拿动作前的 HP 算。
     checks.extend(_retaliate_checks(step, before, new_events, previous_hp=potion.player_hp))
+    return checks
+
+
+def _heal_spell_checks(
+    step: int, before: SnapshotView, after: SnapshotView, new_events: Sequence
+) -> list[RuleCheck]:
+    if not new_events:
+        return [_boolean_rule(R_EVENT_COUNT, step, False, "治疗魔法事件", "无事件")]
+    spell = new_events[0]
+    power = HEAL_SPELL_BASE + before.player.magic
+    healed = min(power, before.player.max_hp - before.player.hp)
+    checks = [
+        _equality_rule(R_EVENT_COUNT, step, 2, len(new_events)),
+        _boolean_rule(
+            R_EVENT_ACTOR_ORDER,
+            step,
+            spell.actor == "player" and spell.kind == "cast_heal",
+            "首条事件为玩家治疗魔法",
+            f"{spell.actor}/{spell.kind}",
+        ),
+        _boolean_rule(
+            R_MAGIC_HEAL,
+            step,
+            spell.value == power
+            and spell.player_hp == before.player.hp + healed
+            and spell.slime_hp == before.slime.hp
+            and spell.potions == before.player.potions,
+            f"威力 {power}，实际回血 {healed}，敌人和药水不变",
+            f"威力 {spell.value}，事件生命 {spell.player_hp}",
+        ),
+        _equality_rule(R_BATTLE_ADVANCE, step, before.battle_index, after.battle_index),
+    ]
+    checks.extend(_retaliate_checks(step, before, new_events, previous_hp=spell.player_hp))
+    return checks
+
+
+def _resource_checks(
+    step: int, action: str, before: SnapshotView, after: SnapshotView
+) -> list[RuleCheck]:
+    cooldown = (
+        POWER_STRIKE_COOLDOWN
+        if action == "power_strike"
+        else max(0, before.player.power_strike_cooldown - 1)
+        if before.ruleset in ("v3", "v4", "v5")
+        else 0
+    )
+    checks = [_equality_rule(R_SKILL_COOLDOWN, step, cooldown, after.player.power_strike_cooldown)]
+    if before.ruleset not in ("v4", "v5"):
+        checks.extend(
+            [
+                _equality_rule(R_EP_COST, step, before.player.ep, after.player.ep),
+                _equality_rule(R_MAGIC_GROWTH, step, before.player.magic, after.player.magic),
+            ]
+        )
+        return checks
+    cost = (
+        HEAL_SPELL_COST
+        if action == "cast_heal"
+        else SPELL_DAMAGE[action][0]
+        if action in SPELL_DAMAGE
+        else 0
+    )
+    defeated = action in ("attack", "power_strike", *SPELL_DAMAGE) and after.slime.hp == 0
+    levels = (
+        _experience_outcome(
+            before.player.level, before.player.exp, ENEMY_EXP[before.enemy_type], before.ruleset
+        )[0]
+        if defeated
+        else 0
+    )
+    expected_max_ep = before.player.max_ep + EP_PER_LEVEL * levels
+    expected_ep = expected_max_ep if levels else before.player.ep - cost
+    checks.extend(
+        [
+            _equality_rule(R_EP_COST, step, expected_ep, after.player.ep),
+            _equality_rule(R_MAGIC_GROWTH, step, expected_max_ep, after.player.max_ep),
+            _equality_rule(
+                R_MAGIC_GROWTH, step, before.player.magic + 5 * levels, after.player.magic
+            ),
+        ]
+    )
     return checks
 
 
@@ -675,7 +823,7 @@ def _invariant_checks(step: int, before: SnapshotView, after: SnapshotView) -> l
         _equality_rule(R_INVARIANTS, step, before.seed, after.seed),
         *(
             []
-            if before.ruleset == "v3"
+            if before.ruleset in ("v3", "v4", "v5")
             else [
                 _equality_rule(R_INVARIANTS, step, before.player.max_hp, after.player.max_hp),
                 _equality_rule(R_INVARIANTS, step, before.slime.max_hp, after.slime.max_hp),
@@ -699,7 +847,10 @@ def _invariant_checks(step: int, before: SnapshotView, after: SnapshotView) -> l
             R_INVARIANTS,
             step,
             0 <= after.player.potions
-            and (before.ruleset == "v3" or after.player.potions <= before.player.potions),
+            and (
+                before.ruleset in ("v3", "v4", "v5")
+                or after.player.potions <= before.player.potions
+            ),
             "药水非负，旧规则下只减不增",
             str(after.player.potions),
         ),
@@ -709,6 +860,13 @@ def _invariant_checks(step: int, before: SnapshotView, after: SnapshotView) -> l
             after.player.level >= 1 and after.player.exp >= 0,
             "等级至少1且经验非负",
             f"等级{after.player.level}经验{after.player.exp}",
+        ),
+        _boolean_rule(
+            R_INVARIANTS,
+            step,
+            0 <= after.player.ep <= after.player.max_ep and after.player.magic >= INITIAL_MAGIC,
+            "EP 在 [0, max_ep] 且魔力不少于初始值",
+            f"EP {after.player.ep}/{after.player.max_ep}，魔力 {after.player.magic}",
         ),
     ]
     return checks

@@ -102,6 +102,10 @@
                   <p>剩余药水 <strong id="potions-value">—</strong> 瓶</p>
                   <p>金币 <strong id="gold-value">—</strong></p>
                   <p>等级 <strong id="player-level-value">1</strong> · 经验 <strong id="player-exp-value">0 / 15</strong></p>
+                  <label for="player-ep-progress">EP <strong id="player-ep-value">100 / 100</strong></label>
+                  <progress id="player-ep-progress" max="100" value="100" aria-label="玩家法力值"></progress>
+                  <p>魔力 <strong id="player-magic-value">10</strong></p>
+                  <p id="skill-status">重击：可用</p>
                 </section>
                 <section class="fighter" aria-labelledby="slime-heading">
                   <div class="fighter-title"><h3 id="slime-heading">史莱姆</h3><strong id="slime-hp">—</strong></div>
@@ -113,6 +117,11 @@
 
               <div class="action-row" aria-label="战斗动作">
                 <button id="attack-button" class="button button-primary" type="button" disabled>攻击</button>
+                <button id="power-strike-button" class="button button-secondary" type="button" aria-describedby="skill-status" disabled>重击</button>
+                <button id="cast-spark-button" class="button button-secondary" type="button" disabled>魔法飞弹 · 20 EP</button>
+                <button id="cast-flame-button" class="button button-secondary" type="button" disabled>火球 · 40 EP</button>
+                <button id="cast-meteor-button" class="button button-secondary" type="button" disabled>陨石 · 70 EP</button>
+                <button id="cast-heal-button" class="button button-secondary" type="button" disabled>治疗魔法 · 30 EP</button>
                 <button id="potion-button" class="button button-secondary" type="button" disabled>使用药水</button>
                 <button id="next-battle-button" class="button button-secondary" type="button" disabled>进入下一场</button>
                 <button id="refresh-button" class="button button-quiet" type="button" disabled>刷新状态</button>
@@ -147,9 +156,9 @@
               <form id="agent-form">
                 <label for="agent-skill">战斗 skill</label>
                 <select id="agent-skill" name="skill_id">
-                  <option value="injured-potion-then-attack">受伤喝药，随后持续攻击</option>
+                  <option value="injured-potion-then-attack">开局喝药、战技优先、伤害魔法循环</option>
                 </select>
-                <p id="agent-skill-hint" class="helper field-helper">默认策略：开局满血喝药，受伤后补药，持续攻击；当前场获胜后进入下一场，最终终态再验证一次行动限制。</p>
+                <p id="agent-skill-hint" class="helper field-helper">默认策略：开局满血喝药、半血以下补药；伤害动作优先重击，冷却时按陨石→火球→魔法飞弹循环，EP 不足时普通攻击；终态后再验证一次行动限制。</p>
                 <label for="agent-skill-upload">上传自定义 skill（Markdown 或纯文本）</label>
                 <input id="agent-skill-upload" type="file" accept=".md,.txt,text/markdown,text/plain" aria-describedby="agent-upload-hint" />
                 <p id="agent-upload-hint" class="helper field-helper">文件最多 4,000 字符，上传后可选择。自定义策略由真实模型执行；上传内容不会作为程序代码运行。</p>
@@ -171,6 +180,7 @@
                   <label class="check-row"><input class="agent-force-fault" type="checkbox" value="potion_not_consumed" />喝药不消耗药水</label>
                   <label class="check-row"><input class="agent-force-fault" type="checkbox" value="loot_anomaly" />掉落物品异常</label>
                   <label class="check-row"><input class="agent-force-fault" type="checkbox" value="level_anomaly" />玩家升级异常</label>
+                  <label class="check-row"><input class="agent-force-fault" type="checkbox" value="skill_power_anomaly" />技能威力异常</label>
                 </fieldset>
                 <p id="agent-defect-hint" class="goal-guidance" aria-live="polite">不勾选时：70% 不注入缺陷，30% 随机注入一种；出现时也按 seed 安排生效节点。</p>
 

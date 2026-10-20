@@ -19,9 +19,15 @@ from .rules import (
     CODE_BATTLE_NOT_WON,
     CODE_CAMPAIGN_COMPLETE,
     CODE_NO_POTIONS,
+    CODE_NOT_ENOUGH_EP,
     CODE_PLAYER_FULL_HP,
+    CODE_SKILL_COOLDOWN,
+    CODE_SKILL_UNAVAILABLE,
+    CODE_SPELL_UNAVAILABLE,
+    HEAL_SPELL_COST,
     HTTP_CONFLICT,
     HTTP_OK,
+    SPELL_DAMAGE,
 )
 
 
@@ -32,7 +38,7 @@ def derive_expectation(snapshot: SnapshotView, action: ActionName) -> ActionStep
     不使用敌人生命值或事件历史——后者与这三种拒绝条件的判定无关。
     """
     if action == "next_battle":
-        if snapshot.ruleset != "v3" or snapshot.status != "won":
+        if snapshot.ruleset not in ("v3", "v4", "v5") or snapshot.status != "won":
             return ActionStep(
                 action=action, expected_status=HTTP_CONFLICT, expected_code=CODE_BATTLE_NOT_WON
             )
@@ -48,6 +54,27 @@ def derive_expectation(snapshot: SnapshotView, action: ActionName) -> ActionStep
         )
     if action == "attack":
         return ActionStep(action=action, expected_status=HTTP_OK, expected_code=None)
+    if action == "power_strike":
+        if snapshot.ruleset not in ("v3", "v4", "v5"):
+            return ActionStep(
+                action=action, expected_status=HTTP_CONFLICT, expected_code=CODE_SKILL_UNAVAILABLE
+            )
+        if snapshot.player.power_strike_cooldown:
+            return ActionStep(
+                action=action, expected_status=HTTP_CONFLICT, expected_code=CODE_SKILL_COOLDOWN
+            )
+        return ActionStep(action=action, expected_status=HTTP_OK)
+    if action.startswith("cast_"):
+        if snapshot.ruleset not in ("v4", "v5"):
+            return ActionStep(
+                action=action, expected_status=HTTP_CONFLICT, expected_code=CODE_SPELL_UNAVAILABLE
+            )
+        cost = HEAL_SPELL_COST if action == "cast_heal" else SPELL_DAMAGE[action][0]
+        if snapshot.player.ep < cost:
+            return ActionStep(
+                action=action, expected_status=HTTP_CONFLICT, expected_code=CODE_NOT_ENOUGH_EP
+            )
+        return ActionStep(action=action, expected_status=HTTP_OK)
     # 旧规则下满血拒绝；新规则下药水效力固定，但实际回血截断到生命上限。
     if snapshot.ruleset == "v1" and snapshot.player.hp >= snapshot.player.max_hp:
         return ActionStep(

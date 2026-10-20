@@ -15,6 +15,7 @@ from gamepilot.lab.profiles import (
     FAULT_POTION_NOT_CONSUMED,
     FAULT_POTION_OVERHEAL,
     FAULT_RETALIATE_AFTER_DEATH,
+    FAULT_SKILL_POWER_ANOMALY,
     PROFILE_NORMAL,
 )
 from gamepilot.lab.selection import RANDOM_FAULT_PERCENT
@@ -40,6 +41,7 @@ class StartAgentTestRequest(BaseModel):
             FAULT_RETALIATE_AFTER_DEATH,
             FAULT_LOOT_ANOMALY,
             FAULT_LEVEL_ANOMALY,
+            FAULT_SKILL_POWER_ANOMALY,
         ]
         | None
     ) = None
@@ -50,8 +52,9 @@ class StartAgentTestRequest(BaseModel):
             FAULT_RETALIATE_AFTER_DEATH,
             FAULT_LOOT_ANOMALY,
             FAULT_LEVEL_ANOMALY,
+            FAULT_SKILL_POWER_ANOMALY,
         ]
-    ] = Field(default_factory=list, max_length=5)
+    ] = Field(default_factory=list, max_length=6)
     provider_mode: Literal["offline", "real"] = "offline"
     paid_ack: bool = False
 

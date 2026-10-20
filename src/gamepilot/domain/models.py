@@ -32,17 +32,35 @@ class PlayerState(CombatantState):
     gold: int = 0
     level: int = 1
     exp: int = 0
+    power_strike_cooldown: int = 0
+    ep: int = 100
+    max_ep: int = 100
+    magic: int = 10
 
 
-EventActor = Literal["player", "slime", "goblin", "troll"]
-EventKind = Literal["attack", "potion", "retaliate", "drop", "level_up", "next_battle"]
+EventActor = Literal[
+    "player", "slime", "goblin", "skeleton", "wolf", "orc", "troll", "wraith", "dragon"
+]
+EventKind = Literal[
+    "attack",
+    "power_strike",
+    "cast_spark",
+    "cast_flame",
+    "cast_meteor",
+    "cast_heal",
+    "potion",
+    "retaliate",
+    "drop",
+    "level_up",
+    "next_battle",
+]
 
 
 class CombatEvent(BaseModel):
     """一条结构化战斗事件，供后续 Agent 观察与缺陷报告消费。
 
     `value` 的含义取决于 `kind`：
-    - attack / retaliate：造成的伤害；
+    - attack / power_strike / retaliate：造成的伤害；
     - potion：v2 为固定药水效力 25；实际回血由动作前后 HP 计算，并受上限截断。
       v1 历史存档仍记录实际回血量。
 
@@ -68,8 +86,10 @@ class GameSnapshot(BaseModel):
     turn: int
     player: PlayerState
     slime: CombatantState
-    enemy_type: Literal["slime", "goblin", "troll"] = "slime"
-    ruleset: Literal["v1", "v2", "v3"] = "v3"
+    enemy_type: Literal[
+        "slime", "goblin", "skeleton", "wolf", "orc", "troll", "wraith", "dragon"
+    ] = "slime"
+    ruleset: Literal["v1", "v2", "v3", "v4", "v5"] = "v5"
     battle_count: int = 1
     battle_index: int = 1
     enemy_level: int = 1

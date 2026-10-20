@@ -98,14 +98,30 @@ CONTROL_SUITE = "agent-control"
 
 STATUS_PATTERN = re.compile(r"状态：(\S+)")
 PLAYER_PATTERN = re.compile(r"玩家：生命 (\d+)/(\d+)，药水 (\d+)")
-SLIME_PATTERN = re.compile(r"(?:史莱姆|哥布林|巨魔)：(?:等级 \d+，)?生命 (\d+)/(\d+)")
 BATTLE_PATTERN = re.compile(r"连战：第 (\d+)/(\d+) 场")
+RULESET_PATTERN = re.compile(r"规则集：(v[1-5])")
+EP_PATTERN = re.compile(r"EP (\d+)/(\d+)")
+COOLDOWN_PATTERN = re.compile(r"重击冷却 (\d+)")
+OFFENSIVE_SPELLS = (("cast_meteor", 70), ("cast_flame", 40), ("cast_spark", 20))
+SLIME_PATTERN = re.compile(
+    r"(?:史莱姆|哥布林|骷髅|野狼|兽人|巨魔|幽灵|巨龙)：(?:等级 \d+，)?生命 (\d+)/(\d+)"
+)
 
 
 class Observation:
     """从**渲染后的观测文本**里读出的公开快照。"""
 
-    __slots__ = ("status", "hp", "max_hp", "potions", "battle_index", "battle_count")
+    __slots__ = (
+        "status",
+        "hp",
+        "max_hp",
+        "potions",
+        "ep",
+        "power_strike_cooldown",
+        "ruleset",
+        "battle_index",
+        "battle_count",
+    )
 
     def __init__(
         self,
@@ -113,6 +129,9 @@ class Observation:
         hp: int,
         max_hp: int,
         potions: int,
+        ep: int = 100,
+        power_strike_cooldown: int = 0,
+        ruleset: str = "v3",
         battle_index: int = 1,
         battle_count: int = 1,
     ) -> None:
@@ -120,6 +139,9 @@ class Observation:
         self.hp = hp
         self.max_hp = max_hp
         self.potions = potions
+        self.ep = ep
+        self.power_strike_cooldown = power_strike_cooldown
+        self.ruleset = ruleset
         self.battle_index = battle_index
         self.battle_count = battle_count
 
@@ -134,6 +156,9 @@ def read_observation(content: str) -> Observation | None:
     player = PLAYER_PATTERN.search(content)
     slime = SLIME_PATTERN.search(content)
     battle = BATTLE_PATTERN.search(content)
+    ep = EP_PATTERN.search(content)
+    cooldown = COOLDOWN_PATTERN.search(content)
+    ruleset = RULESET_PATTERN.search(content)
     if status is None or player is None or slime is None:
         return None
     return Observation(
@@ -141,6 +166,9 @@ def read_observation(content: str) -> Observation | None:
         hp=int(player.group(1)),
         max_hp=int(player.group(2)),
         potions=int(player.group(3)),
+        ep=int(ep.group(1)) if ep else 100,
+        power_strike_cooldown=int(cooldown.group(1)) if cooldown else 0,
+        ruleset=ruleset.group(1) if ruleset else "v3",
         battle_index=int(battle.group(1)) if battle else 1,
         battle_count=int(battle.group(2)) if battle else 1,
     )
@@ -173,9 +201,10 @@ def observation_reacting_double(goal_id: str) -> ModelProvider:
     """
     probed = False
     opening_potion_used = False
+    next_spell_index = 0
 
     def respond(messages: Sequence[ChatMessage]) -> ModelReply:
-        nonlocal probed, opening_potion_used
+        nonlocal probed, opening_potion_used, next_spell_index
         step = sum(1 for item in messages if item.role == "assistant")
         observation = latest_observation(messages)
         if observation is None:
@@ -199,8 +228,17 @@ def observation_reacting_double(goal_id: str) -> ModelProvider:
             if not opening_potion_used and observation.potions > 0:
                 opening_potion_used = True
                 return _action("use_potion", step)
-            if observation.hp < observation.max_hp and observation.potions > 0:
+            if observation.hp * 2 <= observation.max_hp and observation.potions > 0:
                 return _action("use_potion", step)
+            if observation.ruleset in ("v4", "v5"):
+                if observation.power_strike_cooldown == 0:
+                    return _action("power_strike", step)
+                for offset in range(len(OFFENSIVE_SPELLS)):
+                    index = (next_spell_index + offset) % len(OFFENSIVE_SPELLS)
+                    spell, cost = OFFENSIVE_SPELLS[index]
+                    if observation.ep >= cost:
+                        next_spell_index = (index + 1) % len(OFFENSIVE_SPELLS)
+                        return _action(spell, step)
             return _action("attack", step)
         if goal_id == GOAL_FULL_HEALTH:
             if observation.hp >= observation.max_hp and not probed:

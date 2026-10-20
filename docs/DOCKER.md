@@ -21,11 +21,12 @@ docker compose -f compose.local.yaml up --build
 增加 `GAMEPILOT_API_PORT=18000`（保留其他已有配置），或在 WSL 终端设置变量。
 服务只映射 IPv4 回环地址；PostgreSQL 不映射宿主端口。
 镜像已包含 Agent 依赖，默认离线演练不调用付费模型。真实模式需要由服务端
-环境变量 `GAMEPILOT_AGENT_API_KEY` 提供密钥，网页还要求每次单独确认付费
-边界；不要将密钥写入仓库文件。若密钥已在 Windows 本机环境中，可运行
+环境变量 `GAMEPILOT_AGENT_API_KEY` 提供密钥。可将其保存在仓库根目录的本地
+`.env` 中；该文件已被 Git 忽略，Docker Compose 后续启动会自动传入。网页仍要求
+每次单独确认付费边界。若只想临时转发 Windows 本机环境中的密钥，可运行
 `./scripts/start_local_with_model.ps1`：脚本优先使用 `GAMEPILOT_AGENT_API_KEY`，
-也接受指向 DeepSeek Anthropic 入口的 `ANTHROPIC_AUTH_TOKEN`，只在此次启动时
-转发给 WSL Docker；已有镜像无需重建，需要重建时加 `-Build`。每次网页运行
+也接受指向 DeepSeek Anthropic 入口的 `ANTHROPIC_AUTH_TOKEN`；已有镜像无需重建，
+需要重建时加 `-Build`。每次网页运行
 最多 50 次模型调用、50 次动作，每次请求最多 512 输出 Token；输入 Token 和
 金额无硬上限，费用无可靠单价时为 unknown。网页真实模式已完成一次单格
 验证，记录见 `docs/validation/AGENT-WEB-REAL-SMOKE-20261013.md`。

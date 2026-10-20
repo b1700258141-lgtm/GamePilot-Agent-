@@ -16,7 +16,7 @@ def defeat_current(session: CombatSession) -> None:
 
 
 def test_goblin_awards_thirty_exp_and_two_sequential_levels() -> None:
-    session = create_combat_session(12)
+    session = CombatSession("v3-goblin", 12, ruleset="v3")
     assert session.snapshot().enemy_type == "goblin"
     defeat_current(session)
     snapshot = session.snapshot()
@@ -28,7 +28,7 @@ def test_goblin_awards_thirty_exp_and_two_sequential_levels() -> None:
 
 
 def test_slime_exp_carries_to_next_battle_without_resetting_player() -> None:
-    session = create_combat_session(4, battle_count=2)
+    session = CombatSession("v3-carry", 4, ruleset="v3", battle_count=2)
     assert session.snapshot().enemy_type == "slime"
     defeat_current(session)
     won = session.snapshot()
@@ -49,7 +49,7 @@ def test_slime_exp_carries_to_next_battle_without_resetting_player() -> None:
 
 
 def test_progressed_campaign_rebuilds_from_saved_events() -> None:
-    session = create_combat_session(4, battle_count=2)
+    session = CombatSession("v3-replay", 4, ruleset="v3", battle_count=2)
     defeat_current(session)
     session.next_battle()
     defeat_current(session)
@@ -68,7 +68,7 @@ def test_all_campaign_lengths_are_valid(battle_count: int) -> None:
 
 
 def test_six_battle_campaign_can_beat_troll_after_leveling() -> None:
-    session = create_combat_session(9, battle_count=6)
+    session = CombatSession("v3-six", 9, ruleset="v3", battle_count=6)
     enemies = []
     opening_potion_used = False
     actions = 0

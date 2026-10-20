@@ -1,6 +1,6 @@
 """规则规格：判定所用的数值与规则编号，独立于被测实现。
 
-当前数值来源是 `docs/BATTLE_RULES_V3.md`，
+当前数值来源是 `docs/BATTLE_RULES_V5.md`，
 不是 `gamepilot.domain.combat`：如果判定器导入被测实现的常量，
 就等于让被测代码生成自己的「正确答案」，缺陷会一起被搬进期望值里。
 
@@ -11,8 +11,8 @@
 """
 
 # 规则规格版本：数值或判定语义变化时必须递增，报告用它判断能否重跑比较。
-RULES_VERSION = "3.0.0"
-RULES_SOURCE = "docs/BATTLE_RULES_V3.md"
+RULES_VERSION = "5.0.0"
+RULES_SOURCE = "docs/BATTLE_RULES_V5.md"
 
 # 初始状态（规则文档「初始状态」）。
 PLAYER_MAX_HP = 100
@@ -20,6 +20,58 @@ SLIME_MAX_HP = 60
 INITIAL_POTIONS = 3
 ENEMY_MAX_HP = {"slime": 60, "goblin": 80, "troll": 170}
 ENEMY_DAMAGE_RANGES = {"slime": (12, 18), "goblin": (18, 27), "troll": (35, 45)}
+ENEMY_MAX_HP.update({"skeleton": 95, "wolf": 110, "orc": 135, "wraith": 210, "dragon": 280})
+ENEMY_DAMAGE_RANGES.update(
+    {
+        "skeleton": (20, 30),
+        "wolf": (24, 34),
+        "orc": (28, 38),
+        "wraith": (40, 52),
+        "dragon": (50, 65),
+    }
+)
+ENEMY_LEVELS = {
+    "slime": 1,
+    "goblin": 2,
+    "skeleton": 3,
+    "wolf": 4,
+    "orc": 4,
+    "troll": 5,
+    "wraith": 6,
+    "dragon": 8,
+}
+ENEMY_EXP = {
+    "slime": 10,
+    "goblin": 30,
+    "skeleton": 35,
+    "wolf": 40,
+    "orc": 50,
+    "troll": 60,
+    "wraith": 75,
+    "dragon": 100,
+}
+ENEMY_GOLD = {
+    "slime": (1, 3),
+    "goblin": (10, 20),
+    "skeleton": (4, 8),
+    "wolf": (6, 10),
+    "orc": (12, 20),
+    "wraith": (20, 30),
+    "dragon": (35, 50),
+}
+INITIAL_EP = 100
+INITIAL_MAGIC = 10
+EP_PER_LEVEL = 50
+MAGIC_PER_LEVEL = 5
+POWER_STRIKE_BONUS = 12
+POWER_STRIKE_COOLDOWN = 2
+SPELL_DAMAGE = {
+    "cast_spark": (20, (18, 24)),
+    "cast_flame": (40, (32, 40)),
+    "cast_meteor": (70, (50, 60)),
+}
+HEAL_SPELL_COST = 30
+HEAL_SPELL_BASE = 20
 
 # 数值范围（规则文档「初始状态」与「允许的动作」）。
 PLAYER_DAMAGE_MIN = 18
@@ -42,6 +94,10 @@ CODE_PLAYER_FULL_HP = "player_full_hp"
 CODE_NO_POTIONS = "no_potions"
 CODE_BATTLE_NOT_WON = "battle_not_won"
 CODE_CAMPAIGN_COMPLETE = "campaign_complete"
+CODE_SKILL_COOLDOWN = "skill_cooldown"
+CODE_SKILL_UNAVAILABLE = "skill_unavailable"
+CODE_SPELL_UNAVAILABLE = "spell_unavailable"
+CODE_NOT_ENOUGH_EP = "not_enough_ep"
 
 # 报告 schema 版本；重跑只接受明确支持的版本。
 SCHEMA_VERSION = "2.0"
@@ -95,6 +151,11 @@ R_LAST_EVENT_MATCHES_SNAPSHOT = "R-LAST-EVENT-MATCHES-SNAPSHOT"
 R_FINAL_STATUS = "R-FINAL-STATUS"
 R_CONTROL_MATCH = "R-CONTROL-MATCH"
 R_STEP_LIMIT = "R-STEP-LIMIT"
+R_SKILL_POWER = "R-SKILL-POWER"
+R_SKILL_COOLDOWN = "R-SKILL-COOLDOWN"
+R_EP_COST = "R-EP-COST"
+R_MAGIC_HEAL = "R-MAGIC-HEAL"
+R_MAGIC_GROWTH = "R-MAGIC-GROWTH"
 
 # rule_id → 规则含义。判定器只使用这里的编号，测试用它检查覆盖完整性。
 RULE_CATALOG: dict[str, str] = {
@@ -123,7 +184,7 @@ RULE_CATALOG: dict[str, str] = {
     R_LOOT_ITEM: "金币掉落的物品类型必须为 gold",
     R_LOOT_BALANCE: "金币余额按掉落数量增加",
     R_EXP_REWARD: "击杀后经验掉落与敌人类型一致",
-    R_EXP_BALANCE: "经验每15点升级，超出部分顺延",
+    R_EXP_BALANCE: "经验达到当前等级门槛后升级，超出部分顺延",
     R_LEVEL_UP: "每升一级伤害+10、生命上限+20、回满生命且药水+1",
     R_BATTLE_ADVANCE: "获胜后可进入下一场，玩家状态继承且敌人属性不变",
     R_RETALIATE_ONCE: "敌人存活时恰好一次反击，伤害在敌人对应范围且按值扣血",
@@ -137,4 +198,9 @@ RULE_CATALOG: dict[str, str] = {
     R_FINAL_STATUS: "场景结束时状态符合场景声明的预期",
     R_CONTROL_MATCH: "对照会话与主会话的状态和事件一致",
     R_STEP_LIMIT: "未超过每场景动作尝试上限（含被拒绝动作）",
+    R_SKILL_POWER: "重击及伤害魔法的威力处于各自规则范围",
+    R_SKILL_COOLDOWN: "重击冷却随其他成功战斗动作减少，进入下一场不减少",
+    R_EP_COST: "施法消耗指定 EP；升级时 EP 上限增加并回满",
+    R_MAGIC_HEAL: "治疗魔法按 20 加魔力值恢复生命，不超过生命上限",
+    R_MAGIC_GROWTH: "每次升级使 EP 上限增加 50、回满 EP，魔力增加 5",
 }

@@ -239,6 +239,7 @@ class AgentWebRunManager:
             R_NO_RETALIATE_ON_KILL,
             R_POTION_CAP,
             R_POTION_DECREMENTS,
+            R_SKILL_POWER,
         )
 
         config = record["config"]
@@ -314,6 +315,7 @@ class AgentWebRunManager:
             "retaliate_after_death": [R_NO_RETALIATE_ON_KILL, R_NO_ACTION_AFTER_PLAYER_DEATH],
             "loot_anomaly": [R_LOOT_PRESENT, R_LOOT_RANGE, R_LOOT_ITEM, R_EXP_REWARD],
             "level_anomaly": [R_LEVEL_UP],
+            "skill_power_anomaly": [R_SKILL_POWER],
         }
         selected_faults = config["selected_faults"]
         triggered_faults = {item.fault_id for item in triggers}

@@ -89,7 +89,7 @@ def create_session(
     repository: Annotated[SessionRepository, Depends(get_repository)],
     session_factory: Annotated[SessionFactory, Depends(get_session_factory)],
 ) -> GameSnapshot:
-    """创建一场玩家对史莱姆的战斗，返回完整初始快照。"""
+    """创建一场玩家对随机敌人的战斗，返回完整初始快照。"""
     session = session_factory(payload.seed, payload.battle_count)
     repository.save(session)
     return session.snapshot()
@@ -124,10 +124,14 @@ def perform_action(
     payload: ActionRequest,
     repository: Annotated[SessionRepository, Depends(get_repository)],
 ) -> GameSnapshot:
-    """执行 attack 或 use_potion；领域冲突由异常处理器返回 HTTP 409。"""
+    """执行战斗动作；领域冲突由异常处理器返回 HTTP 409。"""
     session = repository.get(session_id)
     if payload.action == "attack":
         session.attack()
+    elif payload.action == "power_strike":
+        session.power_strike()
+    elif payload.action in ("cast_spark", "cast_flame", "cast_meteor", "cast_heal"):
+        session.cast_spell(payload.action)
     elif payload.action == "use_potion":
         session.use_potion()
     else:

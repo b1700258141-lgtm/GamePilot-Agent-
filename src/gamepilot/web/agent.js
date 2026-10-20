@@ -1,7 +1,10 @@
 "use strict";
 
 const agentEl = (id) => document.getElementById(id);
-const agentEnemyNames = { slime: "史莱姆", goblin: "哥布林", troll: "巨魔" };
+const agentEnemyNames = {
+  slime: "史莱姆", goblin: "哥布林", skeleton: "骷髅", wolf: "野狼",
+  orc: "兽人", troll: "巨魔", wraith: "幽灵", dragon: "巨龙",
+};
 const AGENT_API = "/api/v1/agent-test-runs";
 const AGENT_STORAGE_KEY = "gamepilot:last-agent-run-id";
 const defectNames = {
@@ -11,6 +14,7 @@ const defectNames = {
   retaliate_after_death: "死亡后反击",
   loot_anomaly: "掉落物品异常",
   level_anomaly: "玩家升级异常",
+  skill_power_anomaly: "技能威力异常",
 };
 const goalNames = {
   "battle-end": "战斗至结束",
@@ -18,7 +22,12 @@ const goalNames = {
   healing: "受伤后治疗",
   victory: "击败敌人并验证结束",
 };
-const actionNames = { attack: "攻击", potion: "使用药水", use_potion: "使用药水", next_battle: "进入下一场", retaliate: "反击", drop: "掉落", level_up: "升级" };
+const actionNames = {
+  attack: "攻击", power_strike: "重击", cast_spark: "魔法飞弹",
+  cast_flame: "火球", cast_meteor: "陨石", cast_heal: "治疗魔法",
+  potion: "使用药水", use_potion: "使用药水", next_battle: "进入下一场",
+  retaliate: "反击", drop: "掉落", level_up: "升级",
+};
 const verdictNames = {
   pass: "游戏规则通过",
   defect_detected: "发现游戏缺陷",
@@ -171,7 +180,7 @@ function renderSkillChoices(selectedId = agentEl("agent-skill").value) {
 function updateSkillHint() {
   const skill = agentSkills.find((item) => item.skill_id === agentEl("agent-skill").value);
   agentEl("agent-skill-hint").textContent = skill?.built_in
-    ? "默认策略：开局满血喝药，受伤后补药，药水耗尽持续攻击；终态后再验证一次行动限制。"
+    ? "默认策略：开局满血喝药、半血以下补药；伤害动作优先重击，冷却时按陨石→火球→魔法飞弹循环，EP 不足时普通攻击；终态后再验证一次行动限制。"
     : "已选自定义文本策略。只有真实模型会根据上传内容选择动作；所有动作仍受工具、规则和预算约束。";
 }
 

@@ -2,7 +2,7 @@
 
 模型可见的东西就是这里渲染出来的全部，**没有别的通道**：
 
-- 固定公开规则（对应 `docs/BATTLE_RULES_V3.md`，与判定器逐项核对）；
+- 固定公开规则（对应 `docs/BATTLE_RULES_V4.md`，与判定器逐项核对）；
 - 自然语言测试目标；
 - 最新公开快照（线上响应的业务字段）与上一步的动作结果；
 - 简短的规则检查反馈；
@@ -23,36 +23,46 @@ from gamepilot.testing.models import RuleCheck, SnapshotView
 
 from .models import BudgetSpec, ChatMessage, ToolCallRequest, ToolResult
 
-PROMPT_VERSION = "3.0.0"
-RULES_PROMPT_VERSION = "3.0.0"
+PROMPT_VERSION = "5.0.0"
+RULES_PROMPT_VERSION = "5.0.0"
 
 # 公开规则正文：逐条对应规则文档，不含任何实现细节、seed 提示或缺陷信息。
 PUBLIC_RULES = """\
 游戏是玩家对随机敌人的回合制连战，规则如下：
 
 初始状态
-- 玩家：1 级，经验 0/15，生命 100/100，3 瓶药水，0 金币
-- 敌人按种子确定：史莱姆 60%（60 HP）、哥布林 30%（80 HP）、巨魔 10%（170 HP）
+- 玩家：1 级，经验 0/15，生命 100/100，EP 100/100，魔力 10，3 瓶药水，0 金币
+- 敌人按种子确定：史莱姆35%、哥布林22%、骷髅14%、野狼10%、兽人8%、巨魔5%、幽灵4%、巨龙2%
+- 敌人生命/反击伤害：史莱姆60/12~18、哥布林80/18~27、骷髅95/20~30、
+  野狼110/24~34、兽人135/28~38、巨魔170/35~45、幽灵210/40~52、巨龙280/50~65
 - 状态 active，回合 0，没有历史事件
 
 允许的动作
-- attack：玩家攻击敌人，伤害 18~25；若敌人仍存活，立即反击。
-  史莱姆伤害 12~18，哥布林 18~27，巨魔 35~45
+- attack：玩家攻击敌人，伤害 18~25；若敌人仍存活，立即反击
+- power_strike：普通攻击额外 +12 伤害，使用后需完成两次其他战斗动作才能再用
+- cast_spark/cast_flame/cast_meteor：分别消耗 20/40/70 EP，基础伤害 18~24/32~40/50~60，
+  再加当前魔力值；没有冷却，EP 不足时动作被拒绝
+- cast_heal：消耗 30 EP，治疗效力为 20+魔力值，实际回血不超过生命上限；没有冷却
 - use_potion：药水固定效力 25 点，实际回血为 min(25, 距离生命上限的差值)，消耗 1 瓶；
   满血使用实际回血 0；随后敌人反击
 
 状态规则
 - 生命最低为 0
-- 敌人生命降到 0 时状态变为 won，且该回合不再反击。击杀史莱姆掉落 1~3 金币，哥布林掉落 10~20 金币
+- 敌人生命降到 0 时状态变为 won，且该回合不再反击。金币掉落：史莱姆1~3、
+  哥布林10~20、骷髅4~8、野狼6~10、兽人12~20、巨魔无、幽灵20~30、巨龙35~50
 - 玩家生命降到 0 时状态变为 lost
 - 每个成功执行的玩家动作使回合数加 1
+- 施放魔法和重击后，存活的敌人也会反击；击杀、经验和掉落与普通攻击一致
 - 当前场结束后不可继续攻击或喝药；若已获胜且仍有剩余场次，可进入下一场。
 - 连战目标为 1～6 场；当前场获胜后若还有剩余场次，调用 next_battle 进入下一场。
   玩家当前生命、药水、金币、等级和经验继承；最后一场获胜后不可再进入下一场。
-- 敌人等级：史莱姆 1、哥布林 2、巨魔 5；敌人的生命与伤害范围不因等级改变。
-- 击杀经验：史莱姆 10、哥布林 30、巨魔 60。玩家初始 1 级、0 经验，
-  每满 15 经验升一级，多余经验顺延；每升一级攻击伤害 +10、最大生命 +20，
-  随即回满至新的生命上限，剩余药水再加 1 瓶。连续升级逐级结算。
+- 敌人等级：史莱姆1、哥布林2、骷髅3、野狼4、兽人4、巨魔5、幽灵6、巨龙8；
+  敌人的生命与伤害范围不因等级改变
+- 击杀经验：史莱姆10、哥布林30、骷髅35、野狼40、兽人50、巨魔60、幽灵75、巨龙100。
+  玩家初始 1 级、0 经验，
+  当前等级为 L 时，升到 L+1 级需要 15×L 经验（依次为 15、30、45……）；
+  多余经验顺延，单次奖励可连续升级；每升一级攻击伤害 +10、最大生命 +20，
+  随即回满至新的生命上限，剩余药水再加 1 瓶；EP 上限 +50 并回满，魔力 +5。连续升级逐级结算。
 - 没有药水时使用药水属于无效动作：不得修改状态，返回 HTTP 409
 - 无效动作的具体错误码：战斗已结束 battle_not_active；没有药水 no_potions
 """
@@ -60,7 +70,8 @@ PUBLIC_RULES = """\
 PROTOCOL = """\
 工作方式
 - 每一轮你必须且只能调用一个工具：perform_action 或 finish。
-- perform_action 可选 attack、use_potion、next_battle。
+- perform_action 可选 attack、power_strike、cast_spark、cast_flame、cast_meteor、
+  cast_heal、use_potion、next_battle。
 - 选择动作时不要试图预测随机数值；程序会在发送前用公开规则核对这次动作的预期结果。
 - 每次动作的真实结果会作为下一条观测返回给你，包括状态快照和规则检查结论。
 - 当你认为测试目标已经被当前观测充分覆盖时，调用 finish 并说明依据。
@@ -89,17 +100,28 @@ def _render_budget(spec: BudgetSpec, *, actions_used: int, model_calls_used: int
 
 def render_snapshot(snapshot: SnapshotView) -> str:
     """把公开快照渲染成可读文本；只使用线上响应里本来就有的业务字段。"""
-    enemy_name = {"slime": "史莱姆", "goblin": "哥布林", "troll": "巨魔"}.get(
-        snapshot.enemy_type, snapshot.enemy_type
-    )
+    enemy_name = {
+        "slime": "史莱姆",
+        "goblin": "哥布林",
+        "skeleton": "骷髅",
+        "wolf": "野狼",
+        "orc": "兽人",
+        "troll": "巨魔",
+        "wraith": "幽灵",
+        "dragon": "巨龙",
+    }.get(snapshot.enemy_type, snapshot.enemy_type)
     lines = [
         f"状态：{snapshot.status}",
+        f"规则集：{snapshot.ruleset}",
         f"连战：第 {snapshot.battle_index}/{snapshot.battle_count} 场",
         f"回合：{snapshot.turn}",
         (
             f"玩家：生命 {snapshot.player.hp}/{snapshot.player.max_hp}，"
             f"药水 {snapshot.player.potions}，金币 {snapshot.player.gold}，"
-            f"等级 {snapshot.player.level}，经验 {snapshot.player.exp}/15"
+            f"等级 {snapshot.player.level}，经验 {snapshot.player.exp}/"
+            f"{15 * snapshot.player.level if snapshot.ruleset == 'v5' else 15}，"
+            f"EP {snapshot.player.ep}/{snapshot.player.max_ep}，魔力 {snapshot.player.magic}，"
+            f"重击冷却 {snapshot.player.power_strike_cooldown}"
         ),
         (
             f"{enemy_name}：等级 {snapshot.enemy_level}，"

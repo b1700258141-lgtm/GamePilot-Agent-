@@ -11,7 +11,9 @@ from .profiles import FAULT_IDS
 RANDOM_FAULT_PERCENT = 30
 _HASH_PREFIX = "gamepilot-random-fault-v1:"
 _TIMING_PREFIX = "gamepilot-fault-timing-v1:"
-_REPEATABLE_FAULTS = frozenset(("potion_overheal", "potion_not_consumed", "retaliate_after_death"))
+_REPEATABLE_FAULTS = frozenset(
+    ("potion_overheal", "potion_not_consumed", "retaliate_after_death", "skill_power_anomaly")
+)
 
 
 @dataclass(frozen=True)

@@ -10,11 +10,15 @@ from uuid import uuid4
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 DEFAULT_SKILL_ID = "injured-potion-then-attack"
-DEFAULT_SKILL_NAME = "开局喝药、受伤补药、持续攻击"
+DEFAULT_SKILL_NAME = "开局喝药、战技优先、伤害魔法循环"
 DEFAULT_SKILL_INSTRUCTIONS = (
     "开局满血时先使用一瓶药水；药水固定效力为25，实际回血受生命上限截断。"
-    "之后在战斗 active 时，若玩家受伤且还有药水就喝药，否则攻击。"
-    "药水耗尽后持续攻击，直到玩家或敌人阵亡。"
+    "之后仅在生命不超过上限一半且还有药水时先补药；其余 active 战斗回合按以下优先级选择伤害动作："
+    "重击 power_strike 冷却为 0 时优先使用；冷却中依次施放陨石 cast_meteor、"
+    "火球 cast_flame、魔法飞弹 cast_spark。三种伤害魔法走完一轮后再从陨石开始，"
+    "重击和喝药不重置魔法顺序，进入下一场也沿用顺序。"
+    "当前 EP 不够支付轮到的魔法时跳过它，尝试本轮下一种；三种都不能施放时普通攻击 attack。"
+    "伤害魔法没有冷却，重击需完成两次其他成功战斗动作才恢复。"
     "当前场获胜且还有下一场时使用 next_battle，继续按当前状态战斗。"
     "最后一场结束或玩家阵亡后再尝试一次攻击，以验证终态不能继续行动；"
     "只试一次，然后结束。"

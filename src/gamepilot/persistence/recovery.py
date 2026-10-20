@@ -66,6 +66,9 @@ class StoredSession:
     gold: int = 0
     level: int = 1
     exp: int = 0
+    ep: int = 100
+    max_ep: int = 100
+    magic: int = 10
     battle_count: int = 1
     battle_index: int = 1
     enemy_type: str = "slime"
@@ -85,6 +88,9 @@ class StoredSession:
             gold=snapshot.player.gold,
             level=snapshot.player.level,
             exp=snapshot.player.exp,
+            ep=snapshot.player.ep,
+            max_ep=snapshot.player.max_ep,
+            magic=snapshot.player.magic,
             battle_count=snapshot.battle_count,
             battle_index=snapshot.battle_index,
             enemy_type=snapshot.enemy_type,
@@ -167,14 +173,24 @@ def rebuild_session(state: StoredSession, events: Sequence[StoredEvent]) -> Comb
 
 def _replay_player_action(session: CombatSession, event: CombatEvent, *, session_id: str) -> None:
     """重放单条事件；史莱姆反击不重放，由上一个玩家动作自动生成。"""
-    if event.actor in ("slime", "goblin", "troll"):
+    if event.actor in ("slime", "goblin", "skeleton", "wolf", "orc", "troll", "wraith", "dragon"):
         if event.kind not in ("retaliate", "drop"):
             raise PersistenceInconsistentError(
                 f"session {session_id}: turn {event.turn} recorded unexpected "
                 f"slime event kind {event.kind!r}"
             )
         return
-    if event.actor != "player" or event.kind not in ("attack", "potion", "next_battle", "level_up"):
+    if event.actor != "player" or event.kind not in (
+        "attack",
+        "power_strike",
+        "cast_spark",
+        "cast_flame",
+        "cast_meteor",
+        "cast_heal",
+        "potion",
+        "next_battle",
+        "level_up",
+    ):
         raise PersistenceInconsistentError(
             f"session {session_id}: turn {event.turn} recorded unsupported event "
             f"{event.actor}/{event.kind}"
@@ -183,6 +199,10 @@ def _replay_player_action(session: CombatSession, event: CombatEvent, *, session
     try:
         if event.kind == "attack":
             session.attack()
+        elif event.kind == "power_strike":
+            session.power_strike()
+        elif event.kind in ("cast_spark", "cast_flame", "cast_meteor", "cast_heal"):
+            session.cast_spell(event.kind)
         elif event.kind == "potion":
             session.use_potion()
         elif event.kind == "next_battle":

@@ -1,0 +1,2996 @@
+{
+  "schema_version": "2.0",
+  "rules_version": "4.0.0",
+  "mode": "replay",
+  "run_id": "20261020T033732Z-286bc6",
+  "source_run_id": "20261020T033729Z-6ac1af",
+  "source_report": "D:\\AIdevelop\\AI gamer test agent\\.pytest-v4-run-05\\test_v4_new_enemy_normal_web_a3\\20261020T033729Z-6ac1af\\run\\20261020T033729Z-6ac1af.json",
+  "base_url": "http://gamepilot-agent-test.local",
+  "started_at": "2026-10-20T03:37:32Z",
+  "finished_at": "2026-10-20T03:37:32Z",
+  "duration_ms": 13.222299996414222,
+  "timeout_seconds": 5.0,
+  "environment": {
+    "python_version": "3.14.6",
+    "platform": "Windows-11-10.0.26200-SP0",
+    "gamepilot_version": "0.1.0"
+  },
+  "summary": {
+    "matched": 1,
+    "mismatched": 0,
+    "not_comparable": 0
+  },
+  "cases": [
+    {
+      "case_id": "agent-battle-end",
+      "outcome": "match",
+      "note": "与原运行逐字段一致",
+      "session_id": "28a05a2442db4e068d26a8bb1fe7d7c1",
+      "replayed_actions": [
+        {
+          "index": 1,
+          "action": "use_potion",
+          "status_code": 200,
+          "error_code": null,
+          "elapsed_ms": 1.0692999931052327
+        },
+        {
+          "index": 2,
+          "action": "cast_spark",
+          "status_code": 200,
+          "error_code": null,
+          "elapsed_ms": 1.0270999919157475
+        },
+        {
+          "index": 3,
+          "action": "power_strike",
+          "status_code": 200,
+          "error_code": null,
+          "elapsed_ms": 1.6955000028247014
+        },
+        {
+          "index": 4,
+          "action": "attack",
+          "status_code": 409,
+          "error_code": "battle_not_active",
+          "elapsed_ms": 0.8392000017920509
+        }
+      ],
+      "execution": {
+        "case_id": "agent-battle-end",
+        "description": "网页 Agent 连战测试 battle-end",
+        "seed": 8,
+        "status": "pass",
+        "scenario": {
+          "case_id": "agent-battle-end",
+          "description": "网页 Agent 连战测试 battle-end",
+          "seed": 8,
+          "battle_count": 1,
+          "steps": [
+            {
+              "action": "use_potion",
+              "expected_status": 200,
+              "expected_code": null
+            },
+            {
+              "action": "cast_spark",
+              "expected_status": 200,
+              "expected_code": null
+            },
+            {
+              "action": "power_strike",
+              "expected_status": 200,
+              "expected_code": null
+            },
+            {
+              "action": "attack",
+              "expected_status": 409,
+              "expected_code": "battle_not_active"
+            }
+          ],
+          "expected_final_status": null,
+          "control": null
+        },
+        "session_id": "28a05a2442db4e068d26a8bb1fe7d7c1",
+        "create_observation": {
+          "method": "POST",
+          "path": "/api/v1/game-sessions",
+          "status_code": 201,
+          "body": {
+            "session_id": "28a05a2442db4e068d26a8bb1fe7d7c1",
+            "seed": 8,
+            "status": "active",
+            "turn": 0,
+            "player": {
+              "hp": 100,
+              "max_hp": 100,
+              "potions": 3,
+              "gold": 0,
+              "level": 1,
+              "exp": 0,
+              "power_strike_cooldown": 0,
+              "ep": 100,
+              "max_ep": 100,
+              "magic": 10
+            },
+            "slime": {
+              "hp": 210,
+              "max_hp": 210
+            },
+            "enemy_type": "wraith",
+            "ruleset": "v4",
+            "battle_count": 1,
+            "battle_index": 1,
+            "enemy_level": 6,
+            "events": []
+          },
+          "error_kind": null,
+          "error_detail": null,
+          "elapsed_ms": 2.2905999940121546
+        },
+        "initial_get_observation": {
+          "method": "GET",
+          "path": "/api/v1/game-sessions/28a05a2442db4e068d26a8bb1fe7d7c1",
+          "status_code": 200,
+          "body": {
+            "session_id": "28a05a2442db4e068d26a8bb1fe7d7c1",
+            "seed": 8,
+            "status": "active",
+            "turn": 0,
+            "player": {
+              "hp": 100,
+              "max_hp": 100,
+              "potions": 3,
+              "gold": 0,
+              "level": 1,
+              "exp": 0,
+              "power_strike_cooldown": 0,
+              "ep": 100,
+              "max_ep": 100,
+              "magic": 10
+            },
+            "slime": {
+              "hp": 210,
+              "max_hp": 210
+            },
+            "enemy_type": "wraith",
+            "ruleset": "v4",
+            "battle_count": 1,
+            "battle_index": 1,
+            "enemy_level": 6,
+            "events": []
+          },
+          "error_kind": null,
+          "error_detail": null,
+          "elapsed_ms": 1.0230000043520704
+        },
+        "actions_completed": true,
+        "started_at": "2026-10-20T03:37:32Z",
+        "finished_at": "2026-10-20T03:37:32Z",
+        "duration_ms": 10.07039999240078,
+        "planned_actions": [
+          "use_potion",
+          "cast_spark",
+          "power_strike",
+          "attack"
+        ],
+        "executed_actions": [
+          {
+            "index": 1,
+            "action": "use_potion",
+            "status_code": 200,
+            "error_code": null,
+            "elapsed_ms": 1.0692999931052327
+          },
+          {
+            "index": 2,
+            "action": "cast_spark",
+            "status_code": 200,
+            "error_code": null,
+            "elapsed_ms": 1.0270999919157475
+          },
+          {
+            "index": 3,
+            "action": "power_strike",
+            "status_code": 200,
+            "error_code": null,
+            "elapsed_ms": 1.6955000028247014
+          },
+          {
+            "index": 4,
+            "action": "attack",
+            "status_code": 409,
+            "error_code": "battle_not_active",
+            "elapsed_ms": 0.8392000017920509
+          }
+        ],
+        "initial_snapshot": {
+          "session_id": "28a05a2442db4e068d26a8bb1fe7d7c1",
+          "seed": 8,
+          "status": "active",
+          "turn": 0,
+          "player": {
+            "hp": 100,
+            "max_hp": 100,
+            "potions": 3,
+            "gold": 0,
+            "level": 1,
+            "exp": 0,
+            "power_strike_cooldown": 0,
+            "ep": 100,
+            "max_ep": 100,
+            "magic": 10
+          },
+          "slime": {
+            "hp": 210,
+            "max_hp": 210
+          },
+          "enemy_type": "wraith",
+          "ruleset": "v4",
+          "battle_count": 1,
+          "battle_index": 1,
+          "enemy_level": 6,
+          "events": []
+        },
+        "final_snapshot": {
+          "session_id": "28a05a2442db4e068d26a8bb1fe7d7c1",
+          "seed": 8,
+          "status": "lost",
+          "turn": 3,
+          "player": {
+            "hp": 0,
+            "max_hp": 100,
+            "potions": 2,
+            "gold": 0,
+            "level": 1,
+            "exp": 0,
+            "power_strike_cooldown": 2,
+            "ep": 80,
+            "max_ep": 100,
+            "magic": 10
+          },
+          "slime": {
+            "hp": 148,
+            "max_hp": 210
+          },
+          "enemy_type": "wraith",
+          "ruleset": "v4",
+          "battle_count": 1,
+          "battle_index": 1,
+          "enemy_level": 6,
+          "events": [
+            {
+              "turn": 1,
+              "actor": "player",
+              "kind": "potion",
+              "value": 25,
+              "player_hp": 100,
+              "slime_hp": 210,
+              "potions": 2,
+              "item": null
+            },
+            {
+              "turn": 1,
+              "actor": "wraith",
+              "kind": "retaliate",
+              "value": 43,
+              "player_hp": 57,
+              "slime_hp": 210,
+              "potions": null,
+              "item": null
+            },
+            {
+              "turn": 2,
+              "actor": "player",
+              "kind": "cast_spark",
+              "value": 30,
+              "player_hp": 57,
+              "slime_hp": 180,
+              "potions": 2,
+              "item": null
+            },
+            {
+              "turn": 2,
+              "actor": "wraith",
+              "kind": "retaliate",
+              "value": 46,
+              "player_hp": 11,
+              "slime_hp": 180,
+              "potions": null,
+              "item": null
+            },
+            {
+              "turn": 3,
+              "actor": "player",
+              "kind": "power_strike",
+              "value": 32,
+              "player_hp": 11,
+              "slime_hp": 148,
+              "potions": 2,
+              "item": null
+            },
+            {
+              "turn": 3,
+              "actor": "wraith",
+              "kind": "retaliate",
+              "value": 43,
+              "player_hp": 0,
+              "slime_hp": 148,
+              "potions": null,
+              "item": null
+            }
+          ]
+        },
+        "steps": [
+          {
+            "index": 1,
+            "action": "use_potion",
+            "expected_status": 200,
+            "expected_code": null,
+            "observed_status": 200,
+            "observed_code": null,
+            "status": "pass",
+            "before": {
+              "session_id": "28a05a2442db4e068d26a8bb1fe7d7c1",
+              "seed": 8,
+              "status": "active",
+              "turn": 0,
+              "player": {
+                "hp": 100,
+                "max_hp": 100,
+                "potions": 3,
+                "gold": 0,
+                "level": 1,
+                "exp": 0,
+                "power_strike_cooldown": 0,
+                "ep": 100,
+                "max_ep": 100,
+                "magic": 10
+              },
+              "slime": {
+                "hp": 210,
+                "max_hp": 210
+              },
+              "enemy_type": "wraith",
+              "ruleset": "v4",
+              "battle_count": 1,
+              "battle_index": 1,
+              "enemy_level": 6,
+              "events": []
+            },
+            "after": {
+              "session_id": "28a05a2442db4e068d26a8bb1fe7d7c1",
+              "seed": 8,
+              "status": "active",
+              "turn": 1,
+              "player": {
+                "hp": 57,
+                "max_hp": 100,
+                "potions": 2,
+                "gold": 0,
+                "level": 1,
+                "exp": 0,
+                "power_strike_cooldown": 0,
+                "ep": 100,
+                "max_ep": 100,
+                "magic": 10
+              },
+              "slime": {
+                "hp": 210,
+                "max_hp": 210
+              },
+              "enemy_type": "wraith",
+              "ruleset": "v4",
+              "battle_count": 1,
+              "battle_index": 1,
+              "enemy_level": 6,
+              "events": [
+                {
+                  "turn": 1,
+                  "actor": "player",
+                  "kind": "potion",
+                  "value": 25,
+                  "player_hp": 100,
+                  "slime_hp": 210,
+                  "potions": 2,
+                  "item": null
+                },
+                {
+                  "turn": 1,
+                  "actor": "wraith",
+                  "kind": "retaliate",
+                  "value": 43,
+                  "player_hp": 57,
+                  "slime_hp": 210,
+                  "potions": null,
+                  "item": null
+                }
+              ]
+            },
+            "new_events": [
+              {
+                "turn": 1,
+                "actor": "player",
+                "kind": "potion",
+                "value": 25,
+                "player_hp": 100,
+                "slime_hp": 210,
+                "potions": 2,
+                "item": null
+              },
+              {
+                "turn": 1,
+                "actor": "wraith",
+                "kind": "retaliate",
+                "value": 43,
+                "player_hp": 57,
+                "slime_hp": 210,
+                "potions": null,
+                "item": null
+              }
+            ],
+            "observation": {
+              "method": "POST",
+              "path": "/api/v1/game-sessions/28a05a2442db4e068d26a8bb1fe7d7c1/actions",
+              "status_code": 200,
+              "body": {
+                "session_id": "28a05a2442db4e068d26a8bb1fe7d7c1",
+                "seed": 8,
+                "status": "active",
+                "turn": 1,
+                "player": {
+                  "hp": 57,
+                  "max_hp": 100,
+                  "potions": 2,
+                  "gold": 0,
+                  "level": 1,
+                  "exp": 0,
+                  "power_strike_cooldown": 0,
+                  "ep": 100,
+                  "max_ep": 100,
+                  "magic": 10
+                },
+                "slime": {
+                  "hp": 210,
+                  "max_hp": 210
+                },
+                "enemy_type": "wraith",
+                "ruleset": "v4",
+                "battle_count": 1,
+                "battle_index": 1,
+                "enemy_level": 6,
+                "events": [
+                  {
+                    "turn": 1,
+                    "actor": "player",
+                    "kind": "potion",
+                    "value": 25,
+                    "player_hp": 100,
+                    "slime_hp": 210,
+                    "potions": 2,
+                    "item": null
+                  },
+                  {
+                    "turn": 1,
+                    "actor": "wraith",
+                    "kind": "retaliate",
+                    "value": 43,
+                    "player_hp": 57,
+                    "slime_hp": 210,
+                    "potions": null,
+                    "item": null
+                  }
+                ]
+              },
+              "error_kind": null,
+              "error_detail": null,
+              "elapsed_ms": 1.0692999931052327
+            },
+            "verification_observation": null,
+            "error": null,
+            "checks": [
+              {
+                "rule_id": "R-EXPECTED-STATUS",
+                "status": "pass",
+                "expected": "200",
+                "actual": "200",
+                "message": "",
+                "step": 1
+              },
+              {
+                "rule_id": "R-INVARIANTS",
+                "status": "pass",
+                "expected": "动作前后的 session_id必须相同",
+                "actual": "相同",
+                "message": "",
+                "step": 1
+              },
+              {
+                "rule_id": "R-INVARIANTS",
+                "status": "pass",
+                "expected": "8",
+                "actual": "8",
+                "message": "",
+                "step": 1
+              },
+              {
+                "rule_id": "R-INVARIANTS",
+                "status": "pass",
+                "expected": "0 <= player.hp <= 100",
+                "actual": "57",
+                "message": "",
+                "step": 1
+              },
+              {
+                "rule_id": "R-INVARIANTS",
+                "status": "pass",
+                "expected": "0 <= slime.hp <= 210",
+                "actual": "210",
+                "message": "",
+                "step": 1
+              },
+              {
+                "rule_id": "R-INVARIANTS",
+                "status": "pass",
+                "expected": "药水非负，旧规则下只减不增",
+                "actual": "2",
+                "message": "",
+                "step": 1
+              },
+              {
+                "rule_id": "R-INVARIANTS",
+                "status": "pass",
+                "expected": "等级至少1且经验非负",
+                "actual": "等级1经验0",
+                "message": "",
+                "step": 1
+              },
+              {
+                "rule_id": "R-INVARIANTS",
+                "status": "pass",
+                "expected": "EP 在 [0, max_ep] 且魔力不少于初始值",
+                "actual": "EP 100/100，魔力 10",
+                "message": "",
+                "step": 1
+              },
+              {
+                "rule_id": "R-TURN-INCREMENT",
+                "status": "pass",
+                "expected": "1",
+                "actual": "1",
+                "message": "",
+                "step": 1
+              },
+              {
+                "rule_id": "R-HISTORY-PREFIX",
+                "status": "pass",
+                "expected": "[]",
+                "actual": "[]",
+                "message": "",
+                "step": 1
+              },
+              {
+                "rule_id": "R-EVENT-TURN",
+                "status": "pass",
+                "expected": "all new events turn == 1",
+                "actual": "[1, 1]",
+                "message": "",
+                "step": 1
+              },
+              {
+                "rule_id": "R-EVENT-ACTOR-ORDER",
+                "status": "pass",
+                "expected": "first new event: actor=player kind=potion",
+                "actual": "actor=player kind=potion",
+                "message": "",
+                "step": 1
+              },
+              {
+                "rule_id": "R-POTION-HEAL",
+                "status": "pass",
+                "expected": "药水效力 25，实际回血 min(25, 100 - 100) = 0",
+                "actual": "heal=25 event player_hp=100",
+                "message": "",
+                "step": 1
+              },
+              {
+                "rule_id": "R-POTION-CAP",
+                "status": "pass",
+                "expected": "药水事件 HP <= 100",
+                "actual": "100",
+                "message": "",
+                "step": 1
+              },
+              {
+                "rule_id": "R-POTION-DECREMENTS",
+                "status": "pass",
+                "expected": "2",
+                "actual": "2",
+                "message": "",
+                "step": 1
+              },
+              {
+                "rule_id": "R-EVENT-COUNT",
+                "status": "pass",
+                "expected": "2",
+                "actual": "2",
+                "message": "",
+                "step": 1
+              },
+              {
+                "rule_id": "R-RETALIATE-ONCE",
+                "status": "pass",
+                "expected": "wraith retaliate with damage in [40, 52] and player.hp = max(0, 100 - damage)",
+                "actual": "actor=wraith kind=retaliate value=43 player_hp=57",
+                "message": "",
+                "step": 1
+              },
+              {
+                "rule_id": "R-RETALIATE-POTIONS-NULL",
+                "status": "pass",
+                "expected": "None",
+                "actual": "None",
+                "message": "",
+                "step": 1
+              },
+              {
+                "rule_id": "R-POTION-DECREMENTS",
+                "status": "pass",
+                "expected": "2",
+                "actual": "2",
+                "message": "",
+                "step": 1
+              },
+              {
+                "rule_id": "R-SKILL-COOLDOWN",
+                "status": "pass",
+                "expected": "0",
+                "actual": "0",
+                "message": "",
+                "step": 1
+              },
+              {
+                "rule_id": "R-EP-COST",
+                "status": "pass",
+                "expected": "100",
+                "actual": "100",
+                "message": "",
+                "step": 1
+              },
+              {
+                "rule_id": "R-MAGIC-GROWTH",
+                "status": "pass",
+                "expected": "100",
+                "actual": "100",
+                "message": "",
+                "step": 1
+              },
+              {
+                "rule_id": "R-MAGIC-GROWTH",
+                "status": "pass",
+                "expected": "10",
+                "actual": "10",
+                "message": "",
+                "step": 1
+              },
+              {
+                "rule_id": "R-INVARIANTS",
+                "status": "pass",
+                "expected": "事件 HP 在上下限内且药水数量非负",
+                "actual": "正常",
+                "message": "",
+                "step": 1
+              },
+              {
+                "rule_id": "R-STATUS-CONSISTENT",
+                "status": "pass",
+                "expected": "status=won ⇒ slime.hp=0；status=lost ⇒ player.hp=0；status=active ⇒ 双方存活",
+                "actual": "status=active player.hp=57 slime.hp=210",
+                "message": "",
+                "step": 1
+              },
+              {
+                "rule_id": "R-LAST-EVENT-MATCHES-SNAPSHOT",
+                "status": "pass",
+                "expected": "last event hp = (57, 210)",
+                "actual": "last event hp = (57, 210)",
+                "message": "",
+                "step": 1
+              }
+            ]
+          },
+          {
+            "index": 2,
+            "action": "cast_spark",
+            "expected_status": 200,
+            "expected_code": null,
+            "observed_status": 200,
+            "observed_code": null,
+            "status": "pass",
+            "before": {
+              "session_id": "28a05a2442db4e068d26a8bb1fe7d7c1",
+              "seed": 8,
+              "status": "active",
+              "turn": 1,
+              "player": {
+                "hp": 57,
+                "max_hp": 100,
+                "potions": 2,
+                "gold": 0,
+                "level": 1,
+                "exp": 0,
+                "power_strike_cooldown": 0,
+                "ep": 100,
+                "max_ep": 100,
+                "magic": 10
+              },
+              "slime": {
+                "hp": 210,
+                "max_hp": 210
+              },
+              "enemy_type": "wraith",
+              "ruleset": "v4",
+              "battle_count": 1,
+              "battle_index": 1,
+              "enemy_level": 6,
+              "events": [
+                {
+                  "turn": 1,
+                  "actor": "player",
+                  "kind": "potion",
+                  "value": 25,
+                  "player_hp": 100,
+                  "slime_hp": 210,
+                  "potions": 2,
+                  "item": null
+                },
+                {
+                  "turn": 1,
+                  "actor": "wraith",
+                  "kind": "retaliate",
+                  "value": 43,
+                  "player_hp": 57,
+                  "slime_hp": 210,
+                  "potions": null,
+                  "item": null
+                }
+              ]
+            },
+            "after": {
+              "session_id": "28a05a2442db4e068d26a8bb1fe7d7c1",
+              "seed": 8,
+              "status": "active",
+              "turn": 2,
+              "player": {
+                "hp": 11,
+                "max_hp": 100,
+                "potions": 2,
+                "gold": 0,
+                "level": 1,
+                "exp": 0,
+                "power_strike_cooldown": 0,
+                "ep": 80,
+                "max_ep": 100,
+                "magic": 10
+              },
+              "slime": {
+                "hp": 180,
+                "max_hp": 210
+              },
+              "enemy_type": "wraith",
+              "ruleset": "v4",
+              "battle_count": 1,
+              "battle_index": 1,
+              "enemy_level": 6,
+              "events": [
+                {
+                  "turn": 1,
+                  "actor": "player",
+                  "kind": "potion",
+                  "value": 25,
+                  "player_hp": 100,
+                  "slime_hp": 210,
+                  "potions": 2,
+                  "item": null
+                },
+                {
+                  "turn": 1,
+                  "actor": "wraith",
+                  "kind": "retaliate",
+                  "value": 43,
+                  "player_hp": 57,
+                  "slime_hp": 210,
+                  "potions": null,
+                  "item": null
+                },
+                {
+                  "turn": 2,
+                  "actor": "player",
+                  "kind": "cast_spark",
+                  "value": 30,
+                  "player_hp": 57,
+                  "slime_hp": 180,
+                  "potions": 2,
+                  "item": null
+                },
+                {
+                  "turn": 2,
+                  "actor": "wraith",
+                  "kind": "retaliate",
+                  "value": 46,
+                  "player_hp": 11,
+                  "slime_hp": 180,
+                  "potions": null,
+                  "item": null
+                }
+              ]
+            },
+            "new_events": [
+              {
+                "turn": 2,
+                "actor": "player",
+                "kind": "cast_spark",
+                "value": 30,
+                "player_hp": 57,
+                "slime_hp": 180,
+                "potions": 2,
+                "item": null
+              },
+              {
+                "turn": 2,
+                "actor": "wraith",
+                "kind": "retaliate",
+                "value": 46,
+                "player_hp": 11,
+                "slime_hp": 180,
+                "potions": null,
+                "item": null
+              }
+            ],
+            "observation": {
+              "method": "POST",
+              "path": "/api/v1/game-sessions/28a05a2442db4e068d26a8bb1fe7d7c1/actions",
+              "status_code": 200,
+              "body": {
+                "session_id": "28a05a2442db4e068d26a8bb1fe7d7c1",
+                "seed": 8,
+                "status": "active",
+                "turn": 2,
+                "player": {
+                  "hp": 11,
+                  "max_hp": 100,
+                  "potions": 2,
+                  "gold": 0,
+                  "level": 1,
+                  "exp": 0,
+                  "power_strike_cooldown": 0,
+                  "ep": 80,
+                  "max_ep": 100,
+                  "magic": 10
+                },
+                "slime": {
+                  "hp": 180,
+                  "max_hp": 210
+                },
+                "enemy_type": "wraith",
+                "ruleset": "v4",
+                "battle_count": 1,
+                "battle_index": 1,
+                "enemy_level": 6,
+                "events": [
+                  {
+                    "turn": 1,
+                    "actor": "player",
+                    "kind": "potion",
+                    "value": 25,
+                    "player_hp": 100,
+                    "slime_hp": 210,
+                    "potions": 2,
+                    "item": null
+                  },
+                  {
+                    "turn": 1,
+                    "actor": "wraith",
+                    "kind": "retaliate",
+                    "value": 43,
+                    "player_hp": 57,
+                    "slime_hp": 210,
+                    "potions": null,
+                    "item": null
+                  },
+                  {
+                    "turn": 2,
+                    "actor": "player",
+                    "kind": "cast_spark",
+                    "value": 30,
+                    "player_hp": 57,
+                    "slime_hp": 180,
+                    "potions": 2,
+                    "item": null
+                  },
+                  {
+                    "turn": 2,
+                    "actor": "wraith",
+                    "kind": "retaliate",
+                    "value": 46,
+                    "player_hp": 11,
+                    "slime_hp": 180,
+                    "potions": null,
+                    "item": null
+                  }
+                ]
+              },
+              "error_kind": null,
+              "error_detail": null,
+              "elapsed_ms": 1.0270999919157475
+            },
+            "verification_observation": null,
+            "error": null,
+            "checks": [
+              {
+                "rule_id": "R-EXPECTED-STATUS",
+                "status": "pass",
+                "expected": "200",
+                "actual": "200",
+                "message": "",
+                "step": 2
+              },
+              {
+                "rule_id": "R-INVARIANTS",
+                "status": "pass",
+                "expected": "动作前后的 session_id必须相同",
+                "actual": "相同",
+                "message": "",
+                "step": 2
+              },
+              {
+                "rule_id": "R-INVARIANTS",
+                "status": "pass",
+                "expected": "8",
+                "actual": "8",
+                "message": "",
+                "step": 2
+              },
+              {
+                "rule_id": "R-INVARIANTS",
+                "status": "pass",
+                "expected": "0 <= player.hp <= 100",
+                "actual": "11",
+                "message": "",
+                "step": 2
+              },
+              {
+                "rule_id": "R-INVARIANTS",
+                "status": "pass",
+                "expected": "0 <= slime.hp <= 210",
+                "actual": "180",
+                "message": "",
+                "step": 2
+              },
+              {
+                "rule_id": "R-INVARIANTS",
+                "status": "pass",
+                "expected": "药水非负，旧规则下只减不增",
+                "actual": "2",
+                "message": "",
+                "step": 2
+              },
+              {
+                "rule_id": "R-INVARIANTS",
+                "status": "pass",
+                "expected": "等级至少1且经验非负",
+                "actual": "等级1经验0",
+                "message": "",
+                "step": 2
+              },
+              {
+                "rule_id": "R-INVARIANTS",
+                "status": "pass",
+                "expected": "EP 在 [0, max_ep] 且魔力不少于初始值",
+                "actual": "EP 80/100，魔力 10",
+                "message": "",
+                "step": 2
+              },
+              {
+                "rule_id": "R-TURN-INCREMENT",
+                "status": "pass",
+                "expected": "2",
+                "actual": "2",
+                "message": "",
+                "step": 2
+              },
+              {
+                "rule_id": "R-HISTORY-PREFIX",
+                "status": "pass",
+                "expected": "[turn=1 actor='player' kind='potion' value=25 player_hp=100 slime_hp=210 potions=2 item=None, turn=1 actor='wraith' kind='retaliate' value=43 player_hp=57 slime_hp=210 potions=None item=None]",
+                "actual": "[turn=1 actor='player' kind='potion' value=25 player_hp=100 slime_hp=210 potions=2 item=None, turn=1 actor='wraith' kind='retaliate' value=43 player_hp=57 slime_hp=210 potions=None item=None]",
+                "message": "",
+                "step": 2
+              },
+              {
+                "rule_id": "R-EVENT-TURN",
+                "status": "pass",
+                "expected": "all new events turn == 2",
+                "actual": "[2, 2]",
+                "message": "",
+                "step": 2
+              },
+              {
+                "rule_id": "R-EVENT-ACTOR-ORDER",
+                "status": "pass",
+                "expected": "首条事件为玩家 cast_spark",
+                "actual": "player/cast_spark",
+                "message": "",
+                "step": 2
+              },
+              {
+                "rule_id": "R-SKILL-POWER",
+                "status": "pass",
+                "expected": "伤害在 28～34",
+                "actual": "30",
+                "message": "",
+                "step": 2
+              },
+              {
+                "rule_id": "R-ATTACK-HP-APPLY",
+                "status": "pass",
+                "expected": "攻击事件按伤害扣敌人生命，玩家生命和药水不变",
+                "actual": "敌人 180 玩家 57 药水 2",
+                "message": "",
+                "step": 2
+              },
+              {
+                "rule_id": "R-BATTLE-ADVANCE",
+                "status": "pass",
+                "expected": "1",
+                "actual": "1",
+                "message": "",
+                "step": 2
+              },
+              {
+                "rule_id": "R-RETALIATE-ONCE",
+                "status": "pass",
+                "expected": "wraith retaliate with damage in [40, 52] and player.hp = max(0, 57 - damage)",
+                "actual": "actor=wraith kind=retaliate value=46 player_hp=11",
+                "message": "",
+                "step": 2
+              },
+              {
+                "rule_id": "R-RETALIATE-POTIONS-NULL",
+                "status": "pass",
+                "expected": "None",
+                "actual": "None",
+                "message": "",
+                "step": 2
+              },
+              {
+                "rule_id": "R-EVENT-COUNT",
+                "status": "pass",
+                "expected": "2",
+                "actual": "2",
+                "message": "",
+                "step": 2
+              },
+              {
+                "rule_id": "R-LOOT-BALANCE",
+                "status": "pass",
+                "expected": "0",
+                "actual": "0",
+                "message": "",
+                "step": 2
+              },
+              {
+                "rule_id": "R-EXP-BALANCE",
+                "status": "pass",
+                "expected": "0",
+                "actual": "0",
+                "message": "",
+                "step": 2
+              },
+              {
+                "rule_id": "R-LEVEL-UP",
+                "status": "pass",
+                "expected": "1",
+                "actual": "1",
+                "message": "",
+                "step": 2
+              },
+              {
+                "rule_id": "R-LEVEL-UP",
+                "status": "pass",
+                "expected": "100",
+                "actual": "100",
+                "message": "",
+                "step": 2
+              },
+              {
+                "rule_id": "R-LEVEL-UP",
+                "status": "pass",
+                "expected": "2",
+                "actual": "2",
+                "message": "",
+                "step": 2
+              },
+              {
+                "rule_id": "R-ATTACK-HP-APPLY",
+                "status": "pass",
+                "expected": "2",
+                "actual": "2",
+                "message": "",
+                "step": 2
+              },
+              {
+                "rule_id": "R-SKILL-COOLDOWN",
+                "status": "pass",
+                "expected": "0",
+                "actual": "0",
+                "message": "",
+                "step": 2
+              },
+              {
+                "rule_id": "R-EP-COST",
+                "status": "pass",
+                "expected": "80",
+                "actual": "80",
+                "message": "",
+                "step": 2
+              },
+              {
+                "rule_id": "R-MAGIC-GROWTH",
+                "status": "pass",
+                "expected": "100",
+                "actual": "100",
+                "message": "",
+                "step": 2
+              },
+              {
+                "rule_id": "R-MAGIC-GROWTH",
+                "status": "pass",
+                "expected": "10",
+                "actual": "10",
+                "message": "",
+                "step": 2
+              },
+              {
+                "rule_id": "R-INVARIANTS",
+                "status": "pass",
+                "expected": "事件 HP 在上下限内且药水数量非负",
+                "actual": "正常",
+                "message": "",
+                "step": 2
+              },
+              {
+                "rule_id": "R-STATUS-CONSISTENT",
+                "status": "pass",
+                "expected": "status=won ⇒ slime.hp=0；status=lost ⇒ player.hp=0；status=active ⇒ 双方存活",
+                "actual": "status=active player.hp=11 slime.hp=180",
+                "message": "",
+                "step": 2
+              },
+              {
+                "rule_id": "R-LAST-EVENT-MATCHES-SNAPSHOT",
+                "status": "pass",
+                "expected": "last event hp = (11, 180)",
+                "actual": "last event hp = (11, 180)",
+                "message": "",
+                "step": 2
+              }
+            ]
+          },
+          {
+            "index": 3,
+            "action": "power_strike",
+            "expected_status": 200,
+            "expected_code": null,
+            "observed_status": 200,
+            "observed_code": null,
+            "status": "pass",
+            "before": {
+              "session_id": "28a05a2442db4e068d26a8bb1fe7d7c1",
+              "seed": 8,
+              "status": "active",
+              "turn": 2,
+              "player": {
+                "hp": 11,
+                "max_hp": 100,
+                "potions": 2,
+                "gold": 0,
+                "level": 1,
+                "exp": 0,
+                "power_strike_cooldown": 0,
+                "ep": 80,
+                "max_ep": 100,
+                "magic": 10
+              },
+              "slime": {
+                "hp": 180,
+                "max_hp": 210
+              },
+              "enemy_type": "wraith",
+              "ruleset": "v4",
+              "battle_count": 1,
+              "battle_index": 1,
+              "enemy_level": 6,
+              "events": [
+                {
+                  "turn": 1,
+                  "actor": "player",
+                  "kind": "potion",
+                  "value": 25,
+                  "player_hp": 100,
+                  "slime_hp": 210,
+                  "potions": 2,
+                  "item": null
+                },
+                {
+                  "turn": 1,
+                  "actor": "wraith",
+                  "kind": "retaliate",
+                  "value": 43,
+                  "player_hp": 57,
+                  "slime_hp": 210,
+                  "potions": null,
+                  "item": null
+                },
+                {
+                  "turn": 2,
+                  "actor": "player",
+                  "kind": "cast_spark",
+                  "value": 30,
+                  "player_hp": 57,
+                  "slime_hp": 180,
+                  "potions": 2,
+                  "item": null
+                },
+                {
+                  "turn": 2,
+                  "actor": "wraith",
+                  "kind": "retaliate",
+                  "value": 46,
+                  "player_hp": 11,
+                  "slime_hp": 180,
+                  "potions": null,
+                  "item": null
+                }
+              ]
+            },
+            "after": {
+              "session_id": "28a05a2442db4e068d26a8bb1fe7d7c1",
+              "seed": 8,
+              "status": "lost",
+              "turn": 3,
+              "player": {
+                "hp": 0,
+                "max_hp": 100,
+                "potions": 2,
+                "gold": 0,
+                "level": 1,
+                "exp": 0,
+                "power_strike_cooldown": 2,
+                "ep": 80,
+                "max_ep": 100,
+                "magic": 10
+              },
+              "slime": {
+                "hp": 148,
+                "max_hp": 210
+              },
+              "enemy_type": "wraith",
+              "ruleset": "v4",
+              "battle_count": 1,
+              "battle_index": 1,
+              "enemy_level": 6,
+              "events": [
+                {
+                  "turn": 1,
+                  "actor": "player",
+                  "kind": "potion",
+                  "value": 25,
+                  "player_hp": 100,
+                  "slime_hp": 210,
+                  "potions": 2,
+                  "item": null
+                },
+                {
+                  "turn": 1,
+                  "actor": "wraith",
+                  "kind": "retaliate",
+                  "value": 43,
+                  "player_hp": 57,
+                  "slime_hp": 210,
+                  "potions": null,
+                  "item": null
+                },
+                {
+                  "turn": 2,
+                  "actor": "player",
+                  "kind": "cast_spark",
+                  "value": 30,
+                  "player_hp": 57,
+                  "slime_hp": 180,
+                  "potions": 2,
+                  "item": null
+                },
+                {
+                  "turn": 2,
+                  "actor": "wraith",
+                  "kind": "retaliate",
+                  "value": 46,
+                  "player_hp": 11,
+                  "slime_hp": 180,
+                  "potions": null,
+                  "item": null
+                },
+                {
+                  "turn": 3,
+                  "actor": "player",
+                  "kind": "power_strike",
+                  "value": 32,
+                  "player_hp": 11,
+                  "slime_hp": 148,
+                  "potions": 2,
+                  "item": null
+                },
+                {
+                  "turn": 3,
+                  "actor": "wraith",
+                  "kind": "retaliate",
+                  "value": 43,
+                  "player_hp": 0,
+                  "slime_hp": 148,
+                  "potions": null,
+                  "item": null
+                }
+              ]
+            },
+            "new_events": [
+              {
+                "turn": 3,
+                "actor": "player",
+                "kind": "power_strike",
+                "value": 32,
+                "player_hp": 11,
+                "slime_hp": 148,
+                "potions": 2,
+                "item": null
+              },
+              {
+                "turn": 3,
+                "actor": "wraith",
+                "kind": "retaliate",
+                "value": 43,
+                "player_hp": 0,
+                "slime_hp": 148,
+                "potions": null,
+                "item": null
+              }
+            ],
+            "observation": {
+              "method": "POST",
+              "path": "/api/v1/game-sessions/28a05a2442db4e068d26a8bb1fe7d7c1/actions",
+              "status_code": 200,
+              "body": {
+                "session_id": "28a05a2442db4e068d26a8bb1fe7d7c1",
+                "seed": 8,
+                "status": "lost",
+                "turn": 3,
+                "player": {
+                  "hp": 0,
+                  "max_hp": 100,
+                  "potions": 2,
+                  "gold": 0,
+                  "level": 1,
+                  "exp": 0,
+                  "power_strike_cooldown": 2,
+                  "ep": 80,
+                  "max_ep": 100,
+                  "magic": 10
+                },
+                "slime": {
+                  "hp": 148,
+                  "max_hp": 210
+                },
+                "enemy_type": "wraith",
+                "ruleset": "v4",
+                "battle_count": 1,
+                "battle_index": 1,
+                "enemy_level": 6,
+                "events": [
+                  {
+                    "turn": 1,
+                    "actor": "player",
+                    "kind": "potion",
+                    "value": 25,
+                    "player_hp": 100,
+                    "slime_hp": 210,
+                    "potions": 2,
+                    "item": null
+                  },
+                  {
+                    "turn": 1,
+                    "actor": "wraith",
+                    "kind": "retaliate",
+                    "value": 43,
+                    "player_hp": 57,
+                    "slime_hp": 210,
+                    "potions": null,
+                    "item": null
+                  },
+                  {
+                    "turn": 2,
+                    "actor": "player",
+                    "kind": "cast_spark",
+                    "value": 30,
+                    "player_hp": 57,
+                    "slime_hp": 180,
+                    "potions": 2,
+                    "item": null
+                  },
+                  {
+                    "turn": 2,
+                    "actor": "wraith",
+                    "kind": "retaliate",
+                    "value": 46,
+                    "player_hp": 11,
+                    "slime_hp": 180,
+                    "potions": null,
+                    "item": null
+                  },
+                  {
+                    "turn": 3,
+                    "actor": "player",
+                    "kind": "power_strike",
+                    "value": 32,
+                    "player_hp": 11,
+                    "slime_hp": 148,
+                    "potions": 2,
+                    "item": null
+                  },
+                  {
+                    "turn": 3,
+                    "actor": "wraith",
+                    "kind": "retaliate",
+                    "value": 43,
+                    "player_hp": 0,
+                    "slime_hp": 148,
+                    "potions": null,
+                    "item": null
+                  }
+                ]
+              },
+              "error_kind": null,
+              "error_detail": null,
+              "elapsed_ms": 1.6955000028247014
+            },
+            "verification_observation": null,
+            "error": null,
+            "checks": [
+              {
+                "rule_id": "R-EXPECTED-STATUS",
+                "status": "pass",
+                "expected": "200",
+                "actual": "200",
+                "message": "",
+                "step": 3
+              },
+              {
+                "rule_id": "R-INVARIANTS",
+                "status": "pass",
+                "expected": "动作前后的 session_id必须相同",
+                "actual": "相同",
+                "message": "",
+                "step": 3
+              },
+              {
+                "rule_id": "R-INVARIANTS",
+                "status": "pass",
+                "expected": "8",
+                "actual": "8",
+                "message": "",
+                "step": 3
+              },
+              {
+                "rule_id": "R-INVARIANTS",
+                "status": "pass",
+                "expected": "0 <= player.hp <= 100",
+                "actual": "0",
+                "message": "",
+                "step": 3
+              },
+              {
+                "rule_id": "R-INVARIANTS",
+                "status": "pass",
+                "expected": "0 <= slime.hp <= 210",
+                "actual": "148",
+                "message": "",
+                "step": 3
+              },
+              {
+                "rule_id": "R-INVARIANTS",
+                "status": "pass",
+                "expected": "药水非负，旧规则下只减不增",
+                "actual": "2",
+                "message": "",
+                "step": 3
+              },
+              {
+                "rule_id": "R-INVARIANTS",
+                "status": "pass",
+                "expected": "等级至少1且经验非负",
+                "actual": "等级1经验0",
+                "message": "",
+                "step": 3
+              },
+              {
+                "rule_id": "R-INVARIANTS",
+                "status": "pass",
+                "expected": "EP 在 [0, max_ep] 且魔力不少于初始值",
+                "actual": "EP 80/100，魔力 10",
+                "message": "",
+                "step": 3
+              },
+              {
+                "rule_id": "R-TURN-INCREMENT",
+                "status": "pass",
+                "expected": "3",
+                "actual": "3",
+                "message": "",
+                "step": 3
+              },
+              {
+                "rule_id": "R-HISTORY-PREFIX",
+                "status": "pass",
+                "expected": "[turn=1 actor='player' kind='potion' value=25 player_hp=100 slime_hp=210 potions=2 item=None, turn=1 actor='wraith' kind='retaliate' value=43 player_hp=57 slime_hp=210 potions=None item=None, turn=2 actor='player' kind='cast_spark' value=30 player_hp=57 slime_hp=180 potions=2 item=None, turn=2 actor='wraith' kind='retaliate' value=46 player_hp=11 slime_hp=180 potions=None item=None]",
+                "actual": "[turn=1 actor='player' kind='potion' value=25 player_hp=100 slime_hp=210 potions=2 item=None, turn=1 actor='wraith' kind='retaliate' value=43 player_hp=57 slime_hp=210 potions=None item=None, turn=2 actor='player' kind='cast_spark' value=30 player_hp=57 slime_hp=180 potions=2 item=None, turn=2 actor='wraith' kind='retaliate' value=46 player_hp=11 slime_hp=180 potions=None item=None]",
+                "message": "",
+                "step": 3
+              },
+              {
+                "rule_id": "R-EVENT-TURN",
+                "status": "pass",
+                "expected": "all new events turn == 3",
+                "actual": "[3, 3]",
+                "message": "",
+                "step": 3
+              },
+              {
+                "rule_id": "R-EVENT-ACTOR-ORDER",
+                "status": "pass",
+                "expected": "首条事件为玩家 power_strike",
+                "actual": "player/power_strike",
+                "message": "",
+                "step": 3
+              },
+              {
+                "rule_id": "R-SKILL-POWER",
+                "status": "pass",
+                "expected": "伤害在 30～37",
+                "actual": "32",
+                "message": "",
+                "step": 3
+              },
+              {
+                "rule_id": "R-ATTACK-HP-APPLY",
+                "status": "pass",
+                "expected": "攻击事件按伤害扣敌人生命，玩家生命和药水不变",
+                "actual": "敌人 148 玩家 11 药水 2",
+                "message": "",
+                "step": 3
+              },
+              {
+                "rule_id": "R-BATTLE-ADVANCE",
+                "status": "pass",
+                "expected": "1",
+                "actual": "1",
+                "message": "",
+                "step": 3
+              },
+              {
+                "rule_id": "R-RETALIATE-ONCE",
+                "status": "pass",
+                "expected": "wraith retaliate with damage in [40, 52] and player.hp = max(0, 11 - damage)",
+                "actual": "actor=wraith kind=retaliate value=43 player_hp=0",
+                "message": "",
+                "step": 3
+              },
+              {
+                "rule_id": "R-RETALIATE-POTIONS-NULL",
+                "status": "pass",
+                "expected": "None",
+                "actual": "None",
+                "message": "",
+                "step": 3
+              },
+              {
+                "rule_id": "R-EVENT-COUNT",
+                "status": "pass",
+                "expected": "2",
+                "actual": "2",
+                "message": "",
+                "step": 3
+              },
+              {
+                "rule_id": "R-LOOT-BALANCE",
+                "status": "pass",
+                "expected": "0",
+                "actual": "0",
+                "message": "",
+                "step": 3
+              },
+              {
+                "rule_id": "R-EXP-BALANCE",
+                "status": "pass",
+                "expected": "0",
+                "actual": "0",
+                "message": "",
+                "step": 3
+              },
+              {
+                "rule_id": "R-LEVEL-UP",
+                "status": "pass",
+                "expected": "1",
+                "actual": "1",
+                "message": "",
+                "step": 3
+              },
+              {
+                "rule_id": "R-LEVEL-UP",
+                "status": "pass",
+                "expected": "100",
+                "actual": "100",
+                "message": "",
+                "step": 3
+              },
+              {
+                "rule_id": "R-LEVEL-UP",
+                "status": "pass",
+                "expected": "2",
+                "actual": "2",
+                "message": "",
+                "step": 3
+              },
+              {
+                "rule_id": "R-ATTACK-HP-APPLY",
+                "status": "pass",
+                "expected": "2",
+                "actual": "2",
+                "message": "",
+                "step": 3
+              },
+              {
+                "rule_id": "R-SKILL-COOLDOWN",
+                "status": "pass",
+                "expected": "2",
+                "actual": "2",
+                "message": "",
+                "step": 3
+              },
+              {
+                "rule_id": "R-EP-COST",
+                "status": "pass",
+                "expected": "80",
+                "actual": "80",
+                "message": "",
+                "step": 3
+              },
+              {
+                "rule_id": "R-MAGIC-GROWTH",
+                "status": "pass",
+                "expected": "100",
+                "actual": "100",
+                "message": "",
+                "step": 3
+              },
+              {
+                "rule_id": "R-MAGIC-GROWTH",
+                "status": "pass",
+                "expected": "10",
+                "actual": "10",
+                "message": "",
+                "step": 3
+              },
+              {
+                "rule_id": "R-INVARIANTS",
+                "status": "pass",
+                "expected": "事件 HP 在上下限内且药水数量非负",
+                "actual": "正常",
+                "message": "",
+                "step": 3
+              },
+              {
+                "rule_id": "R-STATUS-CONSISTENT",
+                "status": "pass",
+                "expected": "status=won ⇒ slime.hp=0；status=lost ⇒ player.hp=0；status=active ⇒ 双方存活",
+                "actual": "status=lost player.hp=0 slime.hp=148",
+                "message": "",
+                "step": 3
+              },
+              {
+                "rule_id": "R-LAST-EVENT-MATCHES-SNAPSHOT",
+                "status": "pass",
+                "expected": "last event hp = (0, 148)",
+                "actual": "last event hp = (0, 148)",
+                "message": "",
+                "step": 3
+              }
+            ]
+          },
+          {
+            "index": 4,
+            "action": "attack",
+            "expected_status": 409,
+            "expected_code": "battle_not_active",
+            "observed_status": 409,
+            "observed_code": "battle_not_active",
+            "status": "pass",
+            "before": {
+              "session_id": "28a05a2442db4e068d26a8bb1fe7d7c1",
+              "seed": 8,
+              "status": "lost",
+              "turn": 3,
+              "player": {
+                "hp": 0,
+                "max_hp": 100,
+                "potions": 2,
+                "gold": 0,
+                "level": 1,
+                "exp": 0,
+                "power_strike_cooldown": 2,
+                "ep": 80,
+                "max_ep": 100,
+                "magic": 10
+              },
+              "slime": {
+                "hp": 148,
+                "max_hp": 210
+              },
+              "enemy_type": "wraith",
+              "ruleset": "v4",
+              "battle_count": 1,
+              "battle_index": 1,
+              "enemy_level": 6,
+              "events": [
+                {
+                  "turn": 1,
+                  "actor": "player",
+                  "kind": "potion",
+                  "value": 25,
+                  "player_hp": 100,
+                  "slime_hp": 210,
+                  "potions": 2,
+                  "item": null
+                },
+                {
+                  "turn": 1,
+                  "actor": "wraith",
+                  "kind": "retaliate",
+                  "value": 43,
+                  "player_hp": 57,
+                  "slime_hp": 210,
+                  "potions": null,
+                  "item": null
+                },
+                {
+                  "turn": 2,
+                  "actor": "player",
+                  "kind": "cast_spark",
+                  "value": 30,
+                  "player_hp": 57,
+                  "slime_hp": 180,
+                  "potions": 2,
+                  "item": null
+                },
+                {
+                  "turn": 2,
+                  "actor": "wraith",
+                  "kind": "retaliate",
+                  "value": 46,
+                  "player_hp": 11,
+                  "slime_hp": 180,
+                  "potions": null,
+                  "item": null
+                },
+                {
+                  "turn": 3,
+                  "actor": "player",
+                  "kind": "power_strike",
+                  "value": 32,
+                  "player_hp": 11,
+                  "slime_hp": 148,
+                  "potions": 2,
+                  "item": null
+                },
+                {
+                  "turn": 3,
+                  "actor": "wraith",
+                  "kind": "retaliate",
+                  "value": 43,
+                  "player_hp": 0,
+                  "slime_hp": 148,
+                  "potions": null,
+                  "item": null
+                }
+              ]
+            },
+            "after": {
+              "session_id": "28a05a2442db4e068d26a8bb1fe7d7c1",
+              "seed": 8,
+              "status": "lost",
+              "turn": 3,
+              "player": {
+                "hp": 0,
+                "max_hp": 100,
+                "potions": 2,
+                "gold": 0,
+                "level": 1,
+                "exp": 0,
+                "power_strike_cooldown": 2,
+                "ep": 80,
+                "max_ep": 100,
+                "magic": 10
+              },
+              "slime": {
+                "hp": 148,
+                "max_hp": 210
+              },
+              "enemy_type": "wraith",
+              "ruleset": "v4",
+              "battle_count": 1,
+              "battle_index": 1,
+              "enemy_level": 6,
+              "events": [
+                {
+                  "turn": 1,
+                  "actor": "player",
+                  "kind": "potion",
+                  "value": 25,
+                  "player_hp": 100,
+                  "slime_hp": 210,
+                  "potions": 2,
+                  "item": null
+                },
+                {
+                  "turn": 1,
+                  "actor": "wraith",
+                  "kind": "retaliate",
+                  "value": 43,
+                  "player_hp": 57,
+                  "slime_hp": 210,
+                  "potions": null,
+                  "item": null
+                },
+                {
+                  "turn": 2,
+                  "actor": "player",
+                  "kind": "cast_spark",
+                  "value": 30,
+                  "player_hp": 57,
+                  "slime_hp": 180,
+                  "potions": 2,
+                  "item": null
+                },
+                {
+                  "turn": 2,
+                  "actor": "wraith",
+                  "kind": "retaliate",
+                  "value": 46,
+                  "player_hp": 11,
+                  "slime_hp": 180,
+                  "potions": null,
+                  "item": null
+                },
+                {
+                  "turn": 3,
+                  "actor": "player",
+                  "kind": "power_strike",
+                  "value": 32,
+                  "player_hp": 11,
+                  "slime_hp": 148,
+                  "potions": 2,
+                  "item": null
+                },
+                {
+                  "turn": 3,
+                  "actor": "wraith",
+                  "kind": "retaliate",
+                  "value": 43,
+                  "player_hp": 0,
+                  "slime_hp": 148,
+                  "potions": null,
+                  "item": null
+                }
+              ]
+            },
+            "new_events": [],
+            "observation": {
+              "method": "POST",
+              "path": "/api/v1/game-sessions/28a05a2442db4e068d26a8bb1fe7d7c1/actions",
+              "status_code": 409,
+              "body": {
+                "code": "battle_not_active",
+                "message": "battle already finished with status lost"
+              },
+              "error_kind": null,
+              "error_detail": null,
+              "elapsed_ms": 0.8392000017920509
+            },
+            "verification_observation": {
+              "method": "GET",
+              "path": "/api/v1/game-sessions/28a05a2442db4e068d26a8bb1fe7d7c1",
+              "status_code": 200,
+              "body": {
+                "session_id": "28a05a2442db4e068d26a8bb1fe7d7c1",
+                "seed": 8,
+                "status": "lost",
+                "turn": 3,
+                "player": {
+                  "hp": 0,
+                  "max_hp": 100,
+                  "potions": 2,
+                  "gold": 0,
+                  "level": 1,
+                  "exp": 0,
+                  "power_strike_cooldown": 2,
+                  "ep": 80,
+                  "max_ep": 100,
+                  "magic": 10
+                },
+                "slime": {
+                  "hp": 148,
+                  "max_hp": 210
+                },
+                "enemy_type": "wraith",
+                "ruleset": "v4",
+                "battle_count": 1,
+                "battle_index": 1,
+                "enemy_level": 6,
+                "events": [
+                  {
+                    "turn": 1,
+                    "actor": "player",
+                    "kind": "potion",
+                    "value": 25,
+                    "player_hp": 100,
+                    "slime_hp": 210,
+                    "potions": 2,
+                    "item": null
+                  },
+                  {
+                    "turn": 1,
+                    "actor": "wraith",
+                    "kind": "retaliate",
+                    "value": 43,
+                    "player_hp": 57,
+                    "slime_hp": 210,
+                    "potions": null,
+                    "item": null
+                  },
+                  {
+                    "turn": 2,
+                    "actor": "player",
+                    "kind": "cast_spark",
+                    "value": 30,
+                    "player_hp": 57,
+                    "slime_hp": 180,
+                    "potions": 2,
+                    "item": null
+                  },
+                  {
+                    "turn": 2,
+                    "actor": "wraith",
+                    "kind": "retaliate",
+                    "value": 46,
+                    "player_hp": 11,
+                    "slime_hp": 180,
+                    "potions": null,
+                    "item": null
+                  },
+                  {
+                    "turn": 3,
+                    "actor": "player",
+                    "kind": "power_strike",
+                    "value": 32,
+                    "player_hp": 11,
+                    "slime_hp": 148,
+                    "potions": 2,
+                    "item": null
+                  },
+                  {
+                    "turn": 3,
+                    "actor": "wraith",
+                    "kind": "retaliate",
+                    "value": 43,
+                    "player_hp": 0,
+                    "slime_hp": 148,
+                    "potions": null,
+                    "item": null
+                  }
+                ]
+              },
+              "error_kind": null,
+              "error_detail": null,
+              "elapsed_ms": 0.9291000023949891
+            },
+            "error": null,
+            "checks": [
+              {
+                "rule_id": "R-NO-ACTION-AFTER-PLAYER-DEATH",
+                "status": "pass",
+                "expected": "玩家死亡后动作返回 409",
+                "actual": "HTTP 409",
+                "message": "",
+                "step": 4
+              },
+              {
+                "rule_id": "R-EXPECTED-STATUS",
+                "status": "pass",
+                "expected": "409",
+                "actual": "409",
+                "message": "",
+                "step": 4
+              },
+              {
+                "rule_id": "R-EXPECTED-CODE",
+                "status": "pass",
+                "expected": "battle_not_active",
+                "actual": "battle_not_active",
+                "message": "",
+                "step": 4
+              },
+              {
+                "rule_id": "R-GET-STATUS",
+                "status": "pass",
+                "expected": "200",
+                "actual": "200",
+                "message": "",
+                "step": 4
+              },
+              {
+                "rule_id": "R-REJECT-NO-STATE-CHANGE",
+                "status": "pass",
+                "expected": "被拒绝动作前后的完整状态与事件必须相同",
+                "actual": "相同",
+                "message": "",
+                "step": 4
+              }
+            ]
+          }
+        ],
+        "checks": [
+          {
+            "rule_id": "R-CREATE-STATUS",
+            "status": "pass",
+            "expected": "201",
+            "actual": "201",
+            "message": "",
+            "step": null
+          },
+          {
+            "rule_id": "R-CREATE-SEED",
+            "status": "pass",
+            "expected": "8",
+            "actual": "8",
+            "message": "",
+            "step": null
+          },
+          {
+            "rule_id": "R-GET-STATUS",
+            "status": "pass",
+            "expected": "200",
+            "actual": "200",
+            "message": "",
+            "step": null
+          },
+          {
+            "rule_id": "R-INIT-STATE",
+            "status": "pass",
+            "expected": "100",
+            "actual": "100",
+            "message": "",
+            "step": null
+          },
+          {
+            "rule_id": "R-INIT-STATE",
+            "status": "pass",
+            "expected": "100",
+            "actual": "100",
+            "message": "",
+            "step": null
+          },
+          {
+            "rule_id": "R-INIT-STATE",
+            "status": "pass",
+            "expected": "3",
+            "actual": "3",
+            "message": "",
+            "step": null
+          },
+          {
+            "rule_id": "R-INIT-STATE",
+            "status": "pass",
+            "expected": "0",
+            "actual": "0",
+            "message": "",
+            "step": null
+          },
+          {
+            "rule_id": "R-INIT-STATE",
+            "status": "pass",
+            "expected": "1",
+            "actual": "1",
+            "message": "",
+            "step": null
+          },
+          {
+            "rule_id": "R-INIT-STATE",
+            "status": "pass",
+            "expected": "0",
+            "actual": "0",
+            "message": "",
+            "step": null
+          },
+          {
+            "rule_id": "R-INIT-STATE",
+            "status": "pass",
+            "expected": "100",
+            "actual": "100",
+            "message": "",
+            "step": null
+          },
+          {
+            "rule_id": "R-INIT-STATE",
+            "status": "pass",
+            "expected": "100",
+            "actual": "100",
+            "message": "",
+            "step": null
+          },
+          {
+            "rule_id": "R-INIT-STATE",
+            "status": "pass",
+            "expected": "10",
+            "actual": "10",
+            "message": "",
+            "step": null
+          },
+          {
+            "rule_id": "R-INIT-STATE",
+            "status": "pass",
+            "expected": "0",
+            "actual": "0",
+            "message": "",
+            "step": null
+          },
+          {
+            "rule_id": "R-INIT-STATE",
+            "status": "pass",
+            "expected": "1",
+            "actual": "1",
+            "message": "",
+            "step": null
+          },
+          {
+            "rule_id": "R-INIT-STATE",
+            "status": "pass",
+            "expected": "battle_count in [1, 6]",
+            "actual": "1",
+            "message": "",
+            "step": null
+          },
+          {
+            "rule_id": "R-INIT-STATE",
+            "status": "pass",
+            "expected": "6",
+            "actual": "6",
+            "message": "",
+            "step": null
+          },
+          {
+            "rule_id": "R-INIT-STATE",
+            "status": "pass",
+            "expected": "known enemy type",
+            "actual": "wraith",
+            "message": "",
+            "step": null
+          },
+          {
+            "rule_id": "R-INIT-STATE",
+            "status": "pass",
+            "expected": "210",
+            "actual": "210",
+            "message": "",
+            "step": null
+          },
+          {
+            "rule_id": "R-INIT-STATE",
+            "status": "pass",
+            "expected": "210",
+            "actual": "210",
+            "message": "",
+            "step": null
+          },
+          {
+            "rule_id": "R-INIT-STATE",
+            "status": "pass",
+            "expected": "active",
+            "actual": "active",
+            "message": "",
+            "step": null
+          },
+          {
+            "rule_id": "R-INIT-STATE",
+            "status": "pass",
+            "expected": "0",
+            "actual": "0",
+            "message": "",
+            "step": null
+          },
+          {
+            "rule_id": "R-INIT-STATE",
+            "status": "pass",
+            "expected": "[]",
+            "actual": "[]",
+            "message": "",
+            "step": null
+          },
+          {
+            "rule_id": "R-CREATE-GET-IDENTICAL",
+            "status": "pass",
+            "expected": "创建响应与随后 GET 的完整状态必须相同",
+            "actual": "相同",
+            "message": "",
+            "step": null
+          },
+          {
+            "rule_id": "R-EXPECTED-STATUS",
+            "status": "pass",
+            "expected": "200",
+            "actual": "200",
+            "message": "",
+            "step": 1
+          },
+          {
+            "rule_id": "R-INVARIANTS",
+            "status": "pass",
+            "expected": "动作前后的 session_id必须相同",
+            "actual": "相同",
+            "message": "",
+            "step": 1
+          },
+          {
+            "rule_id": "R-INVARIANTS",
+            "status": "pass",
+            "expected": "8",
+            "actual": "8",
+            "message": "",
+            "step": 1
+          },
+          {
+            "rule_id": "R-INVARIANTS",
+            "status": "pass",
+            "expected": "0 <= player.hp <= 100",
+            "actual": "57",
+            "message": "",
+            "step": 1
+          },
+          {
+            "rule_id": "R-INVARIANTS",
+            "status": "pass",
+            "expected": "0 <= slime.hp <= 210",
+            "actual": "210",
+            "message": "",
+            "step": 1
+          },
+          {
+            "rule_id": "R-INVARIANTS",
+            "status": "pass",
+            "expected": "药水非负，旧规则下只减不增",
+            "actual": "2",
+            "message": "",
+            "step": 1
+          },
+          {
+            "rule_id": "R-INVARIANTS",
+            "status": "pass",
+            "expected": "等级至少1且经验非负",
+            "actual": "等级1经验0",
+            "message": "",
+            "step": 1
+          },
+          {
+            "rule_id": "R-INVARIANTS",
+            "status": "pass",
+            "expected": "EP 在 [0, max_ep] 且魔力不少于初始值",
+            "actual": "EP 100/100，魔力 10",
+            "message": "",
+            "step": 1
+          },
+          {
+            "rule_id": "R-TURN-INCREMENT",
+            "status": "pass",
+            "expected": "1",
+            "actual": "1",
+            "message": "",
+            "step": 1
+          },
+          {
+            "rule_id": "R-HISTORY-PREFIX",
+            "status": "pass",
+            "expected": "[]",
+            "actual": "[]",
+            "message": "",
+            "step": 1
+          },
+          {
+            "rule_id": "R-EVENT-TURN",
+            "status": "pass",
+            "expected": "all new events turn == 1",
+            "actual": "[1, 1]",
+            "message": "",
+            "step": 1
+          },
+          {
+            "rule_id": "R-EVENT-ACTOR-ORDER",
+            "status": "pass",
+            "expected": "first new event: actor=player kind=potion",
+            "actual": "actor=player kind=potion",
+            "message": "",
+            "step": 1
+          },
+          {
+            "rule_id": "R-POTION-HEAL",
+            "status": "pass",
+            "expected": "药水效力 25，实际回血 min(25, 100 - 100) = 0",
+            "actual": "heal=25 event player_hp=100",
+            "message": "",
+            "step": 1
+          },
+          {
+            "rule_id": "R-POTION-CAP",
+            "status": "pass",
+            "expected": "药水事件 HP <= 100",
+            "actual": "100",
+            "message": "",
+            "step": 1
+          },
+          {
+            "rule_id": "R-POTION-DECREMENTS",
+            "status": "pass",
+            "expected": "2",
+            "actual": "2",
+            "message": "",
+            "step": 1
+          },
+          {
+            "rule_id": "R-EVENT-COUNT",
+            "status": "pass",
+            "expected": "2",
+            "actual": "2",
+            "message": "",
+            "step": 1
+          },
+          {
+            "rule_id": "R-RETALIATE-ONCE",
+            "status": "pass",
+            "expected": "wraith retaliate with damage in [40, 52] and player.hp = max(0, 100 - damage)",
+            "actual": "actor=wraith kind=retaliate value=43 player_hp=57",
+            "message": "",
+            "step": 1
+          },
+          {
+            "rule_id": "R-RETALIATE-POTIONS-NULL",
+            "status": "pass",
+            "expected": "None",
+            "actual": "None",
+            "message": "",
+            "step": 1
+          },
+          {
+            "rule_id": "R-POTION-DECREMENTS",
+            "status": "pass",
+            "expected": "2",
+            "actual": "2",
+            "message": "",
+            "step": 1
+          },
+          {
+            "rule_id": "R-SKILL-COOLDOWN",
+            "status": "pass",
+            "expected": "0",
+            "actual": "0",
+            "message": "",
+            "step": 1
+          },
+          {
+            "rule_id": "R-EP-COST",
+            "status": "pass",
+            "expected": "100",
+            "actual": "100",
+            "message": "",
+            "step": 1
+          },
+          {
+            "rule_id": "R-MAGIC-GROWTH",
+            "status": "pass",
+            "expected": "100",
+            "actual": "100",
+            "message": "",
+            "step": 1
+          },
+          {
+            "rule_id": "R-MAGIC-GROWTH",
+            "status": "pass",
+            "expected": "10",
+            "actual": "10",
+            "message": "",
+            "step": 1
+          },
+          {
+            "rule_id": "R-INVARIANTS",
+            "status": "pass",
+            "expected": "事件 HP 在上下限内且药水数量非负",
+            "actual": "正常",
+            "message": "",
+            "step": 1
+          },
+          {
+            "rule_id": "R-STATUS-CONSISTENT",
+            "status": "pass",
+            "expected": "status=won ⇒ slime.hp=0；status=lost ⇒ player.hp=0；status=active ⇒ 双方存活",
+            "actual": "status=active player.hp=57 slime.hp=210",
+            "message": "",
+            "step": 1
+          },
+          {
+            "rule_id": "R-LAST-EVENT-MATCHES-SNAPSHOT",
+            "status": "pass",
+            "expected": "last event hp = (57, 210)",
+            "actual": "last event hp = (57, 210)",
+            "message": "",
+            "step": 1
+          },
+          {
+            "rule_id": "R-EXPECTED-STATUS",
+            "status": "pass",
+            "expected": "200",
+            "actual": "200",
+            "message": "",
+            "step": 2
+          },
+          {
+            "rule_id": "R-INVARIANTS",
+            "status": "pass",
+            "expected": "动作前后的 session_id必须相同",
+            "actual": "相同",
+            "message": "",
+            "step": 2
+          },
+          {
+            "rule_id": "R-INVARIANTS",
+            "status": "pass",
+            "expected": "8",
+            "actual": "8",
+            "message": "",
+            "step": 2
+          },
+          {
+            "rule_id": "R-INVARIANTS",
+            "status": "pass",
+            "expected": "0 <= player.hp <= 100",
+            "actual": "11",
+            "message": "",
+            "step": 2
+          },
+          {
+            "rule_id": "R-INVARIANTS",
+            "status": "pass",
+            "expected": "0 <= slime.hp <= 210",
+            "actual": "180",
+            "message": "",
+            "step": 2
+          },
+          {
+            "rule_id": "R-INVARIANTS",
+            "status": "pass",
+            "expected": "药水非负，旧规则下只减不增",
+            "actual": "2",
+            "message": "",
+            "step": 2
+          },
+          {
+            "rule_id": "R-INVARIANTS",
+            "status": "pass",
+            "expected": "等级至少1且经验非负",
+            "actual": "等级1经验0",
+            "message": "",
+            "step": 2
+          },
+          {
+            "rule_id": "R-INVARIANTS",
+            "status": "pass",
+            "expected": "EP 在 [0, max_ep] 且魔力不少于初始值",
+            "actual": "EP 80/100，魔力 10",
+            "message": "",
+            "step": 2
+          },
+          {
+            "rule_id": "R-TURN-INCREMENT",
+            "status": "pass",
+            "expected": "2",
+            "actual": "2",
+            "message": "",
+            "step": 2
+          },
+          {
+            "rule_id": "R-HISTORY-PREFIX",
+            "status": "pass",
+            "expected": "[turn=1 actor='player' kind='potion' value=25 player_hp=100 slime_hp=210 potions=2 item=None, turn=1 actor='wraith' kind='retaliate' value=43 player_hp=57 slime_hp=210 potions=None item=None]",
+            "actual": "[turn=1 actor='player' kind='potion' value=25 player_hp=100 slime_hp=210 potions=2 item=None, turn=1 actor='wraith' kind='retaliate' value=43 player_hp=57 slime_hp=210 potions=None item=None]",
+            "message": "",
+            "step": 2
+          },
+          {
+            "rule_id": "R-EVENT-TURN",
+            "status": "pass",
+            "expected": "all new events turn == 2",
+            "actual": "[2, 2]",
+            "message": "",
+            "step": 2
+          },
+          {
+            "rule_id": "R-EVENT-ACTOR-ORDER",
+            "status": "pass",
+            "expected": "首条事件为玩家 cast_spark",
+            "actual": "player/cast_spark",
+            "message": "",
+            "step": 2
+          },
+          {
+            "rule_id": "R-SKILL-POWER",
+            "status": "pass",
+            "expected": "伤害在 28～34",
+            "actual": "30",
+            "message": "",
+            "step": 2
+          },
+          {
+            "rule_id": "R-ATTACK-HP-APPLY",
+            "status": "pass",
+            "expected": "攻击事件按伤害扣敌人生命，玩家生命和药水不变",
+            "actual": "敌人 180 玩家 57 药水 2",
+            "message": "",
+            "step": 2
+          },
+          {
+            "rule_id": "R-BATTLE-ADVANCE",
+            "status": "pass",
+            "expected": "1",
+            "actual": "1",
+            "message": "",
+            "step": 2
+          },
+          {
+            "rule_id": "R-RETALIATE-ONCE",
+            "status": "pass",
+            "expected": "wraith retaliate with damage in [40, 52] and player.hp = max(0, 57 - damage)",
+            "actual": "actor=wraith kind=retaliate value=46 player_hp=11",
+            "message": "",
+            "step": 2
+          },
+          {
+            "rule_id": "R-RETALIATE-POTIONS-NULL",
+            "status": "pass",
+            "expected": "None",
+            "actual": "None",
+            "message": "",
+            "step": 2
+          },
+          {
+            "rule_id": "R-EVENT-COUNT",
+            "status": "pass",
+            "expected": "2",
+            "actual": "2",
+            "message": "",
+            "step": 2
+          },
+          {
+            "rule_id": "R-LOOT-BALANCE",
+            "status": "pass",
+            "expected": "0",
+            "actual": "0",
+            "message": "",
+            "step": 2
+          },
+          {
+            "rule_id": "R-EXP-BALANCE",
+            "status": "pass",
+            "expected": "0",
+            "actual": "0",
+            "message": "",
+            "step": 2
+          },
+          {
+            "rule_id": "R-LEVEL-UP",
+            "status": "pass",
+            "expected": "1",
+            "actual": "1",
+            "message": "",
+            "step": 2
+          },
+          {
+            "rule_id": "R-LEVEL-UP",
+            "status": "pass",
+            "expected": "100",
+            "actual": "100",
+            "message": "",
+            "step": 2
+          },
+          {
+            "rule_id": "R-LEVEL-UP",
+            "status": "pass",
+            "expected": "2",
+            "actual": "2",
+            "message": "",
+            "step": 2
+          },
+          {
+            "rule_id": "R-ATTACK-HP-APPLY",
+            "status": "pass",
+            "expected": "2",
+            "actual": "2",
+            "message": "",
+            "step": 2
+          },
+          {
+            "rule_id": "R-SKILL-COOLDOWN",
+            "status": "pass",
+            "expected": "0",
+            "actual": "0",
+            "message": "",
+            "step": 2
+          },
+          {
+            "rule_id": "R-EP-COST",
+            "status": "pass",
+            "expected": "80",
+            "actual": "80",
+            "message": "",
+            "step": 2
+          },
+          {
+            "rule_id": "R-MAGIC-GROWTH",
+            "status": "pass",
+            "expected": "100",
+            "actual": "100",
+            "message": "",
+            "step": 2
+          },
+          {
+            "rule_id": "R-MAGIC-GROWTH",
+            "status": "pass",
+            "expected": "10",
+            "actual": "10",
+            "message": "",
+            "step": 2
+          },
+          {
+            "rule_id": "R-INVARIANTS",
+            "status": "pass",
+            "expected": "事件 HP 在上下限内且药水数量非负",
+            "actual": "正常",
+            "message": "",
+            "step": 2
+          },
+          {
+            "rule_id": "R-STATUS-CONSISTENT",
+            "status": "pass",
+            "expected": "status=won ⇒ slime.hp=0；status=lost ⇒ player.hp=0；status=active ⇒ 双方存活",
+            "actual": "status=active player.hp=11 slime.hp=180",
+            "message": "",
+            "step": 2
+          },
+          {
+            "rule_id": "R-LAST-EVENT-MATCHES-SNAPSHOT",
+            "status": "pass",
+            "expected": "last event hp = (11, 180)",
+            "actual": "last event hp = (11, 180)",
+            "message": "",
+            "step": 2
+          },
+          {
+            "rule_id": "R-EXPECTED-STATUS",
+            "status": "pass",
+            "expected": "200",
+            "actual": "200",
+            "message": "",
+            "step": 3
+          },
+          {
+            "rule_id": "R-INVARIANTS",
+            "status": "pass",
+            "expected": "动作前后的 session_id必须相同",
+            "actual": "相同",
+            "message": "",
+            "step": 3
+          },
+          {
+            "rule_id": "R-INVARIANTS",
+            "status": "pass",
+            "expected": "8",
+            "actual": "8",
+            "message": "",
+            "step": 3
+          },
+          {
+            "rule_id": "R-INVARIANTS",
+            "status": "pass",
+            "expected": "0 <= player.hp <= 100",
+            "actual": "0",
+            "message": "",
+            "step": 3
+          },
+          {
+            "rule_id": "R-INVARIANTS",
+            "status": "pass",
+            "expected": "0 <= slime.hp <= 210",
+            "actual": "148",
+            "message": "",
+            "step": 3
+          },
+          {
+            "rule_id": "R-INVARIANTS",
+            "status": "pass",
+            "expected": "药水非负，旧规则下只减不增",
+            "actual": "2",
+            "message": "",
+            "step": 3
+          },
+          {
+            "rule_id": "R-INVARIANTS",
+            "status": "pass",
+            "expected": "等级至少1且经验非负",
+            "actual": "等级1经验0",
+            "message": "",
+            "step": 3
+          },
+          {
+            "rule_id": "R-INVARIANTS",
+            "status": "pass",
+            "expected": "EP 在 [0, max_ep] 且魔力不少于初始值",
+            "actual": "EP 80/100，魔力 10",
+            "message": "",
+            "step": 3
+          },
+          {
+            "rule_id": "R-TURN-INCREMENT",
+            "status": "pass",
+            "expected": "3",
+            "actual": "3",
+            "message": "",
+            "step": 3
+          },
+          {
+            "rule_id": "R-HISTORY-PREFIX",
+            "status": "pass",
+            "expected": "[turn=1 actor='player' kind='potion' value=25 player_hp=100 slime_hp=210 potions=2 item=None, turn=1 actor='wraith' kind='retaliate' value=43 player_hp=57 slime_hp=210 potions=None item=None, turn=2 actor='player' kind='cast_spark' value=30 player_hp=57 slime_hp=180 potions=2 item=None, turn=2 actor='wraith' kind='retaliate' value=46 player_hp=11 slime_hp=180 potions=None item=None]",
+            "actual": "[turn=1 actor='player' kind='potion' value=25 player_hp=100 slime_hp=210 potions=2 item=None, turn=1 actor='wraith' kind='retaliate' value=43 player_hp=57 slime_hp=210 potions=None item=None, turn=2 actor='player' kind='cast_spark' value=30 player_hp=57 slime_hp=180 potions=2 item=None, turn=2 actor='wraith' kind='retaliate' value=46 player_hp=11 slime_hp=180 potions=None item=None]",
+            "message": "",
+            "step": 3
+          },
+          {
+            "rule_id": "R-EVENT-TURN",
+            "status": "pass",
+            "expected": "all new events turn == 3",
+            "actual": "[3, 3]",
+            "message": "",
+            "step": 3
+          },
+          {
+            "rule_id": "R-EVENT-ACTOR-ORDER",
+            "status": "pass",
+            "expected": "首条事件为玩家 power_strike",
+            "actual": "player/power_strike",
+            "message": "",
+            "step": 3
+          },
+          {
+            "rule_id": "R-SKILL-POWER",
+            "status": "pass",
+            "expected": "伤害在 30～37",
+            "actual": "32",
+            "message": "",
+            "step": 3
+          },
+          {
+            "rule_id": "R-ATTACK-HP-APPLY",
+            "status": "pass",
+            "expected": "攻击事件按伤害扣敌人生命，玩家生命和药水不变",
+            "actual": "敌人 148 玩家 11 药水 2",
+            "message": "",
+            "step": 3
+          },
+          {
+            "rule_id": "R-BATTLE-ADVANCE",
+            "status": "pass",
+            "expected": "1",
+            "actual": "1",
+            "message": "",
+            "step": 3
+          },
+          {
+            "rule_id": "R-RETALIATE-ONCE",
+            "status": "pass",
+            "expected": "wraith retaliate with damage in [40, 52] and player.hp = max(0, 11 - damage)",
+            "actual": "actor=wraith kind=retaliate value=43 player_hp=0",
+            "message": "",
+            "step": 3
+          },
+          {
+            "rule_id": "R-RETALIATE-POTIONS-NULL",
+            "status": "pass",
+            "expected": "None",
+            "actual": "None",
+            "message": "",
+            "step": 3
+          },
+          {
+            "rule_id": "R-EVENT-COUNT",
+            "status": "pass",
+            "expected": "2",
+            "actual": "2",
+            "message": "",
+            "step": 3
+          },
+          {
+            "rule_id": "R-LOOT-BALANCE",
+            "status": "pass",
+            "expected": "0",
+            "actual": "0",
+            "message": "",
+            "step": 3
+          },
+          {
+            "rule_id": "R-EXP-BALANCE",
+            "status": "pass",
+            "expected": "0",
+            "actual": "0",
+            "message": "",
+            "step": 3
+          },
+          {
+            "rule_id": "R-LEVEL-UP",
+            "status": "pass",
+            "expected": "1",
+            "actual": "1",
+            "message": "",
+            "step": 3
+          },
+          {
+            "rule_id": "R-LEVEL-UP",
+            "status": "pass",
+            "expected": "100",
+            "actual": "100",
+            "message": "",
+            "step": 3
+          },
+          {
+            "rule_id": "R-LEVEL-UP",
+            "status": "pass",
+            "expected": "2",
+            "actual": "2",
+            "message": "",
+            "step": 3
+          },
+          {
+            "rule_id": "R-ATTACK-HP-APPLY",
+            "status": "pass",
+            "expected": "2",
+            "actual": "2",
+            "message": "",
+            "step": 3
+          },
+          {
+            "rule_id": "R-SKILL-COOLDOWN",
+            "status": "pass",
+            "expected": "2",
+            "actual": "2",
+            "message": "",
+            "step": 3
+          },
+          {
+            "rule_id": "R-EP-COST",
+            "status": "pass",
+            "expected": "80",
+            "actual": "80",
+            "message": "",
+            "step": 3
+          },
+          {
+            "rule_id": "R-MAGIC-GROWTH",
+            "status": "pass",
+            "expected": "100",
+            "actual": "100",
+            "message": "",
+            "step": 3
+          },
+          {
+            "rule_id": "R-MAGIC-GROWTH",
+            "status": "pass",
+            "expected": "10",
+            "actual": "10",
+            "message": "",
+            "step": 3
+          },
+          {
+            "rule_id": "R-INVARIANTS",
+            "status": "pass",
+            "expected": "事件 HP 在上下限内且药水数量非负",
+            "actual": "正常",
+            "message": "",
+            "step": 3
+          },
+          {
+            "rule_id": "R-STATUS-CONSISTENT",
+            "status": "pass",
+            "expected": "status=won ⇒ slime.hp=0；status=lost ⇒ player.hp=0；status=active ⇒ 双方存活",
+            "actual": "status=lost player.hp=0 slime.hp=148",
+            "message": "",
+            "step": 3
+          },
+          {
+            "rule_id": "R-LAST-EVENT-MATCHES-SNAPSHOT",
+            "status": "pass",
+            "expected": "last event hp = (0, 148)",
+            "actual": "last event hp = (0, 148)",
+            "message": "",
+            "step": 3
+          },
+          {
+            "rule_id": "R-NO-ACTION-AFTER-PLAYER-DEATH",
+            "status": "pass",
+            "expected": "玩家死亡后动作返回 409",
+            "actual": "HTTP 409",
+            "message": "",
+            "step": 4
+          },
+          {
+            "rule_id": "R-EXPECTED-STATUS",
+            "status": "pass",
+            "expected": "409",
+            "actual": "409",
+            "message": "",
+            "step": 4
+          },
+          {
+            "rule_id": "R-EXPECTED-CODE",
+            "status": "pass",
+            "expected": "battle_not_active",
+            "actual": "battle_not_active",
+            "message": "",
+            "step": 4
+          },
+          {
+            "rule_id": "R-GET-STATUS",
+            "status": "pass",
+            "expected": "200",
+            "actual": "200",
+            "message": "",
+            "step": 4
+          },
+          {
+            "rule_id": "R-REJECT-NO-STATE-CHANGE",
+            "status": "pass",
+            "expected": "被拒绝动作前后的完整状态与事件必须相同",
+            "actual": "相同",
+            "message": "",
+            "step": 4
+          }
+        ],
+        "control": null,
+        "failure": null,
+        "error": null
+      },
+      "differences": []
+    }
+  ]
+}

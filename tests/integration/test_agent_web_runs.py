@@ -58,6 +58,67 @@ async def test_offline_web_run_detects_fault_and_preserves_manual_session(
 
 
 @pytest.mark.anyio
+@pytest.mark.parametrize(
+    ("seed", "enemy"),
+    [(3, "skeleton"), (17, "wolf"), (39, "orc"), (8, "wraith"), (146, "dragon")],
+)
+async def test_v4_new_enemy_skill_fault_is_detected_by_web_agent(
+    seed: int, enemy: str, tmp_path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr("gamepilot.web_runs.WEB_REPORT_ROOT", tmp_path)
+    app = create_app(InMemorySessionRepository())
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app), base_url="http://test"
+    ) as http:
+        started = await http.post(
+            "/api/v1/agent-test-runs",
+            json={
+                "goal_id": "battle-end",
+                "seed": seed,
+                "profile": "skill_power_anomaly",
+                "provider_mode": "offline",
+            },
+        )
+        assert started.status_code == 202
+        run_id = started.json()["run_id"]
+        await app.state.agent_run_manager._task
+        result = (await http.get(f"/api/v1/agent-test-runs/{run_id}")).json()
+        assert result["steps"][0]["snapshot"]["enemy_type"] == enemy
+        assert result["status"] == "completed"
+        assert result["result"]["verdict"] == "defect_detected"
+        assert result["result"]["target_rules_hit"] == ["R-SKILL-POWER"]
+        assert result["result"]["replay_outcome"] == "match"
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize(
+    ("seed", "enemy"),
+    [(3, "skeleton"), (17, "wolf"), (39, "orc"), (8, "wraith"), (146, "dragon")],
+)
+async def test_v4_new_enemy_normal_web_agent_has_no_rule_failure(
+    seed: int, enemy: str, tmp_path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr("gamepilot.web_runs.WEB_REPORT_ROOT", tmp_path)
+    app = create_app(InMemorySessionRepository())
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app), base_url="http://test"
+    ) as http:
+        started = await http.post(
+            "/api/v1/agent-test-runs",
+            json={"goal_id": "battle-end", "seed": seed, "profile": "normal"},
+        )
+        assert started.status_code == 202
+        run_id = started.json()["run_id"]
+        await app.state.agent_run_manager._task
+        result = (await http.get(f"/api/v1/agent-test-runs/{run_id}")).json()
+        assert result["steps"][0]["snapshot"]["enemy_type"] == enemy
+        assert result["status"] == "completed"
+        assert result["result"]["verdict"] == "pass"
+        assert result["result"]["failing_rules"] == []
+        assert result["result"]["replay_outcome"] == "match"
+
+
+@pytest.mark.anyio
 async def test_real_guard_rejects_before_start(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("GAMEPILOT_AGENT_API_KEY", raising=False)
     monkeypatch.delenv("ANTHROPIC_AUTH_TOKEN", raising=False)

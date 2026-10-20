@@ -26,6 +26,7 @@ from .profiles import (
     FAULT_POTION_NOT_CONSUMED,
     FAULT_POTION_OVERHEAL,
     FAULT_RETALIATE_AFTER_DEATH,
+    FAULT_SKILL_POWER_ANOMALY,
     FaultProfile,
 )
 from .recorder import TriggerRecorder
@@ -45,8 +46,11 @@ class LabCombatSession(CombatSession):
         battle_count: int = 1,
         fault_ids: frozenset[str] | None = None,
         timing_mode: Literal["immediate", "seeded"] = "immediate",
+        ruleset: Literal["v3", "v4", "v5"] = "v3",
     ) -> None:
-        super().__init__(session_id=session_id, seed=seed, battle_count=battle_count)
+        super().__init__(
+            session_id=session_id, seed=seed, ruleset=ruleset, battle_count=battle_count
+        )
         if timing_mode not in ("immediate", "seeded"):
             raise ValueError("unknown fault timing mode")
         self._timing_mode = timing_mode
@@ -130,7 +134,7 @@ class LabCombatSession(CombatSession):
         super()._ensure_active()
 
     def _drop_reward(self) -> tuple[str, int] | None:
-        variant = self.seed % (6 if self._ruleset == "v3" else 3)
+        variant = self.seed % (6 if self._ruleset in ("v3", "v4", "v5") else 3)
         # 巨魔本来不掉金币：仅“缺失金币”变体在新排程中不算有效候选。
         # 旧即时 profile 保留既有行为，避免改动历史评测口径。
         no_gold_to_remove = (
@@ -177,6 +181,16 @@ class LabCombatSession(CombatSession):
             return 1
         return normal
 
+    def _skill_damage(self, action: str, damage: int) -> int:
+        if self._is_due(FAULT_SKILL_POWER_ANOMALY):
+            abnormal = max(0, damage // 2) if self.seed % 2 == 0 else damage * 2
+            self._record_trigger(
+                FAULT_SKILL_POWER_ANOMALY,
+                f"{action} 正常威力 {damage}，实际威力 {abnormal}",
+            )
+            return abnormal
+        return super()._skill_damage(action, damage)
+
 
 def make_session_factory(
     profile: FaultProfile,
@@ -197,6 +211,7 @@ def make_session_factory(
             battle_count=battle_count,
             fault_ids=fault_ids,
             timing_mode=timing_mode,
+            ruleset="v5",
         )
 
     return factory

@@ -18,7 +18,16 @@ class CreateSessionRequest(BaseModel):
 class ActionRequest(BaseModel):
     """动作请求；非法动作值由 Pydantic 校验为 HTTP 422。"""
 
-    action: Literal["attack", "use_potion", "next_battle"]
+    action: Literal[
+        "attack",
+        "power_strike",
+        "cast_spark",
+        "cast_flame",
+        "cast_meteor",
+        "cast_heal",
+        "use_potion",
+        "next_battle",
+    ]
 
 
 class ErrorResponse(BaseModel):

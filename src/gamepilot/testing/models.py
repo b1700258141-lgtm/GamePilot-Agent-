@@ -15,7 +15,16 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from .rules import SCHEMA_VERSION
 
-ActionName = Literal["attack", "use_potion", "next_battle"]
+ActionName = Literal[
+    "attack",
+    "power_strike",
+    "cast_spark",
+    "cast_flame",
+    "cast_meteor",
+    "cast_heal",
+    "use_potion",
+    "next_battle",
+]
 CheckStatus = Literal["pass", "fail", "error"]
 CaseStatus = Literal["pass", "fail", "error"]
 
@@ -92,6 +101,10 @@ class PlayerView(CombatantView):
     gold: int = 0
     level: int = 1
     exp: int = 0
+    power_strike_cooldown: int = 0
+    ep: int = 100
+    max_ep: int = 100
+    magic: int = 10
 
 
 class SnapshotView(EvidenceModel):
