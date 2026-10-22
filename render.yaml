@@ -1,0 +1,14 @@
+services:
+  - type: web
+    name: gamepilot-public-preview
+    runtime: docker
+    plan: free
+    region: singapore
+    autoDeployTrigger: off
+    healthCheckPath: /ready
+    dockerCommand: /bin/sh -c 'if [ "$REPOSITORY_BACKEND" = postgres ]; then python -m alembic upgrade head; fi; exec python -m uvicorn gamepilot.main:app --host 0.0.0.0 --port 8000 --workers 1'
+    envVars:
+      - key: REPOSITORY_BACKEND
+        value: memory
+      - key: GAMEPILOT_PUBLIC_PREVIEW
+        value: "true"

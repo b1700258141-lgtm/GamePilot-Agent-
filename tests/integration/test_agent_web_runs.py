@@ -131,8 +131,49 @@ async def test_real_guard_rejects_before_start(monkeypatch: pytest.MonkeyPatch) 
         assert (
             await http.post("/api/v1/agent-test-runs", json={**payload, "paid_ack": True})
         ).status_code == 409
-        assert (await http.get("/api/v1/agent-test-runs/config")).json()["real_available"] is False
+        config = (await http.get("/api/v1/agent-test-runs/config")).json()
+        assert config["real_available"] is False
+        assert config["real_access_request_only"] is False
         assert app.state.agent_run_manager._task is None
+
+
+@pytest.mark.anyio
+async def test_public_preview_keeps_offline_runs_and_blocks_real_calls(
+    monkeypatch: pytest.MonkeyPatch, tmp_path
+) -> None:
+    monkeypatch.setenv("GAMEPILOT_PUBLIC_PREVIEW", "true")
+    monkeypatch.setenv("GAMEPILOT_AGENT_API_KEY", "unused-test-key")
+    monkeypatch.setattr("gamepilot.web_runs.WEB_REPORT_ROOT", tmp_path)
+    app = create_app(InMemorySessionRepository())
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app), base_url="http://test"
+    ) as http:
+        config = (await http.get("/api/v1/agent-test-runs/config")).json()
+        assert config["real_access_request_only"] is True
+        assert config["real_available"] is False
+        denied = await http.post(
+            "/api/v1/agent-test-runs",
+            json={"seed": 14, "provider_mode": "real", "paid_ack": True},
+        )
+        assert denied.status_code == 403
+        assert denied.json()["detail"] == "当前版本无权限，请联系平台制作者申请权限。"
+        assert app.state.agent_run_manager._task is None
+        assert (
+            await http.post(
+                "/api/v1/agent-test-runs/skills", json={"name": "test", "instructions": "test"}
+            )
+        ).status_code == 403
+
+        started = await http.post(
+            "/api/v1/agent-test-runs",
+            json={"seed": 14, "provider_mode": "offline", "profile": "potion_overheal"},
+        )
+        assert started.status_code == 202
+        await app.state.agent_run_manager._task
+        run = (await http.get(f"/api/v1/agent-test-runs/{started.json()['run_id']}")).json()
+        assert run["status"] == "completed"
+        assert run["result"]["provider_is_test_double"] is True
+        assert run["result"]["replay_outcome"] == "match"
 
 
 @pytest.mark.anyio

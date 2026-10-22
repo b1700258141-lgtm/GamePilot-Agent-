@@ -32,10 +32,18 @@ WEB_BUDGET = BudgetSpec(
 WEB_BASE_URL = "http://gamepilot-agent-test.local"
 WEB_REPORT_ROOT = Path("artifacts/agent-web-runs")
 LOGGER = logging.getLogger(__name__)
+PREVIEW_ACCESS_MESSAGE = "当前版本无权限，请联系平台制作者申请权限。"
+
+
+def public_preview_enabled() -> bool:
+    """公开预览由部署环境显式开启；默认的本地流程保持原样。"""
+    return os.environ.get("GAMEPILOT_PUBLIC_PREVIEW", "").lower() in {"1", "true"}
 
 
 def real_key() -> tuple[str, str] | None:
     """只在服务端读取密钥；兼容此前配置的 DeepSeek Anthropic 入口。"""
+    if public_preview_enabled():
+        return None
     if key := os.environ.get(DEFAULT_API_KEY_ENV):
         return DEFAULT_API_KEY_ENV, key
     if os.environ.get("ANTHROPIC_BASE_URL") == DEFAULT_BASE_URL:
@@ -89,6 +97,8 @@ class AgentWebRunManager:
 
     async def start(self, config: dict[str, Any]) -> dict[str, Any]:
         async with self._start_lock:
+            if config["provider_mode"] == "real" and public_preview_enabled():
+                raise ValueError(PREVIEW_ACCESS_MESSAGE)
             if self._task is not None and not self._task.done():
                 raise RuntimeError("已有自动测试正在运行，请等待它结束")
             if config["provider_mode"] == "real" and real_key() is None:

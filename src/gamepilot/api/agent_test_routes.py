@@ -19,7 +19,13 @@ from gamepilot.lab.profiles import (
     PROFILE_NORMAL,
 )
 from gamepilot.lab.selection import RANDOM_FAULT_PERCENT
-from gamepilot.web_runs import WEB_BUDGET, AgentWebRunManager, real_key
+from gamepilot.web_runs import (
+    PREVIEW_ACCESS_MESSAGE,
+    WEB_BUDGET,
+    AgentWebRunManager,
+    public_preview_enabled,
+    real_key,
+)
 
 router = APIRouter(prefix="/api/v1/agent-test-runs", tags=["Agent 自动测试"])
 
@@ -80,6 +86,7 @@ def get_manager(request: Request) -> AgentWebRunManager:
 def config() -> dict[str, object]:
     return {
         "real_available": real_key() is not None,
+        "real_access_request_only": public_preview_enabled(),
         "budget": WEB_BUDGET.model_dump(),
         "random_fault_percent": RANDOM_FAULT_PERCENT,
         "fault_ids": FAULT_IDS,
@@ -105,7 +112,10 @@ class AddSkillRequest(BaseModel):
 def list_skills(
     manager: Annotated[AgentWebRunManager, Depends(get_manager)],
 ) -> list[dict[str, object]]:
-    return [skill.model_dump() for skill in manager.skills.list()]
+    skills = manager.skills.list()
+    if public_preview_enabled():
+        skills = [skill for skill in skills if skill.built_in]
+    return [skill.model_dump() for skill in skills]
 
 
 @router.post("/skills", status_code=201)
@@ -113,6 +123,8 @@ def add_skill(
     payload: AddSkillRequest,
     manager: Annotated[AgentWebRunManager, Depends(get_manager)],
 ) -> dict[str, object]:
+    if public_preview_enabled():
+        raise HTTPException(status_code=403, detail=PREVIEW_ACCESS_MESSAGE)
     try:
         return manager.skills.add(payload.name, payload.instructions).model_dump()
     except OSError:
@@ -124,6 +136,8 @@ async def start_run(
     payload: StartAgentTestRequest,
     manager: Annotated[AgentWebRunManager, Depends(get_manager)],
 ) -> dict[str, object]:
+    if payload.provider_mode == "real" and public_preview_enabled():
+        raise HTTPException(status_code=403, detail=PREVIEW_ACCESS_MESSAGE)
     if payload.provider_mode == "real" and not payload.paid_ack:
         raise HTTPException(status_code=400, detail="真实模型测试须单独确认付费范围")
     if payload.provider_mode == "offline" and payload.paid_ack:

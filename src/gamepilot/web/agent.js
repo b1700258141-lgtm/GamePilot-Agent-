@@ -41,6 +41,8 @@ let currentAgentRun = null;
 let previousAgentRun = null;
 let agentPollTimer = null;
 let realAvailable = false;
+let realAccessRequestOnly = false;
+const previewAccessMessage = "当前版本无权限，请联系平台制作者申请权限。";
 let randomFaultPercent = 30;
 let rerunLegacyProfile = null;
 let agentSkills = [];
@@ -115,13 +117,18 @@ function updateDefectHint() {
 
 function updateProviderFields() {
   const real = agentEl("agent-provider").value === "real";
-  agentEl("agent-paid-row").hidden = !real;
+  agentEl("agent-paid-row").hidden = !real || realAccessRequestOnly;
   if (!real) agentEl("agent-paid").checked = false;
-  agentEl("agent-provider-hint").textContent = real
+  agentEl("agent-provider-hint").textContent = real && realAccessRequestOnly
+    ? previewAccessMessage
+    : real
     ? "实际请求模型 deepseek-v4-flash；最多 50 步、50 次调用，每次最多请求 512 输出 Token（合计请求输出上限 25,600）。输入 Token 和金额无硬上限，费用没有可靠单价时为 unknown。"
+    : realAccessRequestOnly
+      ? "离线演练可直接运行；测试替身只验证工程流程，不代表真实模型能力。"
     : realAvailable
       ? "离线替身只验证工程流程，不代表真实模型能力。"
       : "离线替身只验证工程流程，不代表真实模型能力。当前服务未配置 DeepSeek 密钥，deepseek-flash 暂不可用。";
+  agentFormError("");
 }
 
 function formConfig() {
@@ -130,6 +137,9 @@ function formConfig() {
     throw new Error("随机种子必须是 -9007199254740991 至 9007199254740991 之间的整数，或留空随机生成。");
   }
   const providerMode = agentEl("agent-provider").value;
+  if (providerMode === "real" && realAccessRequestOnly) {
+    throw new Error(previewAccessMessage);
+  }
   if (providerMode === "real" && !agentEl("agent-paid").checked) {
     throw new Error("请先确认本次真实模型调用的预算和费用边界。");
   }
@@ -497,8 +507,15 @@ async function initializeAgentPage() {
   try {
     const config = await agentRequest(`${AGENT_API}/config`);
     realAvailable = config.real_available;
+    realAccessRequestOnly = config.real_access_request_only === true;
     randomFaultPercent = config.random_fault_percent;
-    agentEl("agent-real-option").disabled = !realAvailable;
+    agentEl("agent-real-option").disabled = !realAvailable && !realAccessRequestOnly;
+    if (realAccessRequestOnly) agentEl("agent-real-option").textContent = "真实模型测试（需申请权限）";
+    agentEl("agent-skill-summary").textContent = realAccessRequestOnly ? "策略说明" : "策略说明与自定义 skill";
+    for (const id of ["agent-skill-upload-label", "agent-skill-upload", "agent-upload-hint"]) {
+      agentEl(id).hidden = realAccessRequestOnly;
+    }
+    agentEl("agent-skill-upload").disabled = realAccessRequestOnly;
     updateDefectHint();
     updateProviderFields();
   } catch {
