@@ -10,7 +10,7 @@
 
 ### 更新代码
 
-1. 在本地修改并提交代码；公开预览来自已提交版本。随后运行 `powershell -File scripts/package_modelscope_preview.ps1`，生成 `artifacts/modelscope-upload/` 下的三个文件：`Dockerfile`、`modelscope-source.tar.gz`、`ms_deploy.json`。压缩包仅包含 Git 已提交文件，不包含被忽略的 `.env` 和未提交改动。
+1. 在本地修改并提交代码；公开预览来自已提交版本。随后运行 `pwsh -NoProfile -File scripts/package_modelscope_preview.ps1`，生成 `artifacts/modelscope-upload/` 下的三个文件：`Dockerfile`、`modelscope-source.tar.gz`、`ms_deploy.json`。压缩包仅包含 Git 已提交文件，不包含被忽略的 `.env` 和未提交改动。
 2. 登录创空间，在“空间文件”上传这三个文件，保留 Docker 与免费 CPU 配置，重新部署。无需在 Git 命令或仓库里保存魔搭访问令牌。
 3. 等状态变为“运行中”，访问 `/ready`，再核对手动战斗、离线 Agent 测试、真实模型权限提示。原分享链接继续使用。
 
