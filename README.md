@@ -117,7 +117,7 @@ seed 14 同时指定“治疗越过生命上限”和“喝药不消耗药水”
 
 ## 快速启动
 
-希望让其他人直接通过链接体验，可按 [公开预览部署说明](docs/PUBLIC_PREVIEW.md) 使用免费托管方案。公开预览保留手动战斗和离线 Agent 测试；真实模型入口仅显示权限提示，不会发起模型调用。
+已上线 [GamePilot 公开预览](https://modelscope.cn/studios/Aieyr123/gamepilot-public-preview?mode=full&app_path=%2Fui%2F)，可直接体验手动战斗和离线 Agent 测试；真实模型入口仅显示权限提示，不会发起模型调用。更新和免费托管边界见 [公开预览部署说明](docs/PUBLIC_PREVIEW.md)。
 
 ### 给体验者：用 Docker 启动
 
