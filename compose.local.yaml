@@ -10,6 +10,7 @@ x-app: &app
     DATABASE_URL: postgresql+psycopg://gamepilot:local-demo-only@db:5432/gamepilot
     REPOSITORY_BACKEND: postgres
     GAMEPILOT_AGENT_API_KEY: ${GAMEPILOT_AGENT_API_KEY:-}
+    GAMEPILOT_PUBLIC_PREVIEW: "false"
 
 services:
   db:
@@ -39,6 +40,9 @@ services:
 
   api:
     <<: *app
+    command: ["python", "-m", "uvicorn", "gamepilot.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1"]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import json, urllib.request; assert json.load(urllib.request.urlopen('http://127.0.0.1:8000/ready', timeout=2)) == {'status': 'ready'}"]
     volumes:
       - local-agent-skills:/app/artifacts/agent-skills
     ports:
