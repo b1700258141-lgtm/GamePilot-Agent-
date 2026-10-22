@@ -8,7 +8,8 @@ RUN python -m pip wheel --no-cache-dir --wheel-dir /wheels ".[agent]"
 FROM python:3.12-slim AS runtime
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
-    PYTHONUNBUFFERED=1
+    PYTHONUNBUFFERED=1 \
+    GAMEPILOT_PUBLIC_PREVIEW=true
 
 WORKDIR /app
 COPY --from=builder /wheels /wheels
@@ -20,7 +21,7 @@ COPY alembic.ini ./
 COPY alembic/ ./alembic/
 
 USER gamepilot
-EXPOSE 8000
+EXPOSE 7860
 HEALTHCHECK --interval=10s --timeout=3s --start-period=15s --retries=5 \
-    CMD ["python", "-c", "import json, urllib.request; assert json.load(urllib.request.urlopen('http://127.0.0.1:8000/ready', timeout=2)) == {'status': 'ready'}"]
-CMD ["python", "-m", "uvicorn", "gamepilot.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1"]
+    CMD ["python", "-c", "import json, urllib.request; assert json.load(urllib.request.urlopen('http://127.0.0.1:7860/ready', timeout=2)) == {'status': 'ready'}"]
+CMD ["python", "-m", "uvicorn", "gamepilot.main:app", "--host", "0.0.0.0", "--port", "7860", "--workers", "1"]
