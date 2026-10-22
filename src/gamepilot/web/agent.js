@@ -266,6 +266,7 @@ function renderTimeline(steps) {
   for (const item of steps) {
     const [title, description, evidence] = timelineText(item);
     const li = document.createElement("li");
+    li.dataset.kind = item.kind;
     if ((item.kind === "decision" && !item.accepted) ||
       (item.kind === "action" && (item.checks || []).some((check) => check.status === "fail"))) {
       li.className = "problem";
@@ -329,6 +330,7 @@ function renderResult(run) {
   const card = agentEl("agent-result-card");
   card.hidden = !["completed", "error"].includes(run.status);
   if (card.hidden) return;
+  card.dataset.verdict = run.status === "error" ? "execution_error" : run.result.verdict;
   agentEl("agent-result-facts").replaceChildren();
   if (run.status === "error") {
     agentEl("agent-result-heading").textContent = "执行错误";
@@ -387,6 +389,7 @@ function renderComparison(run) {
 
 function renderAgentRun(run) {
   currentAgentRun = run;
+  agentEl("agent-empty-state").hidden = true;
   agentEl("agent-run-card").hidden = false;
   agentEl("agent-process-card").hidden = false;
   const status = agentEl("agent-run-status");

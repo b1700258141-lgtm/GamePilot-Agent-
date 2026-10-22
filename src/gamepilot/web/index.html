@@ -3,21 +3,29 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="theme-color" content="#f4f7fb" />
+    <meta name="theme-color" content="#e9dcc0" />
     <title>GamePilot · 战斗测试台</title>
     <link rel="stylesheet" href="./app.css" />
     <script src="./app.js" defer></script>
     <script src="./agent.js" defer></script>
   </head>
   <body>
+    <svg class="icon-library" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+      <defs>
+        <symbol id="icon-sword" viewBox="0 0 24 24"><path d="m14 4 6-1-1 6-9 9-4-4 8-10Z M13 7l4 4 M4 13l7 7 M7 17l-4 4 M2 20l2 2"/></symbol>
+        <symbol id="icon-rune" viewBox="0 0 24 24"><path d="m12 2 8 10-8 10-8-10 8-10Z M12 2v20 M4 12h16 M8 7l8 10 M16 7 8 17"/></symbol>
+        <symbol id="icon-shield" viewBox="0 0 24 24"><path d="m12 2 8 3v7c0 5-8 10-8 10S4 17 4 12V5l8-3Z M12 6v11 M8 11h8"/></symbol>
+        <symbol id="icon-scroll" viewBox="0 0 24 24"><path d="M6 3h13a3 3 0 0 1 3 3v2h-5V6a3 3 0 0 1 3-3 M6 3a3 3 0 0 0-3 3v12 M3 18H1v1a3 3 0 0 0 3 3h11a3 3 0 0 0 3-3V8 M7 9h6 M7 13h6 M7 17h5"/></symbol>
+      </defs>
+    </svg>
     <a class="skip-link" href="#main">跳到主要内容</a>
     <div class="page-shell">
       <header class="site-header">
         <div class="brand">
-          <span class="brand-mark" aria-hidden="true">GP</span>
+          <span class="brand-mark" aria-hidden="true"><svg class="icon"><use href="#icon-shield"/></svg></span>
           <div>
             <strong>GamePilot</strong>
-            <span class="brand-caption">本地战斗测试台</span>
+            <span class="brand-caption">战斗与试炼档案</span>
           </div>
         </div>
         <div class="header-links">
@@ -28,21 +36,23 @@
 
       <main id="main">
         <section class="intro" aria-labelledby="page-title">
-          <p class="eyebrow">确定性战斗 · Agent 测试</p>
+          <p class="eyebrow">THE PROVING GROUNDS <span> / </span> 试炼之地</p>
           <h1 id="page-title">战斗测试台</h1>
-          <p>手动操作战斗，或让 Agent 选择动作并查看独立规则判定与重放证据。</p>
+          <p>亲自踏入战场，或交由 Agent 执行试炼。每一次行动，皆有据可循。</p>
+          <div class="intro-seal" aria-hidden="true"><svg class="icon"><use href="#icon-sword"/></svg><span>GAMEPILOT</span></div>
         </section>
 
         <nav class="mode-switch" aria-label="测试方式">
-          <button id="mode-manual" class="mode-button active" type="button" aria-pressed="true">手动战斗</button>
-          <button id="mode-agent" class="mode-button" type="button" aria-pressed="false">Agent 自动测试</button>
+          <button id="mode-manual" class="mode-button active" type="button" aria-pressed="true" aria-controls="manual-panel"><svg class="icon" aria-hidden="true"><use href="#icon-sword"/></svg>手动战斗<span class="mode-caption">亲临战场</span></button>
+          <button id="mode-agent" class="mode-button" type="button" aria-pressed="false" aria-controls="agent-panel"><svg class="icon" aria-hidden="true"><use href="#icon-rune"/></svg>Agent 自动测试<span class="mode-caption">策略试炼</span></button>
         </nav>
 
         <section id="manual-panel" aria-label="手动战斗">
         <div class="workspace">
           <aside class="setup-panel card" aria-label="会话操作">
             <section aria-labelledby="new-session-heading">
-              <h2 id="new-session-heading">新建会话</h2>
+              <p class="eyebrow">01 / PREPARATION</p>
+              <h2 id="new-session-heading">启程准备</h2>
               <p class="helper">留空会随机生成种子；输入固定种子可重现敌人和掉落。</p>
               <form id="create-form">
                 <label for="seed-input">随机种子</label>
@@ -60,6 +70,7 @@
             <div class="divider" aria-hidden="true"></div>
 
             <section aria-labelledby="resume-heading">
+              <p class="eyebrow">02 / ARCHIVES</p>
               <h2 id="resume-heading">继续已有会话</h2>
               <p class="helper">输入会话 ID，可读取数据库中保存的战斗。</p>
               <form id="load-form">
@@ -74,9 +85,13 @@
             <div id="feedback" class="feedback" role="status" aria-live="polite">页面已就绪。创建一场战斗开始测试。</div>
 
             <section id="empty-state" class="card empty-state" aria-label="尚未选择战斗">
-              <div class="empty-orbit" aria-hidden="true"><span></span></div>
-              <h2>等待战斗开始</h2>
-              <p>创建新会话，或读取已有会话后即可使用攻击和药水。</p>
+              <img class="citadel-art" src="./citadel.svg" width="760" height="280" alt="" />
+              <div class="empty-copy">
+                <p class="eyebrow">YOUR NEXT CHAPTER</p>
+                <h2>战场静候，冒险将启</h2>
+                <p>在「启程准备」中开始新战斗。<br />挥剑、施法、补给，由你决定下一步。</p>
+              </div>
+              <div class="empty-footnote"><span>固定种子 · 重现战局</span><span>行动记录 · 全程留存</span></div>
             </section>
 
             <section id="battle-view" class="card battle-view" aria-labelledby="battle-heading" hidden>
@@ -97,6 +112,7 @@
 
               <div class="fighters">
                 <section class="fighter" aria-labelledby="player-heading">
+                  <div class="fighter-banner"><svg class="icon" aria-hidden="true"><use href="#icon-shield"/></svg><span>冒险者 / ADVENTURER</span></div>
                   <div class="fighter-title"><h3 id="player-heading">玩家</h3><strong id="player-hp">—</strong></div>
                   <progress id="player-progress" max="100" value="100" aria-label="玩家生命值"></progress>
                   <p>剩余药水 <strong id="potions-value">—</strong> 瓶</p>
@@ -108,6 +124,7 @@
                   <p id="skill-status">重击：可用</p>
                 </section>
                 <section class="fighter" aria-labelledby="slime-heading">
+                  <div class="fighter-banner enemy-banner"><svg class="icon" aria-hidden="true"><use href="#icon-sword"/></svg><span>遭遇 / ENCOUNTER</span></div>
                   <div class="fighter-title"><h3 id="slime-heading">史莱姆</h3><strong id="slime-hp">—</strong></div>
                   <progress id="slime-progress" max="60" value="60" aria-label="史莱姆生命值"></progress>
                   <p>等级 <strong id="enemy-level-value">1</strong></p>
@@ -115,7 +132,8 @@
                 </section>
               </div>
 
-              <div class="action-row" aria-label="战斗动作">
+              <div class="command-heading"><h3>战斗指令</h3><span>攻击、施法与补给会推进回合</span></div>
+              <div class="action-row battle-actions" aria-label="战斗动作">
                 <button id="attack-button" class="button button-primary" type="button" disabled>攻击</button>
                 <button id="power-strike-button" class="button button-secondary" type="button" aria-describedby="skill-status" disabled>重击</button>
                 <button id="cast-spark-button" class="button button-secondary" type="button" disabled>魔法飞弹 · 20 EP</button>
@@ -151,6 +169,7 @@
         <section id="agent-panel" aria-label="Agent 自动测试" hidden>
           <div class="workspace">
             <aside class="setup-panel card" aria-labelledby="agent-setup-heading">
+              <p class="eyebrow">TRIAL CONFIGURATION</p>
               <h2 id="agent-setup-heading">设置本次测试</h2>
               <p class="helper">选择战斗策略、种子和缺陷配置；规则判定器会独立检查每一步。</p>
               <form id="agent-form">
@@ -158,10 +177,13 @@
                 <select id="agent-skill" name="skill_id">
                   <option value="injured-potion-then-attack">开局喝药、战技优先、伤害魔法循环</option>
                 </select>
+                <details class="config-details">
+                  <summary>策略说明与自定义 skill</summary>
                 <p id="agent-skill-hint" class="helper field-helper">默认策略：开局满血喝药、半血以下补药；伤害动作优先重击，冷却时按陨石→火球→魔法飞弹循环，EP 不足时普通攻击；终态后再验证一次行动限制。</p>
                 <label for="agent-skill-upload">上传自定义 skill（Markdown 或纯文本）</label>
                 <input id="agent-skill-upload" type="file" accept=".md,.txt,text/markdown,text/plain" aria-describedby="agent-upload-hint" />
                 <p id="agent-upload-hint" class="helper field-helper">文件最多 4,000 字符，上传后可选择。自定义策略由真实模型执行；上传内容不会作为程序代码运行。</p>
+                </details>
 
                 <label for="agent-seed">随机种子</label>
                 <input id="agent-seed" name="seed" type="number" step="1" min="-9007199254740991" max="9007199254740991" placeholder="留空随机生成" inputmode="numeric" title="请输入 -9007199254740991 至 9007199254740991 之间的整数" aria-describedby="agent-seed-hint" />
@@ -201,6 +223,18 @@
 
             <div class="battle-column">
               <div id="agent-feedback" class="feedback" role="status" aria-live="polite" aria-atomic="true">选择战斗 skill 后开始自动测试。</div>
+              <section id="agent-empty-state" class="card trial-empty" aria-labelledby="trial-empty-heading">
+                <div class="trial-emblem" aria-hidden="true"><svg class="icon"><use href="#icon-rune"/></svg></div>
+                <p class="eyebrow">THE TRIAL JOURNAL</p>
+                <h2 id="trial-empty-heading">让每一步，都经得起检验</h2>
+                <p class="helper">设定战斗策略，开始一次可追溯的自动试炼。</p>
+                <ol class="trial-stages">
+                  <li><span>Ⅰ</span><h3>选择行动</h3><p>Agent 按策略读取战况<br />选择战技、魔法与补给</p></li>
+                  <li><span>Ⅱ</span><h3>独立判定</h3><p>逐步检查游戏规则<br />记录异常与触发位置</p></li>
+                  <li><span>Ⅲ</span><h3>留存证据</h3><p>查看结论与原始报告<br />使用动作轨迹重放</p></li>
+                </ol>
+                <p class="trial-note"><svg class="icon" aria-hidden="true"><use href="#icon-scroll"/></svg>检出已植入的缺陷，代表测试成功发现了问题。</p>
+              </section>
               <section id="agent-run-card" class="card agent-run-card" aria-labelledby="agent-run-heading" hidden>
                 <div class="section-heading">
                   <div><p class="eyebrow">运行状态</p><h2 id="agent-run-heading">本次自动测试</h2></div>
@@ -212,12 +246,6 @@
                   <div><dt>测试配置</dt><dd id="agent-run-config">—</dd></div>
                   <div><dt>运行 ID</dt><dd id="agent-run-id">—</dd></div>
                 </dl>
-              </section>
-
-              <section id="agent-process-card" class="card agent-process-card" aria-labelledby="agent-process-heading" hidden>
-                <div class="section-heading"><div><p class="eyebrow">可解释过程</p><h2 id="agent-process-heading">Agent 与战斗过程</h2></div><span id="agent-step-count" class="event-count">0 项</span></div>
-                <ol id="agent-timeline" class="agent-timeline"></ol>
-                <p id="agent-no-steps" class="helper">正在等待第一条运行记录。</p>
               </section>
 
               <section id="agent-result-card" class="card agent-result-card" aria-labelledby="agent-result-heading" hidden>
@@ -232,6 +260,12 @@
                 </div>
               </section>
 
+              <section id="agent-process-card" class="card agent-process-card" aria-labelledby="agent-process-heading" hidden>
+                <div class="section-heading"><div><p class="eyebrow">可解释过程</p><h2 id="agent-process-heading">Agent 与战斗过程</h2></div><span id="agent-step-count" class="event-count">0 项</span></div>
+                <ol id="agent-timeline" class="agent-timeline"></ol>
+                <p id="agent-no-steps" class="helper">正在等待第一条运行记录。</p>
+              </section>
+
               <section id="agent-compare-card" class="card agent-result-card" aria-labelledby="agent-compare-heading" hidden>
                 <p class="eyebrow">同参对照</p><h2 id="agent-compare-heading">两次运行</h2>
                 <p id="agent-compare-text"></p>
@@ -241,7 +275,7 @@
         </section>
       </main>
 
-      <footer>GamePilot 本地演示 · 游戏规则和测试结论由服务端判定。</footer>
+      <footer><span class="footer-brand">GamePilot <span> / </span> 试炼档案</span><span>本地演示 · 游戏规则和测试结论由服务端判定</span></footer>
     </div>
   </body>
 </html>

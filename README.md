@@ -76,7 +76,35 @@ flowchart LR
 
 ## 产品截图
 
-<!-- 前端优化后在这里补充截图。 -->
+以下展示当前羊皮纸风格界面与主要功能，点击图片可查看原图。自动测试截图使用 2026-10-20 保存的 v5 运行记录，通过当前页面渲染；离线替身与真实模型结果分别标注。
+
+### 初始主界面
+
+手动战斗与 Agent 自动测试共用入口。支持固定随机种子、1～6 场连战，以及通过会话 ID 继续已有战斗。
+
+[![GamePilot 初始主界面：测试方式、随机种子、连战与会话入口](docs/images/platform-home.jpg)](docs/images/platform-home.jpg)
+
+### 手动战斗
+
+查看双方生命、EP、等级、经验与补给，选择攻击、重击、魔法或药水。图中为 seed 2 的第二场连战：玩家已升级，重击仍在冷却，事件列表保留了药水、反击、魔法和掉落记录。
+
+[![手动战斗：角色状态、战斗指令、连战进度与事件记录](docs/images/manual-battle.jpg)](docs/images/manual-battle.jpg)
+
+### 离线自动测试结果
+
+seed 14 同时指定“治疗越过生命上限”和“喝药不消耗药水”，两项缺陷均被独立规则检出，无模型重放一致。页面展示生效节点、触发位置、失败规则及报告入口；离线替身用于验证工程流程，不代表真实模型能力。
+
+[![离线测试：多缺陷配置、独立规则判定与一致的无模型重放](docs/images/agent-offline-result.jpg)](docs/images/agent-offline-result.jpg)
+
+### 真实模型结果与执行过程
+
+`deepseek-v4-flash` 在 seed 63118601 的一次运行中，通过开局喝药触发并检出“治疗越过生命上限”，随后停止测试，无模型重放一致。实际调用 1 次，输入 362 / 输出 51 Token，合计 413；费用为 `unknown`。这是单次缺陷检出样例，未完成配置中的 3 场连战，不代表完整测试矩阵通过。
+
+[![真实模型结果：缺陷检出、规则依据、Token 用量与重放结论](docs/images/agent-real-result.jpg)](docs/images/agent-real-result.jpg)
+
+过程面板保留模型选择、工具校验、动作前后状态和规则失败证据，可继续展开查看记录详情。
+
+[![真实模型执行过程：模型决策、工具校验与药水越界证据](docs/images/agent-real-process.jpg)](docs/images/agent-real-process.jpg)
 
 ## 技术栈
 
