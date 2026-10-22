@@ -117,8 +117,6 @@ seed 14 同时指定“治疗越过生命上限”和“喝药不消耗药水”
 
 ## 快速启动
 
-已上线 [GamePilot 公开预览](https://modelscope.cn/studios/Aieyr123/gamepilot-public-preview?mode=full&app_path=%2Fui%2F)，可直接体验手动战斗和离线 Agent 测试；真实模型入口仅显示权限提示，不会发起模型调用。更新和免费托管边界见 [公开预览部署说明](docs/PUBLIC_PREVIEW.md)。
-
 ### 给体验者：用 Docker 启动
 
 准备好 Git 和 Docker Engine（含 Docker Compose v2）。目前提供的是本地运行方式：需要先把仓库克隆到自己的电脑，也可以在 GitHub 下载 ZIP 后解压；不需要另外安装 Python。
@@ -131,7 +129,7 @@ docker compose -f compose.local.yaml up --build
 
 首次构建会下载镜像和 Python 依赖，可能需要等待。终端保持打开，服务就绪后访问 [http://127.0.0.1:8000/](http://127.0.0.1:8000/)；接口文档在 [http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs)。进入“Agent 自动测试”，选择 1～6 场连战和“离线演练”，即可在不配置模型密钥的情况下体验完整流程。战斗和测试记录保存在本地 PostgreSQL 卷中，停止容器不会删除它们。
 
-这个地址只在运行项目的电脑上可用。面向其他人直接访问的公网网页，需要后续完成云平台部署，届时会补充部署方法。更多本地启动细节见 [Docker 说明](docs/DOCKER.md)。
+这个本地地址只在运行项目的电脑上可用。其他人可直接打开 [GamePilot 在线预览](https://modelscope.cn/studios/Aieyr123/gamepilot-public-preview?mode=full&app_path=%2Fui%2F)，体验手动战斗和离线 Agent 测试；真实模型测试会提示申请权限。更多本地启动细节见 [Docker 说明](docs/DOCKER.md)，在线预览的更新与托管边界见 [公开预览部署说明](docs/PUBLIC_PREVIEW.md)。
 
 ### 给开发者：本地运行 Python
 
