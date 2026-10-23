@@ -184,6 +184,12 @@ jobs:
           test "${#reports[@]}" -eq 1
           python -m gamepilot.testing replay --report "${reports[0]}" --base-url http://127.0.0.1:18770 --output-dir artifacts/ci/container-replay
           python scripts/container_smoke.py --project gamepilot-ci --base-url http://127.0.0.1:18770 --output-dir artifacts/ci/container-smoke
+          for attempt in {1..30}; do
+            if [ "$(docker inspect --format '{{.State.Health.Status}}' gamepilot-ci-api-1 2>/dev/null)" = healthy ]; then
+              break
+            fi
+            sleep 2
+          done
           test "$(docker inspect --format '{{.State.Health.Status}}' gamepilot-ci-api-1)" = healthy
       - name: Preserve service logs
         if: always()
