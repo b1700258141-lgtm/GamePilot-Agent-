@@ -15,6 +15,7 @@ Agent 的动作是模型逐步选出来的，但产物与脚本执行器完全�
 而不是 `mismatch`。
 """
 
+import re
 from collections.abc import AsyncIterator, Sequence
 
 import httpx
@@ -37,8 +38,10 @@ from gamepilot.lab import create_lab_app
 from gamepilot.testing.client import GameClient
 from gamepilot.testing.replay import ReplayInputError, load_report, replay_report
 from gamepilot.testing.reporting import new_run_id, utc_now_iso
+from gamepilot.testing.rules import MAX_ACTION_ATTEMPTS
 
 BASE_URL = "http://agent-replay.invalid"
+PLAYER_PATTERN = re.compile(r"玩家：生命 (\d+)/(\d+)")
 
 
 # -------------------------------------------------------------- 替身与客户端
@@ -74,8 +77,9 @@ def healing_policy(messages: Sequence[ChatMessage], step: int) -> ModelReply:
             latest = message.content
     if latest is None:
         return ModelReply(text="")
-    hp = int(latest.split("玩家：生命 ", 1)[1].split("/", 1)[0])
-    max_hp = int(latest.split("/", 1)[1].split("，", 1)[0])
+    player = PLAYER_PATTERN.search(latest)
+    assert player is not None
+    hp, max_hp = map(int, player.groups())
     if hp < max_hp:
         return action_call("use_potion", step)
     return action_call("attack", step)
@@ -346,7 +350,8 @@ async def test_a_tampered_report_is_rejected_before_any_request(
     payload = json.loads(path.read_text(encoding="utf-8"))
     # 把计划动作加到超过既有上限：报告不该被「尽力而为」地接受。
     case = payload["cases"][0]
-    case["scenario"]["steps"] = case["scenario"]["steps"] * 10
+    steps = case["scenario"]["steps"]
+    case["scenario"]["steps"] = (steps * (MAX_ACTION_ATTEMPTS + 1))[: MAX_ACTION_ATTEMPTS + 1]
     path.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
 
     with pytest.raises(ReplayInputError):

@@ -18,7 +18,7 @@ async def test_manual_session_advances_and_preserves_player() -> None:
         created = response.json()
         session_id = created["session_id"]
         assert (created["ruleset"], created["battle_count"], created["battle_index"]) == (
-            "v3",
+            "v5",
             2,
             1,
         )
@@ -28,7 +28,7 @@ async def test_manual_session_advances_and_preserves_player() -> None:
                 f"/api/v1/game-sessions/{session_id}/actions", json={"action": "attack"}
             )
             current = response.json()
-        assert current["player"]["exp"] == 10
+        assert current["player"]["exp"] == 15
         won = current
         response = await http.post(
             f"/api/v1/game-sessions/{session_id}/actions", json={"action": "next_battle"}
@@ -38,7 +38,7 @@ async def test_manual_session_advances_and_preserves_player() -> None:
         assert (current["status"], current["battle_index"], current["enemy_type"]) == (
             "active",
             2,
-            "goblin",
+            "wolf",
         )
         assert current["player"] == won["player"]
         assert (await http.get(f"/api/v1/game-sessions/{session_id}")).json() == current
@@ -70,7 +70,7 @@ async def test_six_battle_offline_agent_beats_leveled_troll_and_replays(
     async with httpx.AsyncClient(
         transport=httpx.ASGITransport(app=app), base_url="http://test"
     ) as http:
-        started = await http.post("/api/v1/agent-test-runs", json={"seed": 9, "battle_count": 6})
+        started = await http.post("/api/v1/agent-test-runs", json={"seed": 20, "battle_count": 6})
         assert started.status_code == 202
         await app.state.agent_run_manager._task
         run_id = started.json()["run_id"]
@@ -95,7 +95,7 @@ async def test_six_battle_offline_agent_beats_leveled_troll_and_replays(
         ("loot_anomaly", 3, "R-EXP-REWARD"),
         ("loot_anomaly", 4, "R-EXP-REWARD"),
         ("loot_anomaly", 5, "R-EXP-REWARD"),
-        ("level_anomaly", 9, "R-LEVEL-UP"),
+        ("level_anomaly", 1, "R-LEVEL-UP"),
         ("level_anomaly", 12, "R-LEVEL-UP"),
     ],
 )

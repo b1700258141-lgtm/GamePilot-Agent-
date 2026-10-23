@@ -10,8 +10,26 @@ from gamepilot.lab import PROFILE_CATALOG, LabCombatSession, TriggerRecorder
 
 from .agent_manifest import AgentCombination
 
-GameAction = Literal["attack", "use_potion"]
-GAME_ACTIONS: tuple[GameAction, ...] = ("attack", "use_potion")
+GameAction = Literal[
+    "attack",
+    "use_potion",
+    "power_strike",
+    "cast_meteor",
+    "cast_flame",
+    "cast_spark",
+    "cast_heal",
+    "next_battle",
+]
+GAME_ACTIONS: tuple[GameAction, ...] = (
+    "attack",
+    "use_potion",
+    "power_strike",
+    "cast_meteor",
+    "cast_flame",
+    "cast_spark",
+    "cast_heal",
+    "next_battle",
+)
 
 
 class ReachabilityCase(BaseModel):
@@ -49,7 +67,10 @@ def search_fault_reachability(
             )
             for action in actions:
                 try:
-                    getattr(session, action)()
+                    if action.startswith("cast_"):
+                        session.cast_spell(action)
+                    else:
+                        getattr(session, action)()
                 except InvalidCombatAction:
                     pass
                 if recorder.get(session.session_id) is not None:

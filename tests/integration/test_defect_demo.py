@@ -16,15 +16,15 @@ async def test_demo_generates_complete_chain_and_repeat_preserves_evidence(tmp_p
     assert code == 0
     raw = json.loads(path.read_text(encoding="utf-8"))
     assert raw["model_calls"] == 0
-    assert len(raw["exports"]) == 3
-    assert len(raw["targets"]) == 4
+    assert len(raw["exports"]) == 4
+    assert len(raw["targets"]) == 5
     assert all(target["expectation_met"] for target in raw["targets"])
-    assert [target["batch_exit_code"] for target in raw["targets"]] == [0, 1, 1, 1]
+    assert [target["batch_exit_code"] for target in raw["targets"]] == [0, 1, 1, 1, 1]
     manifest, artifacts, _digest = load_manifest(path.parent / raw["manifest"])
-    assert len(manifest.items) == len(artifacts) == 3
+    assert len(manifest.items) == len(artifacts) == 4
     for target in raw["targets"]:
         batch = json.loads((path.parent / target["batch_report"]).read_text(encoding="utf-8"))
-        assert batch["summary"]["executed"] == 3
+        assert batch["summary"]["executed"] == 4
         assert all(Path(row["run_report"]).is_file() for row in batch["items"])
     saved = {p: p.read_bytes() for p in path.parent.rglob("*.json")}
     second_code, second = await demo.run_demo(tmp_path)
@@ -44,7 +44,7 @@ async def test_demo_stops_on_evidence_error_and_redacts_exception(
     raw = json.loads(path.read_text(encoding="utf-8"))
     assert code == 2 and raw["error_kind"] == "RuntimeError"
     assert raw["exports"] == raw["targets"] == []
-    assert raw["planned_exports"] == 3 and raw["planned_targets"] == 4
+    assert raw["planned_exports"] == 4 and raw["planned_targets"] == 5
     assert "secret provider key" not in path.read_text(encoding="utf-8")
 
 
@@ -69,7 +69,7 @@ async def test_demo_rejects_missing_fault_and_directory_collision(
     code, path = await demo.run_demo(tmp_path)
     assert code == (2 if execution_error else 1)
     raw = json.loads(path.read_text(encoding="utf-8"))
-    assert len(raw["targets"]) == (1 if execution_error else 4)
+    assert len(raw["targets"]) == (1 if execution_error else 5)
     saved = path.read_bytes()
     with pytest.raises(ReportWriteError):
         await demo.run_demo(tmp_path)

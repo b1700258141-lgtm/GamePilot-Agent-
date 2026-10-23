@@ -99,7 +99,7 @@ jobs:
           cache: pip
           cache-dependency-path: pyproject.toml
       - name: Install database test dependencies
-        run: python -m pip install '.[dev]'
+        run: python -m pip install '.[dev,agent]'
       - name: Upgrade schema and check drift
         run: |
           python -m alembic upgrade head
@@ -167,7 +167,16 @@ jobs:
       - name: Install host test client
         run: python -m pip install .
       - name: Build and start isolated Compose stack
-        run: docker compose -f compose.local.yaml -p gamepilot-ci up -d --build
+        run: |
+          docker compose -f compose.local.yaml -p gamepilot-ci up -d --build
+          for attempt in {1..45}; do
+            if [ "$(docker inspect --format '{{.State.Health.Status}}' gamepilot-ci-api-1 2>/dev/null)" = healthy ]; then
+              exit 0
+            fi
+            sleep 2
+          done
+          docker compose -f compose.local.yaml -p gamepilot-ci ps
+          exit 1
       - name: Run HTTP baseline, replay, and restart recovery
         run: |
           python -m gamepilot.testing run --base-url http://127.0.0.1:18770 --output-dir artifacts/ci/container-baseline
@@ -175,6 +184,12 @@ jobs:
           test "${#reports[@]}" -eq 1
           python -m gamepilot.testing replay --report "${reports[0]}" --base-url http://127.0.0.1:18770 --output-dir artifacts/ci/container-replay
           python scripts/container_smoke.py --project gamepilot-ci --base-url http://127.0.0.1:18770 --output-dir artifacts/ci/container-smoke
+          for attempt in {1..30}; do
+            if [ "$(docker inspect --format '{{.State.Health.Status}}' gamepilot-ci-api-1 2>/dev/null)" = healthy ]; then
+              break
+            fi
+            sleep 2
+          done
           test "$(docker inspect --format '{{.State.Health.Status}}' gamepilot-ci-api-1)" = healthy
       - name: Preserve service logs
         if: always()

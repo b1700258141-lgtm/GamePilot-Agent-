@@ -80,13 +80,36 @@ async def test_create_session_returns_201_with_full_snapshot(
         "turn",
         "player",
         "slime",
+        "enemy_type",
+        "ruleset",
+        "battle_count",
+        "battle_index",
+        "enemy_level",
         "events",
     }
     assert body["seed"] == 42
     assert body["status"] == "active"
     assert body["turn"] == 0
-    assert body["player"] == {"hp": 100, "max_hp": 100, "potions": 2}
+    assert body["player"] == {
+        "hp": 100,
+        "max_hp": 100,
+        "potions": 3,
+        "gold": 0,
+        "level": 1,
+        "exp": 0,
+        "power_strike_cooldown": 0,
+        "ep": 100,
+        "max_ep": 100,
+        "magic": 10,
+    }
     assert body["slime"] == {"hp": 60, "max_hp": 60}
+    assert (
+        body["enemy_type"],
+        body["ruleset"],
+        body["battle_count"],
+        body["battle_index"],
+        body["enemy_level"],
+    ) == ("slime", "v5", 1, 1, 1)
     assert body["events"] == []
 
 
@@ -164,7 +187,7 @@ async def test_use_potion_updates_hp_and_potions(client: httpx.AsyncClient) -> N
     assert potion_event["kind"] == "potion"
     assert potion_event["player_hp"] == 100
     assert body["player"]["hp"] == 100 - retaliate_event["value"]
-    assert body["player"]["potions"] == 1
+    assert body["player"]["potions"] == 2
 
 
 @pytest.mark.anyio
@@ -177,22 +200,39 @@ async def test_invalid_action_value_returns_422(client: httpx.AsyncClient) -> No
 
 
 @pytest.mark.anyio
-async def test_potion_at_full_hp_returns_409_without_state_change(
+async def test_potion_at_full_hp_consumes_one_and_advances_the_battle(
     client: httpx.AsyncClient,
 ) -> None:
     session_id = (await create_session(client))["session_id"]
     response = await client.post(
         f"/api/v1/game-sessions/{session_id}/actions", json={"action": "use_potion"}
     )
-    assert response.status_code == 409
-    assert response.json() == {
-        "code": "player_full_hp",
-        "message": "player is already at full HP",
-    }
+    assert response.status_code == 200
+    body = response.json()
+    assert body["turn"] == 1
+    assert body["events"][0]["kind"] == "potion"
+    assert body["events"][0]["value"] == 25
+    assert body["events"][0]["player_hp"] == 100
+    assert body["player"]["potions"] == 2
     after = (await client.get(f"/api/v1/game-sessions/{session_id}")).json()
-    assert after["turn"] == 0
-    assert after["events"] == []
-    assert after["player"] == {"hp": 100, "max_hp": 100, "potions": 2}
+    assert after == body
+
+
+@pytest.mark.anyio
+async def test_potion_without_stock_returns_409_without_state_change(
+    client: httpx.AsyncClient,
+) -> None:
+    session_id = (await create_session(client))["session_id"]
+    for _ in range(3):
+        await perform_action(client, session_id, "use_potion")
+    before = (await client.get(f"/api/v1/game-sessions/{session_id}")).json()
+    assert before["player"]["potions"] == 0
+    response = await client.post(
+        f"/api/v1/game-sessions/{session_id}/actions", json={"action": "use_potion"}
+    )
+    assert response.status_code == 409
+    assert response.json()["code"] == "no_potions"
+    assert (await client.get(f"/api/v1/game-sessions/{session_id}")).json() == before
 
 
 @pytest.mark.anyio
@@ -224,6 +264,7 @@ async def test_event_structure_is_stable(client: httpx.AsyncClient) -> None:
             "player_hp",
             "slime_hp",
             "potions",
+            "item",
         }
         assert event["turn"] == body["turn"]
 

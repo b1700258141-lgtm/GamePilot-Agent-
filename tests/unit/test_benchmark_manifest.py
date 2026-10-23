@@ -1,4 +1,4 @@
-"""固定评测清单：矩阵规模、9/23 划分、目标规则与指定触发轨迹。
+"""固定评测清单：矩阵规模、13/43 划分、目标规则与指定触发轨迹。
 
 清单是先于运行写死的标准答案。这里逐项核对它的形状，
 防止有人在结果不符时改清单去迎合实现（例如删掉某一格）。
@@ -13,16 +13,19 @@ from gamepilot.testing.scenarios import BASELINE_SCENARIOS, SUITE_BASELINE
 
 PROFILE_FAIL_COUNTS = {
     PROFILE_NORMAL: 0,
-    "potion_overheal": 4,
-    "potion_not_consumed": 4,
-    "retaliate_after_death": 1,
+    "potion_overheal": 5,
+    "potion_not_consumed": 5,
+    "retaliate_after_death": 2,
+    "loot_anomaly": 1,
+    "level_anomaly": 0,
+    "skill_power_anomaly": 0,
 }
 
 
-def test_matrix_is_four_profiles_by_eight_scenarios() -> None:
-    assert len(PROFILES) == 4
+def test_matrix_is_seven_profiles_by_eight_scenarios() -> None:
+    assert len(PROFILES) == 7
     assert len(BASELINE_SCENARIOS) == 8
-    assert len(manifest.COMBINATIONS) == 32
+    assert len(manifest.COMBINATIONS) == 56
 
 
 def test_matrix_covers_every_profile_and_case_exactly_once() -> None:
@@ -33,11 +36,11 @@ def test_matrix_covers_every_profile_and_case_exactly_once() -> None:
     assert {case_id for _, case_id in keys} == set(manifest.BASELINE_CASE_IDS)
 
 
-def test_expected_split_is_nine_failing_and_twenty_three_passing() -> None:
+def test_expected_split_is_thirteen_failing_and_forty_three_passing() -> None:
     failing = [row for row in manifest.COMBINATIONS if row.expect_fail]
 
-    assert len(failing) == 9
-    assert len(manifest.COMBINATIONS) - len(failing) == 23
+    assert len(failing) == 13
+    assert len(manifest.COMBINATIONS) - len(failing) == 43
 
 
 @pytest.mark.parametrize(("profile", "expected"), PROFILE_FAIL_COUNTS.items())
@@ -72,15 +75,21 @@ def test_target_rules_are_known_rule_ids() -> None:
 def test_designated_triggers_are_failing_combinations_of_distinct_faults() -> None:
     index = {(row.profile, row.case_id): row for row in manifest.COMBINATIONS}
 
-    assert len(manifest.DESIGNATED_TRIGGERS) == 3
+    assert len(manifest.DESIGNATED_TRIGGERS) == 4
     faults = set()
     for key in manifest.DESIGNATED_TRIGGERS:
         row = index[key]
         assert row.expect_fail
         assert row.target_rules
         faults.add(row.fault_id)
-    # 三个缺陷各有一条最小触发轨迹，缺一不可。
-    assert faults == set(FAULT_IDS)
+    # 基线场景能触发的四种缺陷各有一条最小轨迹；其余缺陷由专项场景覆盖。
+    assert faults == {
+        "potion_overheal",
+        "potion_not_consumed",
+        "retaliate_after_death",
+        "loot_anomaly",
+    }
+    assert faults <= set(FAULT_IDS)
 
 
 def test_negative_validation_picks_a_designated_trigger() -> None:
@@ -95,5 +104,5 @@ def test_suite_and_scenario_lookup_are_consistent() -> None:
 
 
 def test_manifest_declares_a_pinned_version_and_source() -> None:
-    assert manifest.BENCHMARK_VERSION == "1.1.0"
+    assert manifest.BENCHMARK_VERSION == "2.0.0"
     assert manifest.MANIFEST_SOURCE

@@ -25,7 +25,7 @@ from gamepilot.persistence.models import GameSessionRow
 from gamepilot.repositories.postgres import PostgresSessionRepository
 
 TEST_DATABASE_NAME = "gamepilot_test"
-EXPECTED_REVISION = "0003_agent_test_runs"
+EXPECTED_REVISION = "0008_level_experience_curve"
 
 
 def hide_password(url: str) -> str:

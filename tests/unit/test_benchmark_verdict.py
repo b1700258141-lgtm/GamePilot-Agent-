@@ -197,8 +197,8 @@ def test_summary_reports_full_conformance() -> None:
     )
 
     assert (summary.status, summary.exit_code) == ("ok", EXIT_OK)
-    assert (summary.combinations_planned, summary.combinations_executed) == (32, 32)
-    assert (summary.as_expected, summary.deviations, summary.execution_errors) == (32, 0, 0)
+    assert (summary.combinations_planned, summary.combinations_executed) == (56, 56)
+    assert (summary.as_expected, summary.deviations, summary.execution_errors) == (56, 0, 0)
     assert (summary.metrics_passed, summary.metrics_total) == (2, 2)
     assert summary.negative_validation_passed is True
 
@@ -226,7 +226,7 @@ def test_summary_is_a_deviation_when_a_combination_does_not_match() -> None:
     summary = _summary(evidences, [_metric(True, "a")], negative=_negative(True))
 
     assert (summary.status, summary.exit_code) == ("deviation", EXIT_DEVIATION)
-    assert (summary.as_expected, summary.deviations) == (31, 1)
+    assert (summary.as_expected, summary.deviations) == (55, 1)
 
 
 def test_execution_error_dominates_every_other_verdict() -> None:
@@ -250,5 +250,5 @@ def test_execution_error_dominates_every_other_verdict() -> None:
 def test_summary_counts_only_executed_combinations() -> None:
     summary = _summary(_reference()[:5], [_metric(True, "a")], negative=_negative(True))
 
-    assert summary.combinations_planned == 32
+    assert summary.combinations_planned == 56
     assert summary.combinations_executed == 5

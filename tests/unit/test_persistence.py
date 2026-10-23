@@ -45,6 +45,16 @@ SESSION_COLUMNS = {
     "player_hp",
     "player_max_hp",
     "potions",
+    "gold",
+    "level",
+    "exp",
+    "ep",
+    "max_ep",
+    "magic",
+    "battle_count",
+    "battle_index",
+    "enemy_type",
+    "ruleset",
     "slime_hp",
     "slime_max_hp",
     "created_at",
@@ -62,6 +72,7 @@ EVENT_COLUMNS = {
     "player_hp",
     "slime_hp",
     "potions",
+    "item",
 }
 
 
@@ -124,7 +135,22 @@ def test_game_sessions_primary_key_and_column_types() -> None:
     assert isinstance(table.c.seed.type, Text)
     assert isinstance(table.c.status.type, String)
     assert table.c.status.type.length == 16
-    for name in ("turn", "player_hp", "player_max_hp", "potions", "slime_hp", "slime_max_hp"):
+    for name in (
+        "turn",
+        "player_hp",
+        "player_max_hp",
+        "potions",
+        "gold",
+        "level",
+        "exp",
+        "ep",
+        "max_ep",
+        "magic",
+        "battle_count",
+        "battle_index",
+        "slime_hp",
+        "slime_max_hp",
+    ):
         assert isinstance(table.c[name].type, Integer)
 
 
@@ -146,6 +172,12 @@ def test_game_sessions_check_constraints() -> None:
         "ck_game_sessions_player_hp_within_max",
         "ck_game_sessions_slime_max_hp_positive",
         "ck_game_sessions_slime_hp_within_max",
+        "ck_game_sessions_gold_non_negative",
+        "ck_game_sessions_level_exp_valid",
+        "ck_game_sessions_ep_magic_valid",
+        "ck_game_sessions_battle_range",
+        "ck_game_sessions_enemy_type_valid",
+        "ck_game_sessions_ruleset_valid",
     }
     status_sql = str(_check_constraint(SESSION_TABLE, "ck_game_sessions_status_valid").sqltext)
     for value in ("active", "won", "lost"):
@@ -163,8 +195,8 @@ def test_game_sessions_check_constraints() -> None:
 def test_combat_events_columns_and_nullability() -> None:
     table = _table(EVENT_TABLE)
     assert set(table.c.keys()) == EVENT_COLUMNS
-    # 只有 potions 允许为空（史莱姆事件不记录玩家药水数）。
-    assert {column.name for column in table.columns if column.nullable} == {"potions"}
+    # 反击不记录药水数；非掉落事件不记录物品名。
+    assert {column.name for column in table.columns if column.nullable} == {"potions", "item"}
 
 
 def test_combat_events_primary_key_is_database_generated() -> None:

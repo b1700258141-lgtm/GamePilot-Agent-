@@ -39,7 +39,8 @@ def _trace(session: CombatSession) -> list[EventRow]:
 
 
 def _play(seed: int, actions: list[str]) -> CombatSession:
-    session = CombatSession(session_id="fixed-session-id", seed=seed)
+    # 这些固定轨迹记录的是 v1；显式指定规则集以验证旧存档仍可重放。
+    session = CombatSession(session_id="fixed-session-id", seed=seed, ruleset="v1")
     for action in actions:
         getattr(session, action)()
     return session
@@ -145,7 +146,8 @@ def test_heal_never_exceeds_missing_hp(missing_hp: int) -> None:
 
 
 def test_constants_are_unchanged() -> None:
-    assert (PLAYER_MAX_HP, SLIME_MAX_HP, INITIAL_POTIONS, POTION_HEAL) == (100, 60, 2, 25)
+    assert (PLAYER_MAX_HP, SLIME_MAX_HP, INITIAL_POTIONS, POTION_HEAL) == (100, 60, 3, 25)
+    assert CombatSession(session_id="legacy", seed=1, ruleset="v1").snapshot().player.potions == 2
 
 
 # ------------------------------------------------------------ 会话创建与身份

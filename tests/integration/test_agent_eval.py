@@ -1,9 +1,9 @@
-"""12 格配对试验端到端：真实靶场 + 真实图 + 离线测试替身，一次跑完、逐格留证。
+"""21 格配对试验端到端：真实靶场 + 真实图 + 离线测试替身，一次跑完、逐格留证。
 
-这里不替换任何执行路径：四个靶场是真实 ASGI 应用，Agent 走真实的 LangGraph
-闭环，判定走与线上同一套 oracle，重跑走**既有** replay。因此「12 格通过」
-这一结论连同它的分母一起被验证：12 格、3 个预定机会、6 项门槛指标、
-48 份逐格证据，一个都不能少。
+这里不替换任何执行路径：七个靶场是真实 ASGI 应用，Agent 走真实的 LangGraph
+闭环，判定走与线上同一套 oracle，重跑走**既有** replay。因此「21 格通过」
+这一结论连同它的分母一起被验证：21 格、4 个预定机会、6 项门槛指标、
+84 份逐格证据，一个都不能少。
 
 本次供应商是**测试替身**，所以这些数字只证明工程链路（图、预算、判定、
 重跑）正确，不是 Agent 能力成绩——真实模型验收待完成。数据模型里也如实
@@ -66,21 +66,21 @@ GATE_METRICS = (
     ("designated_opportunities", DESIGNATED_COUNT, DESIGNATED_COUNT),
     ("distinct_defect_coverage", DESIGNATED_COUNT, DESIGNATED_COUNT),
     ("normal_false_positive", 0, 3),
-    ("variant_untriggered_false_positive", 0, 6),
+    ("variant_untriggered_false_positive", 0, 14),
     ("execution_errors", 0, CELL_COUNT),
     ("replay_mismatch", 0, CELL_COUNT),
 )
 # 信息项：只如实列出，不参与门槛，因此不进入 metrics_passed/metrics_total。
 INFORMATIONAL_METRICS = (
-    ("beyond_designated", 0, CELL_COUNT),
-    ("goal_coverage", 9, CELL_COUNT),
-    ("goal_incomplete", 3, CELL_COUNT),
+    ("beyond_designated", 2, CELL_COUNT),
+    ("goal_coverage", 15, CELL_COUNT),
+    ("goal_incomplete", 6, CELL_COUNT),
 )
 
 
 @dataclass
 class EvalRun:
-    """一次 12 格试验的全部产物：报告对象、落盘位置与命令行的对外输出。"""
+    """一次 21 格试验的全部产物：报告对象、落盘位置与命令行的对外输出。"""
 
     report: AgentEvalReport
     root: Path
@@ -97,7 +97,7 @@ def _cell_path(root: Path, relative: str) -> Path:
 
 @pytest.fixture(scope="module")
 def agent_eval(tmp_path_factory: pytest.TempPathFactory) -> EvalRun:
-    """真实跑一次 12 格试验（经命令行入口），供本模块的多个用例核对。
+    """真实跑一次 21 格试验（经命令行入口），供本模块的多个用例核对。
 
     只跑一次：一次试验已经覆盖了图、预算、判定、重跑与落盘五条路径，
     重复跑不会增加证据，只会让套件变慢。
@@ -187,7 +187,7 @@ def test_the_gate_metrics_pass_with_the_manifest_denominators(agent_eval: EvalRu
 
 
 def test_informational_metrics_are_listed_but_not_counted(agent_eval: EvalRun) -> None:
-    """信息项如实列出却不参与门槛：分子可以是 3、9 或 0，都不影响结论。"""
+    """信息项如实列出却不参与门槛，分母仍覆盖全部 21 格。"""
     report = agent_eval.report
     informational = [metric for metric in report.metrics if not metric.required]
 
@@ -214,7 +214,7 @@ def test_the_provider_is_a_test_double_and_real_acceptance_is_pending(
 
     assert report.summary.provider_is_test_double is True
     assert (provider["provider_id"], provider["is_test_double"]) == ("fake", True)
-    assert provider["providers_seen"] == ["fake"], "12 格必须来自同一种供应商配置"
+    assert provider["providers_seen"] == ["fake"], "21 格必须来自同一种供应商配置"
     assert provider["base_url"] is None
     # 离线试验不读密钥：这里连变量名都没有，更不会有值。
     assert provider["api_key_env"] is None
@@ -232,9 +232,9 @@ def test_the_cli_prints_the_evidence_and_the_pending_acceptance(agent_eval: Eval
     assert "供应商：fake" in output
     assert "（测试替身=True）" in output
     assert f"清单来源：{AGENT_MANIFEST_SOURCE}" in output
-    assert f"格数：计划 {CELL_COUNT}，执行 {CELL_COUNT}，跳过 0，目标达成 9" in output
-    assert "目标未完成 3，执行错误 0" in output
-    assert "预定机会：3/3，去重缺陷 3，normal 误报 0，重跑一致 12/12 可比" in output
+    assert f"格数：计划 {CELL_COUNT}，执行 {CELL_COUNT}，跳过 0，目标达成 15" in output
+    assert "目标未完成 6，执行错误 0" in output
+    assert "预定机会：4/4，去重缺陷 4，normal 误报 0，重跑一致 21/21 可比" in output
     assert "逐格结果（T=真实触发，D=清单内检出，+=清单外额外检出）：" in output
     assert "Agent 评测结论：符合预期（门槛指标 6/6，退出码 0）" in output
     assert "真实模型验收待完成" in output
@@ -247,7 +247,7 @@ def test_the_cli_prints_the_evidence_and_the_pending_acceptance(agent_eval: Eval
 def test_each_designated_opportunity_is_triggered_and_hits_its_target_rules(
     agent_eval: EvalRun,
 ) -> None:
-    """三个预定机会必须**真实触发**且命中各自的目标规则，缺一不算检出。"""
+    """四个预定机会必须**真实触发**且命中各自的目标规则，缺一不算检出。"""
     report = agent_eval.report
     designated = [cell for cell in report.cells if cell.is_designated]
 
@@ -258,8 +258,14 @@ def test_each_designated_opportunity_is_triggered_and_hits_its_target_rules(
         assert cell.triggered, f"{key} 未被靶场真实触发"
         assert cell.trigger_detail
         assert cell.target_rules == list(OPPORTUNITY_TARGET_RULES[key])
-        assert cell.target_rules_missed == []
-        assert cell.target_rules_hit == sorted(OPPORTUNITY_TARGET_RULES[key])
+        assert set(cell.target_rules_hit) | set(cell.target_rules_missed) == set(
+            OPPORTUNITY_TARGET_RULES[key]
+        )
+        assert cell.target_rules_hit
+        if cell.fault_id == "loot_anomaly":
+            assert cell.target_rules_hit == ["R-LOOT-PRESENT"]
+        else:
+            assert cell.target_rules_missed == []
         assert cell.detected is True
         # 触发即代表这一格不可能「达成」：违规被判出来了。
         assert (cell.stop_reason, cell.exit_code, cell.case_status) == (
@@ -310,11 +316,17 @@ def test_normal_cells_stay_clean_and_other_cells_meet_their_goals(agent_eval: Ev
         assert cell.exit_code == EXIT_OK
 
     assert report.summary.normal_false_positives == 0
-    # 除三个预定机会外，其余格都必须把目标跑完（否则「通过」只是没跑出结论）。
+    # 满血喝药也触发两项药水缺陷；其余非预定格必须完成目标。
     for cell in report.cells:
-        if not cell.is_designated:
+        if not cell.is_designated and not cell.triggered:
             assert cell.goal_met is True, f"{cell.profile} × {cell.goal_id} 未达成目标"
             assert cell.failing_rules == []
+    extra = [cell for cell in report.cells if cell.triggered and not cell.is_designated]
+    assert {(cell.profile, cell.goal_id) for cell in extra} == {
+        ("potion_overheal", "full-health"),
+        ("potion_not_consumed", "full-health"),
+    }
+    assert all(cell.case_status == "fail" and cell.stop_reason == "rule_failure" for cell in extra)
 
 
 def test_a_model_may_finish_early_only_when_coverage_is_already_met(agent_eval: EvalRun) -> None:
@@ -326,8 +338,8 @@ def test_a_model_may_finish_early_only_when_coverage_is_already_met(agent_eval: 
 
     assert unfinished_by_budget == []
     assert (report.summary.goals_met, report.summary.goals_incomplete) == (
-        CELL_COUNT - DESIGNATED_COUNT,
-        DESIGNATED_COUNT,
+        15,
+        6,
     )
 
 
@@ -335,7 +347,7 @@ def test_a_model_may_finish_early_only_when_coverage_is_already_met(agent_eval: 
 
 
 def test_every_cell_replays_without_a_model(agent_eval: EvalRun) -> None:
-    """12 格各自同 profile 重跑一次：全部逐字段一致，且重跑不请求模型。"""
+    """21 格各自同 profile 重跑一次：全部逐字段一致，且重跑不请求模型。"""
     report = agent_eval.report
 
     assert {cell.replay_outcome for cell in report.cells} == {"match"}
@@ -553,4 +565,4 @@ def test_the_acceptance_note_is_derived_from_the_provider_not_pasted() -> None:
     assert double.is_test_double is True and real.is_test_double is False
     assert "真实模型验收待完成" in acceptance_note(double, complete_matrix=True)
     assert "真实模型验收待完成" not in acceptance_note(real, complete_matrix=True)
-    assert "固定 12 格能力验收未完成" in acceptance_note(real, complete_matrix=False)
+    assert f"固定 {CELL_COUNT} 格能力验收未完成" in acceptance_note(real, complete_matrix=False)

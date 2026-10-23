@@ -75,12 +75,12 @@ async def test_baseline_suite_passes_on_in_memory_app(game_client: GameClient) -
 async def test_rejected_action_is_verified_by_get_without_state_change(
     game_client: GameClient,
 ) -> None:
-    case = await run_case(game_client, _scenario("potion-at-full-hp-rejected"))
+    case = await run_case(game_client, _scenario("potion-exhaustion"))
 
     assert case.status == "pass"
-    step = case.steps[0]
+    step = case.steps[-1]
     assert step.observed_status == 409
-    assert step.observed_code == "player_full_hp"
+    assert step.observed_code == "no_potions"
     # 409 之后必须用 GET 证明状态与完整事件未变，而不是推断。
     assert step.after is not None
     assert "R-REJECT-NO-STATE-CHANGE" in _rule_ids(step.checks)
@@ -99,13 +99,13 @@ async def test_potion_heal_is_measured_from_potion_event_then_retaliation(
     potion_event = case.steps[1].new_events[0]
     retaliate_event = case.steps[1].new_events[1]
     assert potion_event.kind == "potion"
-    assert potion_event.value == min(25, 100 - case.steps[1].before.player.hp)
-    assert potion_event.player_hp == case.steps[1].before.player.hp + potion_event.value
+    assert potion_event.value == 25
+    assert potion_event.player_hp == min(100, case.steps[1].before.player.hp + 25)
     assert retaliate_event.actor == "slime"
     assert case.steps[1].after.player.hp == potion_event.player_hp - retaliate_event.value
-    # 第三次喝药被拒绝：药水已用完，且状态未变。
-    assert case.steps[3].observed_code == "no_potions"
-    assert case.steps[3].observation.body is not None
+    # 第四次喝药被拒绝：药水已用完，且状态未变。
+    assert case.steps[4].observed_code == "no_potions"
+    assert case.steps[4].observation.body is not None
 
 
 @pytest.mark.anyio
@@ -115,11 +115,11 @@ async def test_rejected_action_does_not_change_later_randomness(game_client: Gam
 
     assert case.status == "pass"
     assert case.control is not None
-    assert case.control.status_codes == [200, 200, 200]
+    assert case.control.status_codes == [200, 200, 200, 200, 200]
     assert normalize_snapshot(case.final_snapshot) == normalize_snapshot(
         case.control.final_snapshot
     )
-    assert case.executed_actions[0].status_code == 409
+    assert case.executed_actions[3].status_code == 409
 
 
 @pytest.mark.anyio

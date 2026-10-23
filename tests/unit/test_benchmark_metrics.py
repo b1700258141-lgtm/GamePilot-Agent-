@@ -80,13 +80,13 @@ def test_reference_matrix_passes_every_metric_with_expected_denominators() -> No
     metrics = build_metrics(_reference())
 
     assert [(m.metric_id, m.numerator, m.denominator, m.passed) for m in metrics] == [
-        ("defect_coverage", 3, 3, True),
-        ("trigger_accuracy", 9, 9, True),
-        ("target_detection", 9, 9, True),
+        ("defect_coverage", 4, 4, True),
+        ("trigger_accuracy", 13, 13, True),
+        ("target_detection", 13, 13, True),
         ("normal_false_positive", 0, 8, True),
-        ("variant_false_positive", 0, 15, True),
-        ("execution_errors", 0, 32, True),
-        ("replay_consistency", 32, 32, True),
+        ("variant_false_positive", 0, 35, True),
+        ("execution_errors", 0, 56, True),
+        ("replay_consistency", 56, 56, True),
     ]
 
 
@@ -109,21 +109,21 @@ def test_missed_target_rule_lowers_detection_but_keeps_trigger_accuracy() -> Non
     )
 
     detection = _metric(metrics, "target_detection")
-    assert (detection.numerator, detection.denominator, detection.passed) == (8, 9, False)
+    assert (detection.numerator, detection.denominator, detection.passed) == (12, 13, False)
     assert R_POTION_CAP in _details(detection)
 
     # 触发记录仍在，触发正确率不下降。
-    assert _metric(metrics, "trigger_accuracy").numerator == 9
+    assert _metric(metrics, "trigger_accuracy").numerator == 13
     # 指定触发轨迹少了一条，缺陷覆盖下降。
-    assert _metric(metrics, "defect_coverage").numerator == 2
+    assert _metric(metrics, "defect_coverage").numerator == 3
 
 
 def test_missing_execution_evidence_is_counted_as_not_detected() -> None:
     """没有执行证据既不算发现，也不从分母里删掉。"""
     metrics = build_metrics(_reference({HEAL_CASE: {"triggered": False, "trigger_detail": None}}))
 
-    assert _metric(metrics, "trigger_accuracy").numerator == 8
-    assert _metric(metrics, "defect_coverage").numerator == 2
+    assert _metric(metrics, "trigger_accuracy").numerator == 12
+    assert _metric(metrics, "defect_coverage").numerator == 3
 
 
 # ------------------------------------------------------- 非目标 fail 与重复命中
@@ -138,8 +138,8 @@ def test_extra_non_target_failures_do_not_inflate_detection() -> None:
     }
     metrics = build_metrics(_reference(overrides))
 
-    assert _metric(metrics, "target_detection").numerator == 9
-    assert _metric(metrics, "defect_coverage").numerator == 3
+    assert _metric(metrics, "target_detection").numerator == 13
+    assert _metric(metrics, "defect_coverage").numerator == 4
     assert "按去重只计一次发现" in _details(_metric(metrics, "target_detection"))
 
 
@@ -158,11 +158,11 @@ def test_variant_failure_on_a_passing_combination_is_a_false_positive() -> None:
     false_positive = _metric(metrics, "variant_false_positive")
     assert (false_positive.numerator, false_positive.denominator, false_positive.passed) == (
         1,
-        15,
+        35,
         False,
     )
     # 预期通过的组合上没有缺陷，因此触发正确率与检测率的分子都不受影响。
-    assert _metric(metrics, "target_detection").numerator == 9
+    assert _metric(metrics, "target_detection").numerator == 13
 
 
 def test_unexpected_trigger_on_a_passing_combination_is_a_false_positive() -> None:
@@ -194,8 +194,8 @@ def test_normal_failure_is_a_false_positive_and_not_a_detection() -> None:
         False,
     )
     # normal 组合不在目标失败集合里，检测率与触发率的分子都不变。
-    assert _metric(metrics, "target_detection").numerator == 9
-    assert _metric(metrics, "trigger_accuracy").numerator == 9
+    assert _metric(metrics, "target_detection").numerator == 13
+    assert _metric(metrics, "trigger_accuracy").numerator == 13
 
 
 # --------------------------------------------------------- 执行错误与不可比较
@@ -221,12 +221,12 @@ def test_execution_error_is_counted_separately_and_kept_in_denominators() -> Non
     )
 
     errors = _metric(metrics, "execution_errors")
-    assert (errors.numerator, errors.denominator, errors.passed) == (1, 32, False)
+    assert (errors.numerator, errors.denominator, errors.passed) == (1, 56, False)
     # 执行错误不算发现缺陷，也不从别的指标分母里消失。
-    assert _metric(metrics, "target_detection").numerator == 8
-    assert _metric(metrics, "target_detection").denominator == 9
-    assert _metric(metrics, "defect_coverage").numerator == 2
-    assert _metric(metrics, "defect_coverage").denominator == 3
+    assert _metric(metrics, "target_detection").numerator == 12
+    assert _metric(metrics, "target_detection").denominator == 13
+    assert _metric(metrics, "defect_coverage").numerator == 3
+    assert _metric(metrics, "defect_coverage").denominator == 4
 
 
 def test_not_comparable_replay_stays_in_the_denominator() -> None:
@@ -235,10 +235,10 @@ def test_not_comparable_replay_stays_in_the_denominator() -> None:
     )
 
     consistency = _metric(metrics, "replay_consistency")
-    assert (consistency.numerator, consistency.denominator, consistency.passed) == (31, 32, False)
+    assert (consistency.numerator, consistency.denominator, consistency.passed) == (55, 56, False)
     assert "not_comparable" in _details(consistency)
     # 缺陷结论本身仍然成立：重跑不可比较不等于缺陷没被检出。
-    assert _metric(metrics, "target_detection").numerator == 9
+    assert _metric(metrics, "target_detection").numerator == 13
 
 
 def test_mismatched_replay_is_not_counted_as_consistent() -> None:
@@ -247,6 +247,6 @@ def test_mismatched_replay_is_not_counted_as_consistent() -> None:
     )
 
     consistency = _metric(metrics, "replay_consistency")
-    assert consistency.numerator == 31
+    assert consistency.numerator == 55
     assert consistency.passed is False
-    assert _metric(metrics, "defect_coverage").numerator == 3
+    assert _metric(metrics, "defect_coverage").numerator == 4

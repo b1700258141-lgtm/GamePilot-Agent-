@@ -1,4 +1,4 @@
-"""Agent 配对试验：5 profile × 3 目标的 15 格对照评测。
+"""Agent 配对试验：7 profile × 3 目标的 21 格对照评测。
 
 评测层是本仓库里**唯一**被允许同时组装 `agent` / `lab` / `benchmark` / `scenarios`
 的地方——这正是「Agent 不得沿导入链读到答案」的边界所在：Agent 读不到靶场、
@@ -104,7 +104,7 @@ EP_PATTERN = re.compile(r"EP (\d+)/(\d+)")
 COOLDOWN_PATTERN = re.compile(r"重击冷却 (\d+)")
 OFFENSIVE_SPELLS = (("cast_meteor", 70), ("cast_flame", 40), ("cast_spark", 20))
 SLIME_PATTERN = re.compile(
-    r"(?:史莱姆|哥布林|骷髅|野狼|兽人|巨魔|幽灵|巨龙)：(?:等级 \d+，)?生命 (\d+)/(\d+)"
+    r"(史莱姆|哥布林|骷髅|野狼|兽人|巨魔|幽灵|巨龙)：(?:等级 \d+，)?生命 (\d+)/(\d+)"
 )
 
 
@@ -121,6 +121,7 @@ class Observation:
         "ruleset",
         "battle_index",
         "battle_count",
+        "enemy_type",
     )
 
     def __init__(
@@ -134,6 +135,7 @@ class Observation:
         ruleset: str = "v3",
         battle_index: int = 1,
         battle_count: int = 1,
+        enemy_type: str = "史莱姆",
     ) -> None:
         self.status = status
         self.hp = hp
@@ -144,6 +146,7 @@ class Observation:
         self.ruleset = ruleset
         self.battle_index = battle_index
         self.battle_count = battle_count
+        self.enemy_type = enemy_type
 
 
 def read_observation(content: str) -> Observation | None:
@@ -171,6 +174,7 @@ def read_observation(content: str) -> Observation | None:
         ruleset=ruleset.group(1) if ruleset else "v3",
         battle_index=int(battle.group(1)) if battle else 1,
         battle_count=int(battle.group(2)) if battle else 1,
+        enemy_type=slime.group(1),
     )
 
 
@@ -225,7 +229,11 @@ def observation_reacting_double(goal_id: str) -> ModelProvider:
         if observation.status != "active":
             return _finish(step, f"战斗状态为 {observation.status}，观测到此为止。")
         if goal_id == GOAL_BATTLE_END:
-            if not opening_potion_used and observation.potions > 0:
+            if (
+                not opening_potion_used
+                and observation.potions > 0
+                and observation.enemy_type != "巨龙"
+            ):
                 opening_potion_used = True
                 return _action("use_potion", step)
             if observation.hp * 2 <= observation.max_hp and observation.potions > 0:
@@ -246,11 +254,31 @@ def observation_reacting_double(goal_id: str) -> ModelProvider:
                 return _action("use_potion", step)
             return _finish(step, "已观察到满血喝药的处理与状态一致性。")
         if goal_id == GOAL_HEALING:
+            if (
+                observation.enemy_type == "骷髅"
+                and observation.hp == observation.max_hp
+                and observation.potions > 0
+                and not opening_potion_used
+            ):
+                opening_potion_used = True
+                return _action("use_potion", step)
             # 受伤即治疗：这是治疗量最可能越过上限的时刻，也就是要验证的边界。
             if observation.hp < observation.max_hp and observation.potions > 0:
                 return _action("use_potion", step)
             return _action("attack", step)  # 先受伤，才能验证治疗边界
         if goal_id == GOAL_VICTORY:
+            if observation.ruleset in ("v4", "v5") and observation.enemy_type in (
+                "哥布林",
+                "骷髅",
+            ):
+                if observation.power_strike_cooldown == 0:
+                    return _action("power_strike", step)
+                for offset in range(len(OFFENSIVE_SPELLS)):
+                    index = (next_spell_index + offset) % len(OFFENSIVE_SPELLS)
+                    spell, cost = OFFENSIVE_SPELLS[index]
+                    if observation.ep >= cost:
+                        next_spell_index = (index + 1) % len(OFFENSIVE_SPELLS)
+                        return _action(spell, step)
             return _action("attack", step)
         return _finish(step, "没有与该目标匹配的策略。")
 
@@ -546,8 +574,11 @@ def acceptance_note(provider: ModelProvider, *, complete_matrix: bool) -> str:
             "不是 Agent 能力成绩；真实模型验收待完成。"
         )
     if not complete_matrix:
-        return "本次使用真实模型调用，但固定 15 格能力验收未完成；仅保留已执行格的证据。"
-    return "本次使用真实模型调用，结论可作为首轮 15 格小样本冒烟结果。"
+        return (
+            f"本次使用真实模型调用，但固定 {len(AGENT_COMBINATIONS)} 格能力验收未完成；"
+            "仅保留已执行格的证据。"
+        )
+    return f"本次使用真实模型调用，结论可作为首轮 {len(AGENT_COMBINATIONS)} 格小样本冒烟结果。"
 
 
 def summarize_spend(

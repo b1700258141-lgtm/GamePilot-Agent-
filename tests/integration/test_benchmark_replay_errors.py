@@ -6,11 +6,15 @@ import httpx
 import pytest
 
 from gamepilot.benchmark import cli, runner
+from gamepilot.benchmark.manifest import COMBINATIONS
 from gamepilot.benchmark.models import BenchmarkReport
 from gamepilot.lab import create_lab_app
 from gamepilot.testing.client import GameClient
 from gamepilot.testing.models import ReplayReport, RunReport
 from gamepilot.testing.replay import load_report
+
+MATRIX_COUNT = len(COMBINATIONS)
+NEGATIVE_REPLAY_CALL = MATRIX_COUNT + 1
 
 
 def _error_response(request: httpx.Request, fault: str) -> httpx.Response:
@@ -49,13 +53,13 @@ def _run_cli(output_dir: Path, expected_exit: int) -> tuple[BenchmarkReport, Pat
     assert report.summary.exit_code == expected_exit
     # 固定分母不会因额外重放的错误而变化。
     metrics = {metric.metric_id: metric for metric in report.metrics}
-    assert metrics["execution_errors"].denominator == 32
-    assert metrics["replay_consistency"].denominator == 32
-    assert metrics["target_detection"].denominator == 9
+    assert metrics["execution_errors"].denominator == MATRIX_COUNT == 56
+    assert metrics["replay_consistency"].denominator == MATRIX_COUNT
+    assert metrics["target_detection"].denominator == 13
     return report, path.parent
 
 
-@pytest.mark.parametrize("call", [1, 33], ids=["same-profile", "negative"])
+@pytest.mark.parametrize("call", [1, NEGATIVE_REPLAY_CALL], ids=["same-profile", "negative"])
 @pytest.mark.parametrize("fault", ["503", "timeout"])
 def test_replay_execution_error_exits_2_and_preserves_evidence(
     tmp_path: Path,
@@ -69,7 +73,7 @@ def test_replay_execution_error_exits_2_and_preserves_evidence(
     assert report.summary.status == "execution_error"
     assert report.summary.execution_errors == 0
     assert report.summary.replay_execution_errors == int(call == 1)
-    assert report.summary.negative_execution_errors == int(call == 33)
+    assert report.summary.negative_execution_errors == int(call == NEGATIVE_REPLAY_CALL)
     assert all(item.case_status != "error" for item in report.combinations)
     negative = report.negative_validation
     assert negative is not None
@@ -101,7 +105,7 @@ def test_replay_execution_error_exits_2_and_preserves_evidence(
     assert "退出码 2" in output
 
 
-@pytest.mark.parametrize("error_call", [1, 33], ids=["same-profile", "negative"])
+@pytest.mark.parametrize("error_call", [1, NEGATIVE_REPLAY_CALL], ids=["same-profile", "negative"])
 def test_replay_error_dominates_a_real_mismatch(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -116,7 +120,9 @@ def test_replay_error_dominates_a_real_mismatch(
     assert report.summary.status == "execution_error"
 
 
-@pytest.mark.parametrize("call", [3, 33], ids=["same-profile-mismatch", "negative-match"])
+@pytest.mark.parametrize(
+    "call", [3, NEGATIVE_REPLAY_CALL], ids=["same-profile-mismatch", "negative-match"]
+)
 def test_comparison_deviation_without_execution_error_still_exits_1(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
