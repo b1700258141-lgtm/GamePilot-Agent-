@@ -46,6 +46,7 @@ def _lab_session(profile_id: str, seed: int, recorder: TriggerRecorder) -> LabCo
         seed=resolved_seed,
         profile=resolve_profile(profile_id),
         recorder=recorder,
+        ruleset="v5",
     )
 
 
@@ -55,28 +56,29 @@ def _lab_session(profile_id: str, seed: int, recorder: TriggerRecorder) -> LabCo
 def test_potion_overheal_really_raises_hp_above_max() -> None:
     recorder = TriggerRecorder()
     session = _lab_session(FAULT_POTION_OVERHEAL, 42, recorder)
-    session.attack()  # seed 42：反击 20，玩家生命 80
+    session.attack()  # v5 seed 42：反击 12，玩家生命 88
 
     session.use_potion()
 
-    # 缺失 20 却治疗 25：喝药事件里的生命值真的越过了上限。
-    assert _trace(session)[2] == (2, "player", "potion", POTION_HEAL, 105, 41, 1)
-    # 后续反击从越界后的 105 继续扣，说明状态是真的被改了。
+    # 缺失 12 却治疗 25：喝药事件里的生命值真的越过了上限。
+    assert _trace(session)[2] == (2, "player", "potion", POTION_HEAL, 113, 41, 2)
+    # 后续反击从越界后的 113 继续扣，说明状态是真的被改了。
     snapshot = session.snapshot()
-    assert snapshot.player.hp == 105 - 28
-    assert snapshot.player.hp > PLAYER_MAX_HP - 28
+    assert snapshot.player.hp == 113 - 17
+    assert snapshot.player.hp > PLAYER_MAX_HP - 17
 
 
 def test_potion_overheal_records_only_a_real_deviation() -> None:
     """缺失生命值等于治疗量时缺陷值与正常值相同，不算偏离，也不记录。"""
     recorder = TriggerRecorder()
-    session = _lab_session(FAULT_POTION_OVERHEAL, 24, recorder)
-    session.attack()  # seed 24：反击 25，玩家生命 75（缺失正好 25）
+    session = _lab_session(FAULT_POTION_OVERHEAL, 42, recorder)
+    session.attack()
+    session.attack()  # v5 seed 42：两次反击合计 25，缺失正好 25
 
     session.use_potion()
 
-    assert _trace(session)[2] == (2, "player", "potion", POTION_HEAL, 100, 36, 1)
-    assert session.snapshot().player.hp == 74  # 与 normal 完全一致
+    assert _trace(session)[4] == (3, "player", "potion", POTION_HEAL, 100, 19, 2)
+    assert session.snapshot().player.hp == 87  # 与 normal 完全一致
     assert recorder.get(session.session_id) is None
     assert len(recorder) == 0
 
@@ -91,7 +93,7 @@ def test_potion_overheal_records_trigger_when_missing_hp_is_smaller() -> None:
     trigger = recorder.get(session.session_id)
     assert trigger is not None
     assert trigger.fault_id == FAULT_POTION_OVERHEAL
-    assert "20" in trigger.detail and str(POTION_HEAL) in trigger.detail
+    assert "12" in trigger.detail and str(POTION_HEAL) in trigger.detail
 
 
 def test_potion_overheal_does_not_touch_potions_or_retaliation() -> None:
@@ -102,7 +104,7 @@ def test_potion_overheal_does_not_touch_potions_or_retaliation() -> None:
     session.use_potion()
 
     snapshot = session.snapshot()
-    assert snapshot.player.potions == 1
+    assert snapshot.player.potions == 2
     assert [event.kind for event in snapshot.events] == [
         "attack",
         "retaliate",
@@ -122,10 +124,10 @@ def test_potion_not_consumed_keeps_the_potion_count() -> None:
     session.use_potion()
 
     # 治疗本身仍然正确（喝药事件里补到 100），只是药水数量没有减少。
-    assert _trace(session)[2] == (2, "player", "potion", 20, 100, 41, 2)
+    assert _trace(session)[2] == (2, "player", "potion", 25, 100, 41, 3)
     snapshot = session.snapshot()
-    assert snapshot.player.potions == 2
-    assert snapshot.player.hp == 100 - 28  # 反击照常发生
+    assert snapshot.player.potions == 3
+    assert snapshot.player.hp == 100 - 17  # 反击照常发生
     trigger = recorder.get(session.session_id)
     assert trigger is not None
     assert trigger.fault_id == FAULT_POTION_NOT_CONSUMED
@@ -137,12 +139,12 @@ def test_potion_not_consumed_still_allows_repeated_use() -> None:
     session = _lab_session(FAULT_POTION_NOT_CONSUMED, 42, recorder)
     session.attack()
 
-    session.use_potion()  # 生命 100、药水仍为 2，随后反击 28 -> 72
-    session.use_potion()  # 生命 97，随后反击 27 -> 70
+    session.use_potion()  # 生命 100、药水仍为 3，随后反击 17 -> 83
+    session.use_potion()  # 生命再次补满，随后反击 14 -> 86
 
     snapshot = session.snapshot()
-    assert snapshot.player.hp == 70
-    assert snapshot.player.potions == 2
+    assert snapshot.player.hp == 86
+    assert snapshot.player.potions == 3
     assert [event.kind for event in snapshot.events].count("potion") == 2
     # 两次偏离只留下一条触发记录：记录条数不等于发现次数。
     assert len(recorder) == 1
@@ -159,11 +161,20 @@ def test_retaliate_after_death_deals_real_damage_after_the_kill() -> None:
         session.attack()
 
     events = _trace(session)
-    assert events[-1] == (3, "slime", "retaliate", 24, 29, 0, None)
+    assert next(event for event in events if event[0] == 3 and event[2] == "retaliate") == (
+        3,
+        "slime",
+        "retaliate",
+        13,
+        62,
+        0,
+        None,
+    )
+    assert [event[2] for event in events[-2:]] == ["drop", "drop"]
     snapshot = session.snapshot()
     # 敌人已经死亡，却仍然造成了真实伤害；胜负状态保持 won（玩家没有被打死）。
     assert snapshot.slime.hp == 0
-    assert snapshot.player.hp == 53 - 24
+    assert snapshot.player.hp == 75 - 13
     assert snapshot.status.value == "won"
     trigger = recorder.get(session.session_id)
     assert trigger is not None
@@ -184,7 +195,7 @@ def test_retaliate_after_death_keeps_other_trajectories_unchanged() -> None:
     """除致死回合外，变体的轨迹必须与 normal 逐字段一致。"""
     recorder = TriggerRecorder()
     faulted = _lab_session(FAULT_RETALIATE_AFTER_DEATH, 42, recorder)
-    normal = CombatSession(session_id="normal", seed=42)
+    normal = CombatSession(session_id="normal", seed=42, ruleset="v5")
 
     faulted.attack()
     faulted.attack()
@@ -200,7 +211,7 @@ def test_retaliate_after_death_keeps_other_trajectories_unchanged() -> None:
 def test_normal_profile_session_matches_plain_combat_session() -> None:
     recorder = TriggerRecorder()
     lab = _lab_session(PROFILE_NORMAL, 42, recorder)
-    plain = CombatSession(session_id="plain", seed=42)
+    plain = CombatSession(session_id="plain", seed=42, ruleset="v5")
 
     for session in (lab, plain):
         session.attack()

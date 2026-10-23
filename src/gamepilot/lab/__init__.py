@@ -16,6 +16,7 @@
 from .app import LAB_API_TITLE, create_lab_app, lab_profile_of
 from .profiles import (
     FAULT_IDS,
+    FAULT_LEVEL_ANOMALY,
     FAULT_LOOT_ANOMALY,
     FAULT_POTION_NOT_CONSUMED,
     FAULT_POTION_OVERHEAL,
@@ -33,6 +34,7 @@ from .session import LabCombatSession, make_session_factory
 
 __all__ = [
     "FAULT_IDS",
+    "FAULT_LEVEL_ANOMALY",
     "FAULT_LOOT_ANOMALY",
     "FAULT_POTION_NOT_CONSUMED",
     "FAULT_POTION_OVERHEAL",

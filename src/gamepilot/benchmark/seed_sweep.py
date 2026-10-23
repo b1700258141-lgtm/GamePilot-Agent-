@@ -13,7 +13,6 @@ from gamepilot.lab import (
     FAULT_POTION_OVERHEAL,
     FAULT_RETALIATE_AFTER_DEATH,
     PROFILE_NORMAL,
-    PROFILES,
     TriggerRecorder,
     create_lab_app,
 )
@@ -45,6 +44,7 @@ TARGET_RULES = {
     FAULT_POTION_NOT_CONSUMED: R_POTION_DECREMENTS,
     FAULT_RETALIATE_AFTER_DEATH: R_NO_RETALIATE_ON_KILL,
 }
+SWEEP_PROFILES = (PROFILE_NORMAL, *TARGET_RULES)
 SUITE = "seed-sweep-v1"
 BASE_URL = "http://seed-sweep.invalid"
 
@@ -157,7 +157,7 @@ async def run_seed_sweep(output_dir: str | Path) -> tuple[SweepReport, Path]:
     replays: dict[str, str] = {}
     digests: dict[str, str] = {}
 
-    for profile in PROFILES:
+    for profile in SWEEP_PROFILES:
         recorder = TriggerRecorder()
         app = create_lab_app(profile, recorder=recorder)
         async with httpx.AsyncClient(
@@ -188,11 +188,12 @@ async def run_seed_sweep(output_dir: str | Path) -> tuple[SweepReport, Path]:
                 )
 
     triggers = {
-        profile: sum(c.profile == profile and c.triggered for c in cells) for profile in PROFILES
+        profile: sum(c.profile == profile and c.triggered for c in cells)
+        for profile in SWEEP_PROFILES
     }
     detections = {
         profile: sum(c.profile == profile and c.triggered and c.target_hit for c in cells)
-        for profile in PROFILES
+        for profile in SWEEP_PROFILES
     }
     run_errors = sum(c.case_status == "error" for c in cells)
     replay_errors = sum(
@@ -210,8 +211,8 @@ async def run_seed_sweep(output_dir: str | Path) -> tuple[SweepReport, Path]:
         rules_version=RULES_VERSION,
         seeds=list(SEEDS),
         traces=list(TRACE_ACTIONS),
-        profiles=list(PROFILES),
-        planned=len(PROFILES) * len(scenarios),
+        profiles=list(SWEEP_PROFILES),
+        planned=len(SWEEP_PROFILES) * len(scenarios),
         executed=len(cells),
         run_errors=run_errors,
         replay_errors=replay_errors,

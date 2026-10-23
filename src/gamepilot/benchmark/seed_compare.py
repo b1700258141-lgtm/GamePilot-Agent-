@@ -6,7 +6,6 @@ from pathlib import Path
 
 from pydantic import BaseModel, ConfigDict, ValidationError
 
-from gamepilot.lab import PROFILES
 from gamepilot.testing.models import CaseReport
 from gamepilot.testing.replay import (
     ReplayInputError,
@@ -23,6 +22,7 @@ from .seed_sweep import (
     SEED_SWEEP_VERSION,
     SEEDS,
     SUITE,
+    SWEEP_PROFILES,
     TARGET_RULES,
     TRACE_ACTIONS,
     SweepReport,
@@ -88,13 +88,13 @@ def _counts(report: SweepReport) -> dict[str, object]:
     cells = report.cells
     triggers = {
         profile: sum(cell.profile == profile and cell.triggered for cell in cells)
-        for profile in PROFILES
+        for profile in SWEEP_PROFILES
     }
     detections = {
         profile: sum(
             cell.profile == profile and cell.triggered and cell.target_hit for cell in cells
         )
-        for profile in PROFILES
+        for profile in SWEEP_PROFILES
     }
     run_errors = sum(cell.case_status == "error" for cell in cells)
     replay_errors = sum(
@@ -103,7 +103,7 @@ def _counts(report: SweepReport) -> dict[str, object]:
     deviations = sum(cell.verdict == "deviation" for cell in cells)
     missing = any(triggers[profile] == 0 for profile in TARGET_RULES)
     return {
-        "planned": len(PROFILES) * len(_scenarios()),
+        "planned": len(SWEEP_PROFILES) * len(_scenarios()),
         "executed": len(cells),
         "run_errors": run_errors,
         "replay_errors": replay_errors,
@@ -130,7 +130,7 @@ def load_sweep(path: str | Path) -> tuple[SweepReport, dict[tuple[str, str], Cas
         or report.rules_version != RULES_VERSION
         or report.seeds != list(SEEDS)
         or report.traces != list(TRACE_ACTIONS)
-        or report.profiles != list(PROFILES)
+        or report.profiles != list(SWEEP_PROFILES)
         or report.run_id != summary_path.parent.name
     ):
         raise SweepInputError("跨种子摘要版本或固定清单不一致，请用当前版本重新生成")
@@ -138,18 +138,22 @@ def load_sweep(path: str | Path) -> tuple[SweepReport, dict[tuple[str, str], Cas
     if any(getattr(report, key) != value for key, value in expected.items()):
         raise SweepInputError("跨种子摘要计数与逐格结论不一致")
     scenarios = _scenarios()
-    expected_keys = [(profile, scenario.case_id) for profile in PROFILES for scenario in scenarios]
+    expected_keys = [
+        (profile, scenario.case_id) for profile in SWEEP_PROFILES for scenario in scenarios
+    ]
     if [(cell.profile, cell.case_id) for cell in report.cells] != expected_keys:
         raise SweepInputError("跨种子摘要逐格顺序或标识不符合固定清单")
-    if set(report.run_reports) != set(PROFILES) or set(report.replay_reports) != set(PROFILES):
+    if set(report.run_reports) != set(SWEEP_PROFILES) or set(report.replay_reports) != set(
+        SWEEP_PROFILES
+    ):
         raise SweepInputError("跨种子摘要缺少 profile 报告引用")
     references = set(report.run_reports.values()) | set(report.replay_reports.values())
-    if len(references) != 2 * len(PROFILES) or set(report.report_sha256) != references:
+    if len(references) != 2 * len(SWEEP_PROFILES) or set(report.report_sha256) != references:
         raise SweepInputError("跨种子报告引用或指纹集合不完整")
 
     root = summary_path.parent
     cases: dict[tuple[str, str], CaseReport] = {}
-    for profile in PROFILES:
+    for profile in SWEEP_PROFILES:
         run_path = _reference(root, report.run_reports[profile])
         replay_path = _reference(root, report.replay_reports[profile])
         for reference, file in (
@@ -177,7 +181,7 @@ def load_sweep(path: str | Path) -> tuple[SweepReport, dict[tuple[str, str], Cas
             or len(replay.cases) != len(scenarios)
         ):
             raise SweepInputError("跨种子运行与重放报告身份或数量不一致")
-        offset = PROFILES.index(profile) * len(scenarios)
+        offset = SWEEP_PROFILES.index(profile) * len(scenarios)
         for index, (scenario, case, replayed) in enumerate(
             zip(scenarios, run.cases, replay.cases, strict=True)
         ):
@@ -257,7 +261,7 @@ def compare_sweeps(
         after_sha256=after_digest,
         before_run_id=before.run_id,
         after_run_id=after.run_id,
-        planned=len(PROFILES) * len(_scenarios()),
+        planned=len(SWEEP_PROFILES) * len(_scenarios()),
         compared=len(before.cells),
         drift_count=len(differences),
         source_exit_codes=source_codes,

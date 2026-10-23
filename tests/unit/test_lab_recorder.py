@@ -17,18 +17,22 @@ def test_record_then_get_returns_the_trigger() -> None:
     )
 
 
-def test_first_record_wins_within_a_session() -> None:
-    """同一会话的多次偏离只作为一条证据，避免「记录条数」被当成发现次数。"""
+def test_first_record_wins_for_each_fault_within_a_session() -> None:
+    """同一缺陷只保留首个触发，多缺陷会话则分别保留证据。"""
     recorder = TriggerRecorder()
 
     recorder.record("session-a", "fault-x", "第一次")
     recorder.record("session-a", "fault-x", "第二次")
     recorder.record("session-a", "fault-y", "另一个缺陷")
 
-    assert len(recorder) == 1
+    assert len(recorder) == 2
     trigger = recorder.get("session-a")
     assert trigger is not None
     assert trigger.detail == "第一次"
+    assert [(item.fault_id, item.detail) for item in recorder.for_session("session-a")] == [
+        ("fault-x", "第一次"),
+        ("fault-y", "另一个缺陷"),
+    ]
 
 
 def test_get_returns_none_for_unknown_or_missing_session() -> None:

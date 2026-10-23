@@ -141,7 +141,9 @@ def test_upgrade_preserves_legacy_seed_values(temp_database: str) -> None:
         assert _seed_column_type(engine) == "bigint"
 
         _assert_alembic_ok(
-            _run_alembic(temp_database, "upgrade", "head"), temp_database, "upgrade head"
+            _run_alembic(temp_database, "upgrade", REVISION_0002),
+            temp_database,
+            "upgrade 0002",
         )
 
         assert _seed_column_type(engine) == "text"
@@ -154,7 +156,7 @@ def test_upgrade_preserves_legacy_seed_values(temp_database: str) -> None:
 def test_downgrade_to_bigint_succeeds_for_in_range_seeds(temp_database: str) -> None:
     """全部取值都在 BIGINT 范围内时，降级成功且数值不变。"""
     _assert_alembic_ok(
-        _run_alembic(temp_database, "upgrade", "head"), temp_database, "upgrade head"
+        _run_alembic(temp_database, "upgrade", REVISION_0002), temp_database, "upgrade 0002"
     )
     in_range = {"range-min": BIGINT_MIN, "range-zero": 0, "range-max": BIGINT_MAX}
 
@@ -177,7 +179,7 @@ def test_downgrade_to_bigint_succeeds_for_in_range_seeds(temp_database: str) -> 
 def test_downgrade_fails_and_preserves_data_for_out_of_range_seed(temp_database: str) -> None:
     """存在 BIGINT 放不下的种子时，降级必须失败且不破坏任何数据与版本。"""
     _assert_alembic_ok(
-        _run_alembic(temp_database, "upgrade", "head"), temp_database, "upgrade head"
+        _run_alembic(temp_database, "upgrade", REVISION_0002), temp_database, "upgrade 0002"
     )
     huge_seed = 2**80
     survivor = "out-of-range-seed"

@@ -17,6 +17,7 @@ from fastapi import FastAPI
 
 from gamepilot.domain.combat import PLAYER_MAX_HP
 from gamepilot.lab import (
+    FAULT_LOOT_ANOMALY,
     FAULT_POTION_NOT_CONSUMED,
     FAULT_POTION_OVERHEAL,
     FAULT_RETALIATE_AFTER_DEATH,
@@ -30,7 +31,12 @@ from gamepilot.lab import (
 from gamepilot.main import create_app
 from gamepilot.repositories.memory import InMemorySessionRepository
 from gamepilot.testing.client import GameClient
-from gamepilot.testing.rules import R_NO_RETALIATE_ON_KILL, R_POTION_CAP, R_POTION_DECREMENTS
+from gamepilot.testing.rules import (
+    R_LOOT_PRESENT,
+    R_NO_RETALIATE_ON_KILL,
+    R_POTION_CAP,
+    R_POTION_DECREMENTS,
+)
 from gamepilot.testing.runner import run_case
 from gamepilot.testing.scenarios import BASELINE_SCENARIOS, SUITE_BASELINE, get_suite
 
@@ -42,11 +48,13 @@ FAULT_TARGET_RULES = {
     FAULT_POTION_OVERHEAL: R_POTION_CAP,
     FAULT_POTION_NOT_CONSUMED: R_POTION_DECREMENTS,
     FAULT_RETALIATE_AFTER_DEATH: R_NO_RETALIATE_ON_KILL,
+    FAULT_LOOT_ANOMALY: R_LOOT_PRESENT,
 }
 FAULT_CASES = {
     FAULT_POTION_OVERHEAL: "attack-then-potion",
     FAULT_POTION_NOT_CONSUMED: "attack-then-potion",
     FAULT_RETALIATE_AFTER_DEATH: "win-then-rejected",
+    FAULT_LOOT_ANOMALY: "win-then-rejected",
 }
 
 
@@ -187,14 +195,14 @@ async def test_sessions_are_not_shared_between_lab_apps(lab_app: LabHarness) -> 
 
 
 @pytest.mark.anyio
-async def test_all_profiles_run_in_one_process_without_crosstalk() -> None:
-    """四个应用同进程并存：各自只记录自己的会话，normal 不记录任何触发。"""
+async def test_baseline_fault_profiles_run_in_one_process_without_crosstalk() -> None:
+    """基线可触发的四种缺陷同进程并存，各自只记录自己的会话。"""
     recorders = {profile: TriggerRecorder() for profile in PROFILES}
     async with httpx.AsyncClient(
         transport=httpx.ASGITransport(app=_lab_app(PROFILE_NORMAL, recorders[PROFILE_NORMAL])),
         base_url=BASE_URL,
     ) as http:
-        for profile in PROFILES[1:]:
+        for profile in FAULT_CASES:
             recorder = recorders[profile]
             app = _lab_app(profile, recorder)
             async with httpx.AsyncClient(
@@ -275,7 +283,10 @@ def test_normal_service_app_has_no_lab_state() -> None:
 async def test_game_api_exposes_no_profile_switch(lab_app: LabHarness) -> None:
     """游戏 API 上没有读取或切换 profile 的入口，参数与响应里都没有它。"""
     schema = lab_app.app.openapi()
-    operations = json.dumps(schema, ensure_ascii=False)
+    game_paths = {
+        path: routes for path, routes in schema["paths"].items() if path.startswith(CREATE_PATH)
+    }
+    operations = json.dumps(game_paths, ensure_ascii=False)
 
     assert "/api/v1/game-sessions" in schema["paths"]
     assert "profile" not in operations
@@ -288,7 +299,14 @@ async def test_game_api_exposes_no_profile_switch(lab_app: LabHarness) -> None:
         document = await http.get("/openapi.json")
 
     assert document.status_code == 200
-    assert "profile" not in json.dumps(document.json(), ensure_ascii=False)
+    assert "profile" not in json.dumps(
+        {
+            path: routes
+            for path, routes in document.json()["paths"].items()
+            if path.startswith(CREATE_PATH)
+        },
+        ensure_ascii=False,
+    )
 
 
 @pytest.mark.anyio
@@ -300,15 +318,16 @@ async def test_profile_cannot_be_selected_through_the_request_body() -> None:
         created = await _create(http, {"seed": 42, "profile": PROFILE_NORMAL, "fault_id": "none"})
         assert created.status_code == CREATED
         session_id = created.json()["session_id"]
-        await http.post(f"{CREATE_PATH}/{session_id}/actions", json={"action": "attack"})
+        attacked = await http.post(f"{CREATE_PATH}/{session_id}/actions", json={"action": "attack"})
         acted = await http.post(
             f"{CREATE_PATH}/{session_id}/actions", json={"action": "use_potion"}
         )
 
-    # 缺陷仍然生效：缺失 20 点却治疗 25 点，生命越过上限。
+    # 缺陷仍然生效：实际损血不足 25 点，却仍治疗 25 点，生命越过上限。
     potion_event = [event for event in acted.json()["events"] if event["kind"] == "potion"][-1]
     assert potion_event["value"] == 25
-    assert potion_event["player_hp"] == PLAYER_MAX_HP + 5
+    assert potion_event["player_hp"] == attacked.json()["player"]["hp"] + 25
+    assert potion_event["player_hp"] > PLAYER_MAX_HP
     assert recorder.get(session_id) is not None
 
 

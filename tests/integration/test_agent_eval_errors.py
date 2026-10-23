@@ -7,7 +7,7 @@ from fastapi.responses import JSONResponse
 
 pytest.importorskip("langgraph", reason='未安装 agent extra：pip install -e ".[dev,agent]"')
 
-from gamepilot.agent.models import AgentRunReport, BudgetSpec, TokenUsage
+from gamepilot.agent.models import AGENT_SCHEMA_VERSION, AgentRunReport, BudgetSpec, TokenUsage
 from gamepilot.agent.provider import FakeProvider, ModelReply, ScriptedProvider
 from gamepilot.benchmark import agent_eval
 from gamepilot.benchmark.agent_eval import EXIT_DEVIATION, EXIT_EXECUTION_ERROR, run_agent_eval
@@ -73,21 +73,21 @@ async def test_fail_fast_stops_paid_cells_but_keeps_auditable_fixed_denominators
 
     summary = report.summary
     assert len(factory_calls) == 1, "首格执行错误后不得再创建后续付费供应商调用"
-    assert (summary.cells_planned, summary.cells_executed, summary.cells_skipped) == (12, 1, 11)
+    assert (summary.cells_planned, summary.cells_executed, summary.cells_skipped) == (21, 1, 20)
     assert summary.aborted_early is True
     assert summary.abort_after_cell == "normal × full-health"
     assert "rate_limit" in (summary.abort_reason or "")
-    assert summary.goals_incomplete == 12
-    assert summary.usage_unknown_cells == 12
-    assert summary.replay_not_executed >= 11
+    assert summary.goals_incomplete == 21
+    assert summary.usage_unknown_cells == 21
+    assert summary.replay_not_executed >= 20
     assert (summary.status, summary.exit_code) == ("execution_error", EXIT_EXECUTION_ERROR)
 
     metrics = {metric.metric_id: metric for metric in report.metrics}
     assert metrics["normal_false_positive"].denominator == 3
-    assert metrics["variant_untriggered_false_positive"].denominator == 6
-    assert metrics["execution_errors"].denominator == 12
-    assert metrics["replay_mismatch"].denominator == 12
-    assert metrics["goal_coverage"].denominator == 12
+    assert metrics["variant_untriggered_false_positive"].denominator == 14
+    assert metrics["execution_errors"].denominator == 21
+    assert metrics["replay_mismatch"].denominator == 21
+    assert metrics["goal_coverage"].denominator == 21
     assert AgentRunReport.model_validate_json(
         (summary_path.parent / report.cells[0].agent_report_path).read_text(encoding="utf-8")
     )
@@ -142,7 +142,7 @@ async def test_eighth_cell_format_exhaustion_preserves_usage_and_stops_matrix(
     )
     summary = report.summary
     assert len(factory_calls) == 8
-    assert (summary.cells_planned, summary.cells_executed, summary.cells_skipped) == (12, 8, 4)
+    assert (summary.cells_planned, summary.cells_executed, summary.cells_skipped) == (21, 8, 13)
     assert summary.exit_code == EXIT_EXECUTION_ERROR
     assert summary.abort_after_cell == "potion_not_consumed × healing"
     assert "agent" in summary.abort_reason
@@ -153,7 +153,7 @@ async def test_eighth_cell_format_exhaustion_preserves_usage_and_stops_matrix(
     saved = AgentRunReport.model_validate_json(
         (path.parent / cell.agent_report_path).read_text(encoding="utf-8")
     )
-    assert saved.schema_version == "1.3"
+    assert saved.schema_version == AGENT_SCHEMA_VERSION
     assert saved.summary.stop_reason == "model_format_error"
     assert saved.summary.stop_detail in summary.abort_reason
     assert saved.summary.exit_code == EXIT_EXECUTION_ERROR

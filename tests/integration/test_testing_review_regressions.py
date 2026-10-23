@@ -11,11 +11,18 @@ from gamepilot.repositories.memory import InMemorySessionRepository
 from gamepilot.testing.client import GameClient
 from gamepilot.testing.models import ActionStep, ControlSpec, Scenario
 from gamepilot.testing.replay import ReplayInputError, compare_case, load_report, replay_report
+from gamepilot.testing.rules import MAX_ACTION_ATTEMPTS
 from gamepilot.testing.runner import ReportWriteError, run_suite, write_report
 from gamepilot.testing.scenarios import BASELINE_SCENARIOS
 
 BASE = "http://testserver"
 SCENARIOS = {case.case_id: case for case in BASELINE_SCENARIOS}
+REJECTED_FIRST = Scenario(
+    case_id="next-battle-before-win",
+    description="战斗仍在进行时，进入下一场被拒绝",
+    seed=42,
+    steps=[ActionStep(action="next_battle", expected_status=409, expected_code="battle_not_won")],
+)
 
 
 class MutatingTransport(httpx.AsyncBaseTransport):
@@ -72,7 +79,7 @@ async def test_all_event_state_links_are_checked(mutation, rule):
                 body["events"][0]["player_hp"] = 101
         if n == 4:
             if mutation == "potion_not_saved":
-                body["player"]["potions"] = 2
+                body["player"]["potions"] = 3
             elif mutation == "potion_hurts_enemy":
                 body["slime"]["hp"] = 1
                 for event in body["events"][-2:]:
@@ -107,7 +114,7 @@ async def test_same_session_http_contracts(request_number, mutation, rule, tmp_p
                 body["seed"] = 999
         return status, body
 
-    report, _ = await record(SCENARIOS["potion-at-full-hp-rejected"], mutate)
+    report, _ = await record(REJECTED_FIRST, mutate)
     case = report.cases[0]
     assert case.status == "fail"
     assert case.failure.rule_id == rule
@@ -132,7 +139,7 @@ async def test_errors_preserve_steps_and_get_observations(number, failure, tmp_p
             return (503 if failure == "server" else 200), {"broken": True}
         return status, body
 
-    report, _ = await record(SCENARIOS["potion-at-full-hp-rejected"], mutate)
+    report, _ = await record(REJECTED_FIRST, mutate)
     # 第三次请求原预期 409，构造 200 会成为接口 fail，因此另用正常攻击测试解析错误。
     if number == 3:
         report, _ = await record(SCENARIOS["attack-then-potion"], mutate)
@@ -161,7 +168,7 @@ async def test_replay_sends_only_recorded_prefix(failure, rejected_first, tmp_pa
     steps = [ActionStep(action="attack"), ActionStep(action="attack")]
     if rejected_first:
         steps.insert(
-            0, ActionStep(action="use_potion", expected_status=409, expected_code="player_full_hp")
+            0, ActionStep(action="next_battle", expected_status=409, expected_code="battle_not_won")
         )
     scenario = Scenario(
         case_id="prefix",
@@ -285,7 +292,10 @@ async def test_report_validation_rejects_each_corruption(mutation, reason, tmp_p
     elif mutation == "wrong_path":
         case["steps"][0]["observation"]["path"] = "/api/v1/game-sessions/" + "f" * 32 + "/actions"
     elif mutation == "control_limit":
-        case["scenario"]["control"] = {"description": "oversized", "actions": ["attack"] * 21}
+        case["scenario"]["control"] = {
+            "description": "oversized",
+            "actions": ["attack"] * (MAX_ACTION_ATTEMPTS + 1),
+        }
     path = tmp_path / "candidate.json"
     path.write_text(json.dumps(raw), encoding="utf-8")
     with pytest.raises(ReplayInputError, match=reason):

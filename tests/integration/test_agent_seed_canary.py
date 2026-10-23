@@ -16,7 +16,7 @@ def test_offline_canary_keeps_paired_evidence(tmp_path: Path) -> None:
     report, summary = asyncio.run(canary.run_agent_seed_canary(tmp_path))
     assert report.exit_code == 0 and report.status == "ok"
     assert report.seed == 2 and report.reachability.reachable
-    assert report.reachability.witness_actions == ["attack"] * 4
+    assert report.reachability.witness_actions == ["attack", "attack", "power_strike"]
     assert report.completion_token_upper_bound == 3072
     assert report.provider["is_test_double"] is True
     evidence = report.evidence

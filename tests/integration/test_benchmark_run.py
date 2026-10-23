@@ -1,8 +1,8 @@
-"""评测端到端：真实跑完 32 个组合、同 profile 重跑、负向验证与退出码。
+"""评测端到端：真实跑完 56 个组合、同 profile 重跑、负向验证与退出码。
 
-这里不替换任何执行路径：四个靶场应用是真实 ASGI 应用，请求经由真实路由
+这里不替换任何执行路径：七个靶场应用是真实 ASGI 应用，请求经由真实路由
 与真实仓储，判定走的是与线上同一套 oracle。因此「评测通过」这一结论
-连同它的分母一起被验证：32 个组合、33 次重跑、7 项指标，一个都不能少。
+连同它的分母一起被验证：56 个组合、57 次重跑、7 项指标，一个都不能少。
 
 退出码同样是对外行为：0 只在全部符合清单时出现；
 报告写不进去或跑不出结论时必须返回 2，不能因为「缺陷被检出」就报成功。
@@ -45,11 +45,11 @@ from gamepilot.testing.runner import ReportWriteError, current_environment
 RUN_COUNT = len(COMBINATIONS)
 FAILING_COUNT = sum(1 for row in COMBINATIONS if row.expect_fail)
 EXPECTED_METRICS = [
-    ("defect_coverage", 3, 3),
-    ("trigger_accuracy", 9, 9),
-    ("target_detection", 9, 9),
+    ("defect_coverage", 4, 4),
+    ("trigger_accuracy", 13, 13),
+    ("target_detection", 13, 13),
     ("normal_false_positive", 0, 8),
-    ("variant_false_positive", 0, 15),
+    ("variant_false_positive", 0, 35),
     ("execution_errors", 0, RUN_COUNT),
     ("replay_consistency", RUN_COUNT, RUN_COUNT),
 ]
@@ -59,7 +59,7 @@ EXPECTED_METRICS = [
 def benchmark_run(tmp_path_factory: pytest.TempPathFactory) -> tuple[BenchmarkReport, Path]:
     """真实跑一次完整评测，报告与目录供本模块的多个用例核对。
 
-    这是进程内的真实运行（四个隔离应用 + 真实 HTTP 路由），
+    这是进程内的真实运行（七个隔离应用 + 真实 HTTP 路由），
     只是不经过命令行入口；入口本身由下面的 CLI 用例单独验证。
     """
     output_dir = tmp_path_factory.mktemp("benchmarks")
@@ -142,7 +142,7 @@ def test_each_expected_failure_hits_its_target_rules(
 def test_same_profile_replays_all_match(
     benchmark_run: tuple[BenchmarkReport, Path],
 ) -> None:
-    """32 个组合各自同 profile 重跑一次，全部逐字段一致。"""
+    """56 个组合各自同 profile 重跑一次，全部逐字段一致。"""
     report, _ = benchmark_run
 
     assert len(report.combinations) == RUN_COUNT
@@ -191,7 +191,7 @@ def test_negative_validation_replays_a_defect_trace_on_normal(
 def test_negative_validation_is_not_counted_in_the_matrix(
     benchmark_run: tuple[BenchmarkReport, Path],
 ) -> None:
-    """负向验证是第 33 次重跑，不属于 32 个组合中的任何一个。"""
+    """负向验证是第 57 次重跑，不属于 56 个组合中的任何一个。"""
     report, root = benchmark_run
     negative = report.negative_validation
     assert negative is not None
@@ -284,7 +284,7 @@ def test_cli_run_exits_0_and_prints_the_manifest_result(
     assert code == EXIT_OK
     assert f"符合清单 {RUN_COUNT}，偏差 0，原始运行执行错误 0" in output
     assert "逐组合结果（T=真实触发，U=意外触发，!=不符清单）：" in output
-    assert "负向验证（不计入 32 次重跑）：通过" in output
+    assert "负向验证（不计入固定矩阵重跑）：通过" in output
     assert f"退出码 {EXIT_OK}" in output
 
     root = next(item for item in tmp_path.iterdir() if item.is_dir())

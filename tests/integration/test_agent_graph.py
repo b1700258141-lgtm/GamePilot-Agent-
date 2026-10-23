@@ -151,7 +151,7 @@ def full_health_policy(messages: Sequence[ChatMessage], step: int) -> ModelReply
     _, hp, max_hp, potions = observed
     if hp >= max_hp and potions > 0 and count_actions(messages, "use_potion") == 0:
         return action_call("use_potion", step)
-    return finish_call(step, "已确认满血喝药被拒绝且状态未变。")
+    return finish_call(step, "已确认满血喝药成功、消耗一瓶并接受反击。")
 
 
 def healing_policy(messages: Sequence[ChatMessage], step: int) -> ModelReply:
@@ -295,7 +295,7 @@ async def test_initial_input_carries_the_real_snapshot_and_the_action_is_execute
 
     assert responder.calls == report.summary.model_calls == 1
     first = observations_in(responder.seen[0])
-    assert first and first[-1][1:] == (100, 100, 2), "第一轮输入必须带上真实初始快照"
+    assert first and first[-1][1:] == (100, 100, 3), "第一轮输入必须带上真实初始快照"
 
     assert report.summary.stop_reason == "goal_met"
     assert report.summary.exit_code == EXIT_OK
@@ -307,10 +307,10 @@ async def test_initial_input_carries_the_real_snapshot_and_the_action_is_execute
     assert [(record.tool, record.action) for record in accepted] == [
         (TOOL_PERFORM_ACTION, "use_potion")
     ]
-    # 游戏侧证据：真的一次 409，且由 GET 证明状态未变。
+    # 游戏侧证据：满血喝药成功，药水消耗与反击均被记录。
     steps = context.execution.steps
     assert [(step.action, step.observed_status, step.observed_code) for step in steps] == [
-        ("use_potion", 409, "player_full_hp")
+        ("use_potion", 200, None)
     ]
     assert server.action_requests == 1
 
@@ -341,7 +341,7 @@ async def test_next_choice_follows_the_observed_hp_and_input_is_updated(
         observed = latest_observation(seen)
         assert observed is not None
         if index == 0:
-            assert observed[1:] == (100, 100, 2)
+            assert observed[1:] == (100, 100, 3)
         else:
             after = steps[index - 1].after
             assert after is not None

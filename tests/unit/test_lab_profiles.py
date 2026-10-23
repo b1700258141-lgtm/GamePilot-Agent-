@@ -4,9 +4,12 @@ import pytest
 
 from gamepilot.lab import (
     FAULT_IDS,
+    FAULT_LEVEL_ANOMALY,
+    FAULT_LOOT_ANOMALY,
     FAULT_POTION_NOT_CONSUMED,
     FAULT_POTION_OVERHEAL,
     FAULT_RETALIATE_AFTER_DEATH,
+    FAULT_SKILL_POWER_ANOMALY,
     PROFILE_CATALOG,
     PROFILE_NORMAL,
     PROFILES,
@@ -15,14 +18,17 @@ from gamepilot.lab import (
 )
 
 
-def test_profiles_are_normal_plus_the_three_faults() -> None:
+def test_profiles_are_normal_plus_the_six_faults() -> None:
     assert PROFILES == (PROFILE_NORMAL, *FAULT_IDS)
     assert FAULT_IDS == (
         FAULT_POTION_OVERHEAL,
         FAULT_POTION_NOT_CONSUMED,
         FAULT_RETALIATE_AFTER_DEATH,
+        FAULT_LOOT_ANOMALY,
+        FAULT_LEVEL_ANOMALY,
+        FAULT_SKILL_POWER_ANOMALY,
     )
-    assert len(set(PROFILES)) == len(PROFILES) == 4
+    assert len(set(PROFILES)) == len(PROFILES) == 7
 
 
 def test_catalog_covers_exactly_the_known_profiles() -> None:

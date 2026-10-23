@@ -38,7 +38,10 @@ def test_control_script_is_valid_at_its_fixed_seed(seed: int, goal_id: str) -> N
     assert case.status == "pass"
     assert case.seed == seed
     if goal_id == "victory":
-        assert len(case.executed_actions) == preflight.VICTORY_ATTACKS[seed] + 1
+        assert [step.action for step in case.executed_actions] == [
+            *preflight.VICTORY_ACTIONS[seed],
+            "attack",
+        ]
         assert case.final_snapshot.status == "won"
 
 
@@ -74,10 +77,7 @@ def test_designated_reachability_matches_http_oracle(
         assert set(combination.target_rules).intersection(failed_rules)
         assert proof.witness_actions
     else:
-        assert seed == 0 and combination.profile == "potion_overheal"
-        assert case.status == "pass"
-        assert proof.witness_actions == []
-        assert proof.sequences_checked == proof.search_space_size == 126
+        pytest.fail(f"{combination.profile} / {seed} 在当前预算内不可达")
 
 
 def _evidence(profile: str, goal_id: str, *, designated: bool = False) -> AgentCellEvidence:
@@ -115,6 +115,7 @@ def test_preflight_classifies_trigger_miss_and_replay_failure() -> None:
     assert preflight._row_status(normal, control, reachable=None) == "deviation"
 
     fault = _evidence(variant.profile, variant.goal_id, designated=True)
+    fault.target_rules = list(variant.target_rules)
     fault.control_case_status = "fail"
     fault.control_failing_rules = list(variant.target_rules)
     assert preflight._row_status(variant, fault, reachable=True) == "deviation"
@@ -122,8 +123,21 @@ def test_preflight_classifies_trigger_miss_and_replay_failure() -> None:
     fault.case_status = "fail"
     fault.exit_code = 1
     assert preflight._row_status(variant, fault, reachable=True) == "deviation"
-    fault.target_rules_hit = ["R-TARGET"]
+    fault.target_rules_hit = [variant.target_rules[0]]
     assert preflight._row_status(variant, fault, reachable=True) == "ok"
+    loot = next(
+        row for row in AGENT_COMBINATIONS if row.profile == "loot_anomaly" and row.is_designated
+    )
+    alternate = _evidence(loot.profile, loot.goal_id, designated=True)
+    alternate.target_rules = list(loot.target_rules)
+    alternate.triggered = True
+    alternate.case_status = alternate.control_case_status = "fail"
+    alternate.exit_code = 1
+    alternate.target_rules_hit = ["R-LOOT-PRESENT"]
+    alternate.control_failing_rules = ["R-LOOT-RANGE"]
+    assert preflight._row_status(loot, alternate, reachable=True) == "deviation"
+    alternate.control_failing_rules = ["R-LOOT-PRESENT"]
+    assert preflight._row_status(loot, alternate, reachable=True) == "ok"
     fault.control_failing_rules = []
     assert preflight._row_status(variant, fault, reachable=True) == "deviation"
     fault.control_failing_rules = list(variant.target_rules)
@@ -149,7 +163,7 @@ def test_unexpected_error_keeps_fixed_denominator(
 
     monkeypatch.setattr(preflight, "_run_cell", fail)
     report, path = asyncio.run(preflight.run_agent_seed_preflight(tmp_path))
-    assert (report.planned, report.executed, report.skipped) == (48, 1, 47)
+    assert (report.planned, report.executed, report.skipped) == (84, 1, 83)
     assert report.exit_code == 2 and report.execution_errors == 1
     assert report.rows[0].error_kind == "OSError"
     assert all(row.status == "skipped" for row in report.rows[1:])

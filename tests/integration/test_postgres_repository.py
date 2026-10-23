@@ -42,7 +42,7 @@ pytestmark = pytest.mark.postgres
 
 # 领域层已验证的确定性终局（见 tests/unit/test_combat.py）：三次攻击后分别获胜与阵亡。
 WON_SEED = 42
-LOST_SEED = 1252
+LOST_SEED = 3
 # 极端种子：超 BIGINT 的整数本来就是 API 与领域支持的取值。
 EXTREME_SEEDS = (0, -1, -123456789, 2**63 - 1, 2**63, 2**80, -(2**80) - 7, 10**40)
 # 必然经过「攻击 → 反击 → 喝药 → 反击」且不会结束战斗的动作序列：
@@ -121,7 +121,7 @@ def _apply(session: CombatSession, action: str) -> None:
 
 def _reference_session(seed: int, actions: Sequence[str]) -> CombatSession:
     """用领域层重放同一串动作，作为「未被打断的基线」。"""
-    session = CombatSession(session_id="baseline", seed=seed)
+    session = CombatSession(session_id="baseline", seed=seed, ruleset="v5")
     for action in actions:
         _apply(session, action)
     return session

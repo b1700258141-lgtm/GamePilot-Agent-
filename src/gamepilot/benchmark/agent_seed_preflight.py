@@ -1,4 +1,4 @@
-"""固定四种 seed 的 60 格离线 Agent 预检；替身成绩不作为模型能力结论。"""
+"""固定四种 seed 的 84 格离线 Agent 预检；替身成绩不作为模型能力结论。"""
 
 import time
 from contextlib import AsyncExitStack
@@ -28,7 +28,7 @@ from .agent_seed_reachability import ReachabilityCase, search_fault_reachability
 PREFLIGHT_VERSION = "2.0.0"
 PREFLIGHT_SEEDS = (0, 1, 2, 3)
 # 连续 seed，不按 Agent 结果筛选。HTTP 独立判定器会再次验证这些对照脚本。
-VICTORY_ATTACKS = {0: 3, 1: 4, 2: 4, 3: 3}
+VICTORY_ACTIONS = {seed: ("power_strike", "cast_meteor") for seed in PREFLIGHT_SEEDS}
 PREFLIGHT_BUDGET = BudgetSpec(
     max_action_attempts=6,
     max_model_calls=6,
@@ -96,12 +96,15 @@ def control_scenario(seed: int, combination: AgentCombination) -> Scenario:
     data["description"] = f"固定 Agent 对照：{combination.goal_id}，seed={seed}"
     if combination.goal_id == "victory":
         data["steps"] = [
-            ActionStep(action="attack").model_dump() for _ in range(VICTORY_ATTACKS[seed])
+            ActionStep(action=action).model_dump() for action in VICTORY_ACTIONS[seed]
         ] + [
             ActionStep(
                 action="attack", expected_status=409, expected_code="battle_not_active"
             ).model_dump()
         ]
+    elif combination.goal_id == "healing" and seed == 3:
+        # 骷髅首回合伤害不低于药水效力，满血药水是该 seed 的上限边界对照。
+        data["steps"] = [ActionStep(action="use_potion").model_dump()]
     scenario = Scenario.model_validate(data)
     if len(scenario.steps) > PREFLIGHT_BUDGET.max_action_attempts:
         raise ValueError("对照脚本超过 Agent 动作预算")
@@ -135,6 +138,7 @@ def _row_status(
         if reachable and (
             evidence.control_case_status != "fail"
             or not set(combination.target_rules).intersection(evidence.control_failing_rules)
+            or not set(evidence.target_rules_hit).intersection(evidence.control_failing_rules)
         ):
             return "deviation"
         if not reachable and (evidence.control_case_status != "pass" or evidence.triggered):
@@ -215,7 +219,7 @@ def _summarize(
 
 
 async def run_agent_seed_preflight(output_dir: str | Path) -> tuple[PreflightReport, Path]:
-    """只用离线观测驱动替身跑固定 60 格；绝不提供真实模型入口。"""
+    """只用离线观测驱动替身跑固定 84 格；绝不提供真实模型入口。"""
     started_at = utc_now_iso()
     started = time.perf_counter()
     run_id = new_run_id()

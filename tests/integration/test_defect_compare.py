@@ -30,7 +30,7 @@ async def test_comparison_tracks_passing_failing_and_new_failures(tmp_path: Path
     _root, paths = await _reports(tmp_path)
     normal, faulty = paths["normal"], paths["potion_not_consumed"]
     for before, after, transition, count, code in (
-        (normal, normal, "still_passing", 3, 0),
+        (normal, normal, "still_passing", 4, 0),
         (faulty, normal, "now_passing", 2, 0),
         (normal, faulty, "new_failure", 2, 1),
         (faulty, faulty, "still_failing", 2, 1),
@@ -38,7 +38,7 @@ async def test_comparison_tracks_passing_failing_and_new_failures(tmp_path: Path
         report, path = compare_batches(before, after, tmp_path / "comparisons")
         assert report["summary"][transition] == count
         assert report["summary"]["exit_code"] == code
-        assert report["summary"]["planned"] == 3
+        assert report["summary"]["planned"] == 4
         assert json.loads(path.read_text(encoding="utf-8")) == report
 
 
@@ -53,7 +53,7 @@ async def test_execution_errors_and_skips_never_become_fixed(tmp_path: Path) -> 
         )
     for before, after in ((paths["normal"], error_path), (error_path, paths["normal"])):
         report, _path = compare_batches(before, after, tmp_path / "comparisons")
-        assert report["summary"]["inconclusive"] == 3
+        assert report["summary"]["inconclusive"] == 4
         assert report["summary"]["now_passing"] == 0
         assert report["summary"]["exit_code"] == 2
 
@@ -95,7 +95,7 @@ async def test_reordered_set_compares_but_changed_set_does_not(tmp_path: Path) -
     root, paths = await _reports(tmp_path)
     manifest = json.loads((root / "manifest.json").read_text(encoding="utf-8"))
     manifest["items"].reverse()
-    for size in (3, 2):
+    for size in (4, 3):
         manifest["items"] = manifest["items"][:size]
         new_manifest = root / f"manifest-{size}.json"
         new_manifest.write_text(json.dumps(manifest), encoding="utf-8")
@@ -105,9 +105,9 @@ async def test_reordered_set_compares_but_changed_set_does_not(tmp_path: Path) -
             _report, after = await run_batch(
                 new_manifest, GameClient(http, base_url="http://normal"), root / f"after-{size}"
             )
-        if size == 3:
+        if size == 4:
             report, _path = compare_batches(paths["normal"], after, root / "comparisons")
-            assert report["summary"]["still_passing"] == 3
+            assert report["summary"]["still_passing"] == 4
         else:
             with pytest.raises(DefectInputError, match="指纹集合不同"):
                 compare_batches(paths["normal"], after, root / "comparisons")

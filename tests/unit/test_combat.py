@@ -7,12 +7,19 @@ import pytest
 
 from gamepilot.domain.combat import (
     PLAYER_DAMAGE_RANGE,
-    SLIME_DAMAGE_RANGE,
     CombatSession,
-    create_combat_session,
+    new_session_identity,
 )
 from gamepilot.domain.errors import InvalidCombatAction
 from gamepilot.domain.models import BattleStatus
+
+V1_SLIME_DAMAGE_RANGE = (20, 35)
+
+
+def create_v1_session(seed: int) -> CombatSession:
+    """把第一版规则的固定轨迹留作历史兼容回归。"""
+    session_id, resolved_seed = new_session_identity(seed)
+    return CombatSession(session_id=session_id, seed=resolved_seed, ruleset="v1")
 
 
 def snapshot_without_id(session: CombatSession) -> dict:
@@ -31,7 +38,7 @@ def play_attacks_until_end(session: CombatSession) -> None:
 
 class TestInitialState:
     def test_initial_state_matches_spec(self) -> None:
-        session = create_combat_session(seed=42)
+        session = create_v1_session(seed=42)
         snap = session.snapshot()
         assert snap.seed == 42
         assert snap.status is BattleStatus.ACTIVE
@@ -47,16 +54,16 @@ class TestInitialState:
 class TestAttack:
     def test_damage_stays_within_defined_ranges(self) -> None:
         for seed in range(200):
-            session = create_combat_session(seed=seed)
+            session = create_v1_session(seed=seed)
             session.attack()
             events = session.snapshot().events
             player_hit = next(e for e in events if e.actor == "player")
             slime_hit = next(e for e in events if e.actor == "slime")
             assert PLAYER_DAMAGE_RANGE[0] <= player_hit.value <= PLAYER_DAMAGE_RANGE[1]
-            assert SLIME_DAMAGE_RANGE[0] <= slime_hit.value <= SLIME_DAMAGE_RANGE[1]
+            assert V1_SLIME_DAMAGE_RANGE[0] <= slime_hit.value <= V1_SLIME_DAMAGE_RANGE[1]
 
     def test_slime_does_not_retaliate_when_it_dies(self) -> None:
-        session = create_combat_session(seed=42)
+        session = create_v1_session(seed=42)
         play_attacks_until_end(session)
         snap = session.snapshot()
         assert snap.status is BattleStatus.WON
@@ -68,14 +75,14 @@ class TestAttack:
 
     def test_hp_never_leaves_valid_range(self) -> None:
         for seed in range(50):
-            session = create_combat_session(seed=seed)
+            session = create_v1_session(seed=seed)
             play_attacks_until_end(session)
             for event in session.snapshot().events:
                 assert 0 <= event.player_hp <= 100
                 assert 0 <= event.slime_hp <= 60
 
     def test_successful_attack_increments_turn(self) -> None:
-        session = create_combat_session(seed=42)
+        session = create_v1_session(seed=42)
         session.attack()
         snap = session.snapshot()
         assert snap.turn == 1
@@ -85,7 +92,7 @@ class TestAttack:
 class TestPotion:
     def test_potion_heals_exactly_25_when_below_cap(self) -> None:
         # 两次攻击后史莱姆必然存活，玩家生命至多 60，治疗不会被上限截断。
-        session = create_combat_session(seed=42)
+        session = create_v1_session(seed=42)
         for _ in range(2):
             session.attack()
         before = session.snapshot()
@@ -101,7 +108,7 @@ class TestPotion:
         assert after.player.potions == before.player.potions - 1
 
     def test_potion_heal_is_capped_at_max_hp(self) -> None:
-        session = create_combat_session(seed=42)
+        session = create_v1_session(seed=42)
         session.attack()  # seed=42 的首次反击造成 20 点伤害，+25 会被上限截断
         before = session.snapshot()
         session.use_potion()
@@ -114,7 +121,7 @@ class TestPotion:
         assert after.player.hp <= 100  # 反击后生命仍在合法范围内
 
     def test_potion_at_full_hp_is_rejected_without_partial_change(self) -> None:
-        session = create_combat_session(seed=42)
+        session = create_v1_session(seed=42)
         before = session.snapshot()
         with pytest.raises(InvalidCombatAction) as exc_info:
             session.use_potion()
@@ -122,7 +129,7 @@ class TestPotion:
         assert session.snapshot() == before
 
     def test_potion_without_potions_is_rejected_without_partial_change(self) -> None:
-        session = create_combat_session(seed=42)
+        session = create_v1_session(seed=42)
         session.attack()
         session.use_potion()
         session.attack()
@@ -138,7 +145,7 @@ class TestPotion:
 
 class TestBattleEnd:
     def test_actions_after_battle_end_are_rejected(self) -> None:
-        session = create_combat_session(seed=42)
+        session = create_v1_session(seed=42)
         play_attacks_until_end(session)
         assert session.snapshot().status is BattleStatus.WON
         before = session.snapshot()
@@ -152,7 +159,7 @@ class TestBattleEnd:
 
     def test_player_death_sets_lost_status(self) -> None:
         """失败状态必须能通过公开动作到达，不能修改会话私有字段。"""
-        session = create_combat_session(seed=1252)
+        session = create_v1_session(seed=1252)
         for _ in range(3):
             session.attack()
         snap = session.snapshot()
@@ -170,7 +177,7 @@ class TestDeterminism:
         def replay(seed: int) -> dict:
             # 该序列对任意种子都合法：2 次攻击后史莱姆必然存活（2×25=50 < 60），
             # 玩家生命 ∈ [76, 84] < 100，药水可用
-            session = create_combat_session(seed=seed)
+            session = create_v1_session(seed=seed)
             session.attack()
             session.attack()
             session.use_potion()
@@ -180,19 +187,19 @@ class TestDeterminism:
         assert replay(7) == replay(7)
 
     def test_sessions_with_same_seed_are_independent_but_identical(self) -> None:
-        first = create_combat_session(seed=9)
-        second = create_combat_session(seed=9)
+        first = create_v1_session(seed=9)
+        second = create_v1_session(seed=9)
         first.attack()
         first.attack()  # 两步后史莱姆必然存活（2×25=50 < 60）
         second.attack()  # 只走一步，不受 first 影响
         assert second.snapshot().turn == 1
-        solo = create_combat_session(seed=9)
+        solo = create_v1_session(seed=9)
         solo.attack()
         assert snapshot_without_id(second) == snapshot_without_id(solo)
 
     def test_session_random_state_does_not_leak_into_other_sessions(self) -> None:
-        first = create_combat_session(seed=1)
-        second = create_combat_session(seed=2)
+        first = create_v1_session(seed=1)
+        second = create_v1_session(seed=2)
         before = snapshot_without_id(second)
         play_attacks_until_end(first)
         assert snapshot_without_id(second) == before

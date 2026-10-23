@@ -1,7 +1,7 @@
-"""Agent 评测清单：5 profile × 3 目标 = 15 组合的固定标准答案。
+"""Agent 评测清单：7 profile × 3 目标 = 21 组合的固定标准答案。
 
-这是一套**明确标注的子集试验**，不声称完成全部 40 组合的 Agent 对照。
-40 组合脚本评测仍单独作为确定性回归，不被重命名为 Agent 成绩。
+这是一套**明确标注的子集试验**，不声称完成全部 56 组合的 Agent 对照。
+56 组合脚本评测仍单独作为确定性回归，不被重命名为 Agent 成绩。
 
 清单与实现分离的意义：目标文本、脚本对照、预定缺陷机会与目标规则都**先于运行写死**。
 Agent 的导入链读不到本模块，因此模型不可能沿导入链拿到标准答案；
@@ -29,6 +29,7 @@ from gamepilot.lab import (
     PROFILES,
 )
 from gamepilot.testing.rules import (
+    R_EXP_REWARD,
     R_LOOT_ITEM,
     R_LOOT_PRESENT,
     R_LOOT_RANGE,
@@ -40,7 +41,7 @@ from gamepilot.testing.rules import (
 AGENT_BENCHMARK_VERSION = "2.0.0"
 AGENT_MANIFEST_SOURCE = "docs/BATTLE_RULES_V2.md#缺陷靶场"
 
-# 全部 15 格统一使用对应场景的 seed=42，Agent 与脚本对照完全同参。
+# 全部 21 格统一使用对应场景的 seed=42，Agent 与脚本对照完全同参。
 AGENT_SEED = 42
 
 AGENT_GOAL_IDS: tuple[str, ...] = (GOAL_FULL_HEALTH, GOAL_HEALING, GOAL_VICTORY)
@@ -61,15 +62,15 @@ DESIGNATED_OPPORTUNITIES: tuple[tuple[str, str], ...] = (
     (FAULT_LOOT_ANOMALY, GOAL_VICTORY),
 )
 
-# 每个预定机会必须命中的规则编号；命中多条时按编号去重计数。
+# 每个预定机会可命中的目标规则；掉落缺陷会随 seed 改变表现，命中其中一条即检出。
 OPPORTUNITY_TARGET_RULES: dict[tuple[str, str], tuple[str, ...]] = {
     (FAULT_POTION_OVERHEAL, GOAL_HEALING): (R_POTION_CAP,),
     (FAULT_POTION_NOT_CONSUMED, GOAL_HEALING): (R_POTION_DECREMENTS,),
     (FAULT_RETALIATE_AFTER_DEATH, GOAL_VICTORY): (R_NO_RETALIATE_ON_KILL,),
-    (FAULT_LOOT_ANOMALY, GOAL_VICTORY): (R_LOOT_PRESENT, R_LOOT_RANGE, R_LOOT_ITEM),
+    (FAULT_LOOT_ANOMALY, GOAL_VICTORY): (R_LOOT_PRESENT, R_LOOT_RANGE, R_LOOT_ITEM, R_EXP_REWARD),
 }
 
-# 15 格共用的预算：与 Agent 的保守默认值一致，评测不额外放宽。
+# 21 格共用的预算：与 Agent 的保守默认值一致，评测不额外放宽。
 AGENT_EVAL_BUDGET = BudgetSpec()
 
 
