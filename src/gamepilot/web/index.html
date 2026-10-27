@@ -187,12 +187,13 @@
                 <select id="agent-skill" name="skill_id">
                   <option value="injured-potion-then-attack">开局喝药、战技优先、伤害魔法循环</option>
                 </select>
-                <details class="config-details">
-                  <summary id="agent-skill-summary">策略说明与自定义 skill</summary>
-                <p id="agent-skill-hint" class="helper field-helper">默认策略：开局满血喝药、半血以下补药；伤害动作优先重击，冷却时按陨石→火球→魔法飞弹循环，EP 不足时普通攻击；终态后再验证一次行动限制。</p>
-                <label id="agent-skill-upload-label" for="agent-skill-upload">上传自定义 skill（Markdown 或纯文本）</label>
+                <label id="agent-skill-upload-label" for="agent-skill-upload">上传战斗策略 skill（.txt / .md）</label>
                 <input id="agent-skill-upload" type="file" accept=".md,.txt,text/markdown,text/plain" aria-describedby="agent-upload-hint" />
-                <p id="agent-upload-hint" class="helper field-helper">文件最多 4,000 字符，上传后可选择。自定义策略由真实模型执行；上传内容不会作为程序代码运行。</p>
+                <p id="agent-upload-hint" class="helper field-helper">文件不超过 16 KB、内容最多 4,000 字符；上传后可在上方选择。自定义策略由真实模型执行，内容不会作为程序代码运行。</p>
+                <details id="agent-skill-details" class="config-details">
+                  <summary id="agent-skill-summary">查看策略说明</summary>
+                  <p id="agent-skill-hint" class="helper field-helper">默认策略：开局满血喝药、半血以下补药；伤害动作优先重击，冷却时按陨石→火球→魔法飞弹循环，EP 不足时普通攻击；终态后再验证一次行动限制。</p>
+                  <pre id="agent-skill-content" class="skill-content" hidden></pre>
                 </details>
 
                 <label for="agent-seed">随机种子</label>

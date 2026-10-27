@@ -54,6 +54,21 @@ async def test_preview_visitors_cannot_read_each_others_game_or_agent_records(
         assert (await http.get(first_path, headers=first)).status_code == 200
         assert (await http.get(first_path, headers=second)).status_code == 404
         assert (await http.get(second_path, headers=first)).status_code == 404
+        skills_path = "/api/v1/agent-test-runs/skills"
+        assert (await http.get(skills_path)).status_code == 403
+        uploaded = await http.post(
+            skills_path,
+            json={"name": "只属于访客一", "instructions": "先攻击，再喝药。"},
+            headers=first,
+        )
+        assert uploaded.status_code == 201
+        uploaded_id = uploaded.json()["skill_id"]
+        first_skills = (await http.get(skills_path, headers=first)).json()
+        assert [skill["skill_id"] for skill in first_skills] == [
+            "injured-potion-then-attack",
+            uploaded_id,
+        ]
+        assert len((await http.get(skills_path, headers=second)).json()) == 1
         assert (
             await http.post(f"{first_path}/actions", json={"action": "attack"}, headers=second)
         ).status_code == 404
@@ -80,7 +95,10 @@ async def test_preview_visitors_cannot_read_each_others_game_or_agent_records(
         assert closed.status_code == 204
         await app.state.preview_visitors._visitors[first_id].close_task
         assert (await http.get(first_path, headers=first)).status_code == 403
+        assert (await http.get(skills_path, headers=first)).status_code == 403
         assert (await http.get(second_path, headers=second)).status_code == 200
+        reopened = await _open(http, first_id, str(uuid4()))
+        assert len((await http.get(skills_path, headers=reopened)).json()) == 1
         assert (tmp_path / run_id).exists() is False
         assert run_id not in app.state.agent_run_manager._records
 
@@ -99,6 +117,13 @@ async def test_refresh_cancels_old_page_close_and_stale_close_cannot_remove_new_
     ) as http:
         visitor_id = str(uuid4())
         old = await _open(http, visitor_id, str(uuid4()))
+        skill_path = "/api/v1/agent-test-runs/skills"
+        uploaded = await http.post(
+            skill_path,
+            json={"name": "刷新保留", "instructions": "先喝药。"},
+            headers=old,
+        )
+        assert uploaded.status_code == 201
         created = await http.post("/api/v1/game-sessions", json={"seed": 14}, headers=old)
         path = f"/api/v1/game-sessions/{created.json()['session_id']}"
         await http.post(
@@ -109,7 +134,9 @@ async def test_refresh_cancels_old_page_close_and_stale_close_cannot_remove_new_
         new = await _open(http, visitor_id, str(uuid4()))
         await asyncio.gather(previous_close, return_exceptions=True)
         assert (await http.get(path, headers=new)).status_code == 200
+        assert len((await http.get(skill_path, headers=new)).json()) == 2
         assert (await http.get(path, headers=old)).status_code == 403
+        assert (await http.get(skill_path, headers=old)).status_code == 403
         await http.post(
             "/api/v1/preview-visitor/close",
             json={"visitor_id": visitor_id, "page_id": old["X-GamePilot-Page"]},

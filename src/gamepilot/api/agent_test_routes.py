@@ -116,21 +116,25 @@ class AddSkillRequest(BaseModel):
 
 @router.get("/skills")
 def list_skills(
+    request: Request,
     manager: Annotated[AgentWebRunManager, Depends(get_manager)],
+    visitor_id: Annotated[str | None, Depends(get_visitor_id)],
 ) -> list[dict[str, object]]:
-    skills = manager.skills.list()
-    if public_preview_enabled():
-        skills = [skill for skill in skills if skill.built_in]
+    visitors = preview_manager(request)
+    skills = visitors.list_skills(visitor_id) if visitors is not None else manager.skills.list()
     return [skill.model_dump() for skill in skills]
 
 
 @router.post("/skills", status_code=201)
 def add_skill(
+    request: Request,
     payload: AddSkillRequest,
     manager: Annotated[AgentWebRunManager, Depends(get_manager)],
+    visitor_id: Annotated[str | None, Depends(get_visitor_id)],
 ) -> dict[str, object]:
-    if public_preview_enabled():
-        raise HTTPException(status_code=403, detail=PREVIEW_ACCESS_MESSAGE)
+    visitors = preview_manager(request)
+    if visitors is not None:
+        return visitors.add_skill(visitor_id, payload.name, payload.instructions).model_dump()
     try:
         return manager.skills.add(payload.name, payload.instructions).model_dump()
     except OSError:

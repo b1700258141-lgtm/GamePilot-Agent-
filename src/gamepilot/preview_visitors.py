@@ -11,10 +11,11 @@ import logging
 import time
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Callable
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from fastapi import HTTPException, Request
 
+from gamepilot.agent.skills import DEFAULT_SKILL, Skill
 from gamepilot.repositories.memory import InMemorySessionRepository
 
 if TYPE_CHECKING:
@@ -25,6 +26,7 @@ PAGE_HEADER = "X-GamePilot-Page"
 CLOSE_GRACE_SECONDS = 5.0
 IDLE_SECONDS = 300.0
 SWEEP_SECONDS = 30.0
+MAX_SKILLS_PER_VISITOR = 10
 LOGGER = logging.getLogger(__name__)
 
 
@@ -32,6 +34,7 @@ LOGGER = logging.getLogger(__name__)
 class _Visitor:
     page_id: str
     repository: InMemorySessionRepository = field(default_factory=InMemorySessionRepository)
+    skills: dict[str, Skill] = field(default_factory=dict)
     last_seen: float = 0.0
     close_task: asyncio.Task[None] | None = None
 
@@ -90,6 +93,22 @@ class PreviewVisitorManager:
             raise HTTPException(status_code=403, detail="访客会话已结束，请刷新页面")
         visitor.last_seen = self._clock()
         return visitor_id, visitor.repository
+
+    def list_skills(self, visitor_id: str) -> list[Skill]:
+        visitor = self._visitors.get(visitor_id)
+        if visitor is None:
+            raise HTTPException(status_code=403, detail="访客会话已结束，请刷新页面")
+        return [DEFAULT_SKILL, *visitor.skills.values()]
+
+    def add_skill(self, visitor_id: str, name: str, instructions: str) -> Skill:
+        visitor = self._visitors.get(visitor_id)
+        if visitor is None:
+            raise HTTPException(status_code=403, detail="访客会话已结束，请刷新页面")
+        if len(visitor.skills) >= MAX_SKILLS_PER_VISITOR:
+            raise HTTPException(status_code=409, detail="当前标签页最多保存 10 个自定义 skill")
+        skill = Skill(skill_id=str(uuid4()), name=name, instructions=instructions)
+        visitor.skills[skill.skill_id] = skill
+        return skill
 
     async def close(self, visitor_id: str, page_id: str) -> None:
         visitor_id = self._token(visitor_id)

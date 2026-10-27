@@ -166,11 +166,21 @@ async def test_public_preview_keeps_offline_runs_and_blocks_real_calls(
         assert denied.status_code == 403
         assert denied.json()["detail"] == "当前版本无权限，请联系平台制作者申请权限。"
         assert app.state.agent_run_manager._task is None
-        assert (
-            await http.post(
-                "/api/v1/agent-test-runs/skills", json={"name": "test", "instructions": "test"}
-            )
-        ).status_code == 403
+        uploaded = await http.post(
+            "/api/v1/agent-test-runs/skills",
+            json={"name": "测试策略", "instructions": "# 测试策略\n先喝药，再攻击。"},
+        )
+        assert uploaded.status_code == 201
+        skill_id = uploaded.json()["skill_id"]
+        skills = (await http.get("/api/v1/agent-test-runs/skills")).json()
+        assert [skill["skill_id"] for skill in skills] == [DEFAULT_SKILL_ID, skill_id]
+        assert skills[1]["instructions"] == "# 测试策略\n先喝药，再攻击。"
+        blocked = await http.post(
+            "/api/v1/agent-test-runs",
+            json={"seed": 14, "provider_mode": "offline", "skill_id": skill_id},
+        )
+        assert blocked.status_code == 409
+        assert app.state.agent_run_manager._task is None
 
         started = await http.post(
             "/api/v1/agent-test-runs",

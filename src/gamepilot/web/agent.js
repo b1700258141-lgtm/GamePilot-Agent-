@@ -170,7 +170,9 @@ function formConfig() {
   const goalId = agentEl("agent-goal").value;
   if (!goalGuidance[goalId]) throw new Error("请选择有效的测试目标。");
   if (providerMode === "offline" && skillId !== "injured-potion-then-attack") {
-    throw new Error("自定义 skill 需要 deepseek-flash；离线替身只支持默认策略。");
+    throw new Error(realAccessRequestOnly
+      ? "在线预览可上传和查看自定义 skill；运行需申请真实模型权限。"
+      : "自定义 skill 需要 deepseek-flash；离线替身只支持默认策略。");
   }
   return {
     goal_id: goalId,
@@ -219,6 +221,9 @@ function updateSkillHint() {
   agentEl("agent-skill-hint").textContent = skill?.built_in
     ? "真实模型读取默认策略：开局满血喝药、半血以下补药；伤害动作优先重击，冷却时按陨石→火球→魔法飞弹循环，EP 不足时普通攻击；终态后再验证一次行动限制。离线替身按所选目标使用内置动作脚本。"
     : "已选自定义文本策略。只有真实模型会根据上传内容选择动作；所有动作仍受工具、规则和预算约束。";
+  agentEl("agent-skill-content").hidden = !skill || skill.built_in;
+  agentEl("agent-skill-content").textContent = skill?.built_in ? "" : skill?.instructions || "";
+  if (skill && !skill.built_in) agentEl("agent-skill-details").open = true;
 }
 
 async function uploadSkill() {
@@ -242,7 +247,9 @@ async function uploadSkill() {
     });
     agentSkills = await agentRequest(`${AGENT_API}/skills`);
     renderSkillChoices(skill.skill_id);
-    agentFeedback(`已添加 skill“${skill.name}”。选择 deepseek-flash 后可运行。`, "success");
+    agentFeedback(realAccessRequestOnly
+      ? `已将 skill“${skill.name}”保存到此标签页，可在策略说明中查看；运行需申请真实模型权限。`
+      : `已添加 skill“${skill.name}”。选择 deepseek-flash 后可运行。`, "success");
     agentFormError("");
   } catch (error) {
     agentFormError(error.message || "上传 skill 失败。");
@@ -597,11 +604,10 @@ async function initializeAgentPage() {
     randomFaultPercent = config.random_fault_percent;
     agentEl("agent-real-option").disabled = !realAvailable && !realAccessRequestOnly;
     if (realAccessRequestOnly) agentEl("agent-real-option").textContent = "真实模型测试（需申请权限）";
-    agentEl("agent-skill-summary").textContent = realAccessRequestOnly ? "策略说明" : "策略说明与自定义 skill";
-    for (const id of ["agent-skill-upload-label", "agent-skill-upload", "agent-upload-hint"]) {
-      agentEl(id).hidden = realAccessRequestOnly;
+    if (realAccessRequestOnly) {
+      agentEl("agent-upload-hint").textContent =
+        "文件不超过 16 KB、内容最多 4,000 字符。上传后仅在此标签页查看，关闭后清空；运行自定义策略需申请真实模型权限。";
     }
-    agentEl("agent-skill-upload").disabled = realAccessRequestOnly;
     updateDefectHint();
     updateProviderFields();
   } catch {
