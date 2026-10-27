@@ -1,7 +1,7 @@
 FROM python:3.12-slim AS builder
 WORKDIR /build
-COPY modelscope-source.tar.gz ./
-RUN tar -xzf modelscope-source.tar.gz && python -m pip wheel --no-cache-dir --wheel-dir /wheels ".[agent]"
+COPY modelscope-source.payload ./
+RUN tar -xzf modelscope-source.payload && python -m pip wheel --no-cache-dir --wheel-dir /wheels ".[agent]"
 
 FROM python:3.12-slim AS runtime
 ENV PYTHONDONTWRITEBYTECODE=1 \
