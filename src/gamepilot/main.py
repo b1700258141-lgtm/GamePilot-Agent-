@@ -28,15 +28,17 @@ from sqlalchemy.exc import SQLAlchemyError
 
 from .api.agent_test_routes import router as agent_test_router
 from .api.errors import register_exception_handlers
+from .api.preview_routes import router as preview_router
 from .api.routes import router
 from .config import RepositoryBackend, get_settings, require_database_url
 from .domain.combat import create_combat_session
 from .persistence.database import create_db_engine, create_session_factory
 from .persistence.errors import PersistenceUnavailableError
+from .preview_visitors import PreviewVisitorManager
 from .repositories.base import SessionRepository
 from .repositories.memory import InMemorySessionRepository
 from .repositories.postgres import PostgresSessionRepository
-from .web_runs import AgentWebRunManager
+from .web_runs import AgentWebRunManager, public_preview_enabled
 
 API_TITLE = "GamePilot"
 API_VERSION = "0.1.0"
@@ -58,13 +60,22 @@ def create_app(repository: SessionRepository | None = None) -> FastAPI:
             agent_db_factory = None
             resolved = InMemorySessionRepository()
 
+    if public_preview_enabled() and not isinstance(resolved, InMemorySessionRepository):
+        raise ValueError("公开预览须使用内存仓储，避免访客数据写入持久化数据库")
+    run_manager = AgentWebRunManager(agent_db_factory)
+    visitors = PreviewVisitorManager(run_manager) if public_preview_enabled() else None
+
     @asynccontextmanager
     async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
         try:
             if engine is not None:
                 _probe_database(engine)
+            if visitors is not None:
+                visitors.start()
             yield
         finally:
+            if visitors is not None:
+                await visitors.stop()
             if engine is not None:
                 # 应用创建的 Engine 由应用释放；注入对象的资源归调用方所有。
                 engine.dispose()
@@ -76,7 +87,8 @@ def create_app(repository: SessionRepository | None = None) -> FastAPI:
         lifespan=lifespan,
     )
     app.state.repository = resolved
-    app.state.agent_run_manager = AgentWebRunManager(agent_db_factory)
+    app.state.agent_run_manager = run_manager
+    app.state.preview_visitors = visitors
 
     # 注入仓储时不推断其底层类型；由调用方持有的依赖不在此处探测。
     def readiness_probe() -> None:
@@ -89,6 +101,7 @@ def create_app(repository: SessionRepository | None = None) -> FastAPI:
     register_exception_handlers(app)
     app.include_router(router)
     app.include_router(agent_test_router)
+    app.include_router(preview_router)
 
     # 本地手动测试页与 API 同源，无需额外前端服务或跨域配置。
     app.mount("/ui", StaticFiles(directory=Path(__file__).parent / "web", html=True), name="ui")

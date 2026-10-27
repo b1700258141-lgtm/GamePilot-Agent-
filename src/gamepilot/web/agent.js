@@ -59,7 +59,7 @@ function showMode(mode) {
 }
 
 async function agentRequest(path, options = {}) {
-  const response = await fetch(path, { cache: "no-store", ...options });
+  const response = await window.gamepilotVisitor.fetch(path, { cache: "no-store", ...options });
   const body = await response.json().catch(() => null);
   if (!response.ok) {
     const detail = typeof body?.detail === "string" ? body.detail : "请求失败";
@@ -442,7 +442,7 @@ async function startAgentRun(config) {
       body: JSON.stringify(config),
     });
     currentAgentRun = run;
-    try { localStorage.setItem(AGENT_STORAGE_KEY, run.run_id); } catch { /* 存储可能被禁用 */ }
+    try { window.gamepilotVisitor.storage().setItem(AGENT_STORAGE_KEY, run.run_id); } catch { /* 存储可能被禁用 */ }
     showMode("agent");
     renderAgentRun(run);
     await pollAgentRun(run.run_id);
@@ -493,6 +493,23 @@ agentEl("agent-rerun").addEventListener("click", () => {
     void startAgentRun(config);
   }
 });
+agentEl("agent-report-link").addEventListener("click", async (event) => {
+  if (!window.gamepilotVisitor.isPreview()) return;
+  event.preventDefault();
+  const link = agentEl("agent-report-link");
+  try {
+    const report = await agentRequest(link.href);
+    const url = URL.createObjectURL(new Blob([JSON.stringify(report, null, 2)],
+      { type: "application/json" }));
+    const download = document.createElement("a");
+    download.href = url;
+    download.download = link.download;
+    download.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1_000);
+  } catch (error) {
+    agentFormError(error.message || "报告下载失败。");
+  }
+});
 agentEl("agent-switch-defect").addEventListener("click", () => {
   if (!currentAgentRun) return;
   rerunLegacyProfile = null;
@@ -528,7 +545,7 @@ async function initializeAgentPage() {
     agentFormError("无法加载 skill 列表；请检查服务状态。");
   }
   let lastId = null;
-  try { lastId = localStorage.getItem(AGENT_STORAGE_KEY); } catch { /* 存储可能被禁用 */ }
+  try { lastId = window.gamepilotVisitor.storage().getItem(AGENT_STORAGE_KEY); } catch { /* 存储可能被禁用 */ }
   if (lastId) {
     showMode("agent");
     await pollAgentRun(lastId);

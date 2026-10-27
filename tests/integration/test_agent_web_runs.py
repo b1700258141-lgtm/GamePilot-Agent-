@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+from uuid import uuid4
 
 import httpx
 import pytest
@@ -148,6 +149,13 @@ async def test_public_preview_keeps_offline_runs_and_blocks_real_calls(
     async with httpx.AsyncClient(
         transport=httpx.ASGITransport(app=app), base_url="http://test"
     ) as http:
+        visitor_id, page_id = str(uuid4()), str(uuid4())
+        opened = await http.post(
+            "/api/v1/preview-visitor/open",
+            json={"visitor_id": visitor_id, "page_id": page_id},
+        )
+        assert opened.json() == {"preview_enabled": True}
+        http.headers.update({"X-GamePilot-Visitor": visitor_id, "X-GamePilot-Page": page_id})
         config = (await http.get("/api/v1/agent-test-runs/config")).json()
         assert config["real_access_request_only"] is True
         assert config["real_available"] is False

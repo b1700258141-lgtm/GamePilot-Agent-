@@ -27,7 +27,7 @@ function setServiceStatus(ok) {
 async function request(path, options = {}) {
   let response;
   try {
-    response = await fetch(path, { cache: "no-store", ...options });
+    response = await window.gamepilotVisitor.fetch(path, { cache: "no-store", ...options });
   } catch {
     setServiceStatus(false);
     throw new Error("连接不到服务。请确认 Docker / FastAPI 正在运行，再刷新页面。");
@@ -166,7 +166,7 @@ async function run(label, operation) {
   try {
     const next = await operation();
     render(next);
-    try { localStorage.setItem(STORAGE_KEY, next.session_id); } catch { /* 浏览器可能禁用存储 */ }
+    try { window.gamepilotVisitor.storage().setItem(STORAGE_KEY, next.session_id); } catch { /* 浏览器可能禁用存储 */ }
     setServiceStatus(true);
     feedback(`${label}成功。当前第 ${next.turn} 回合。`);
   } catch (error) {
@@ -238,7 +238,7 @@ async function initialize() {
     return;
   }
   let previousId = null;
-  try { previousId = localStorage.getItem(STORAGE_KEY); } catch { /* 浏览器可能禁用存储 */ }
+  try { previousId = window.gamepilotVisitor.storage().getItem(STORAGE_KEY); } catch { /* 浏览器可能禁用存储 */ }
   if (previousId) {
     $("session-input").value = previousId;
     await run("恢复上次会话", () => request(`${API_ROOT}/${encodeURIComponent(previousId)}`));

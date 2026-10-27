@@ -19,6 +19,7 @@ from gamepilot.lab.profiles import (
     PROFILE_NORMAL,
 )
 from gamepilot.lab.selection import RANDOM_FAULT_PERCENT
+from gamepilot.preview_visitors import preview_manager
 from gamepilot.web_runs import (
     PREVIEW_ACCESS_MESSAGE,
     WEB_BUDGET,
@@ -82,6 +83,11 @@ def get_manager(request: Request) -> AgentWebRunManager:
     return request.app.state.agent_run_manager  # type: ignore[no-any-return]
 
 
+def get_visitor_id(request: Request) -> str | None:
+    manager = preview_manager(request)
+    return manager.require(request)[0] if manager is not None else None
+
+
 @router.get("/config")
 def config() -> dict[str, object]:
     return {
@@ -135,6 +141,7 @@ def add_skill(
 async def start_run(
     payload: StartAgentTestRequest,
     manager: Annotated[AgentWebRunManager, Depends(get_manager)],
+    visitor_id: Annotated[str | None, Depends(get_visitor_id)],
 ) -> dict[str, object]:
     if payload.provider_mode == "real" and public_preview_enabled():
         raise HTTPException(status_code=403, detail=PREVIEW_ACCESS_MESSAGE)
@@ -146,16 +153,18 @@ async def start_run(
     if config["seed"] is None:
         config["seed"] = secrets.randbits(31)
     try:
-        return await manager.start(config)
+        return await manager.start(config, visitor_id=visitor_id)
     except (RuntimeError, ValueError) as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from None
 
 
 @router.get("/{run_id}")
 def get_run(
-    run_id: str, manager: Annotated[AgentWebRunManager, Depends(get_manager)]
+    run_id: str,
+    manager: Annotated[AgentWebRunManager, Depends(get_manager)],
+    visitor_id: Annotated[str | None, Depends(get_visitor_id)],
 ) -> dict[str, object]:
-    result = manager.get(run_id)
+    result = manager.get(run_id, visitor_id=visitor_id)
     if result is None:
         raise HTTPException(status_code=404, detail="自动测试运行不存在")
     return result
@@ -163,9 +172,11 @@ def get_run(
 
 @router.get("/{run_id}/report")
 def get_report(
-    run_id: str, manager: Annotated[AgentWebRunManager, Depends(get_manager)]
+    run_id: str,
+    manager: Annotated[AgentWebRunManager, Depends(get_manager)],
+    visitor_id: Annotated[str | None, Depends(get_visitor_id)],
 ) -> dict[str, object]:
-    result = manager.report(run_id)
+    result = manager.report(run_id, visitor_id=visitor_id)
     if result is None:
         raise HTTPException(status_code=404, detail="运行报告尚未生成或运行不存在")
     return result

@@ -11,6 +11,7 @@ from fastapi import APIRouter, Depends, Request
 
 from gamepilot.domain.combat import CombatSession
 from gamepilot.domain.models import GameSnapshot
+from gamepilot.preview_visitors import preview_manager
 from gamepilot.repositories.base import SessionRepository
 
 from .schemas import ActionRequest, CreateSessionRequest, ErrorResponse
@@ -49,6 +50,8 @@ _PERSISTENCE_RESPONSES: dict[int | str, dict[str, Any]] = {
 
 def get_repository(request: Request) -> SessionRepository:
     """从应用状态取出仓储实例（由 create_app 注入）。"""
+    if manager := preview_manager(request):
+        return manager.require(request)[1]
     return request.app.state.repository
 
 

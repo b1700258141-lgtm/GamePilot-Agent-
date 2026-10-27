@@ -58,6 +58,7 @@ async def test_local_battle_page_and_assets_are_served(client: httpx.AsyncClient
     assert "text/html" in page.headers["content-type"]
     assert "GamePilot · 战斗测试台" in page.text
     assert (await client.get("/ui/app.css")).status_code == 200
+    assert (await client.get("/ui/visitor.js")).status_code == 200
     assert (await client.get("/ui/app.js")).status_code == 200
 
 

@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+import shutil
 import time
 from pathlib import Path
 from traceback import extract_tb
@@ -18,7 +19,7 @@ from gamepilot.agent.provider import DEFAULT_API_KEY_ENV, DEFAULT_BASE_URL, DEFA
 from gamepilot.agent.skills import DEFAULT_SKILL_ID, SkillStore
 from gamepilot.lab.selection import activation_opportunity, select_faults
 from gamepilot.persistence.models import AgentTestRunRow
-from gamepilot.testing.reporting import new_run_id, utc_now_iso
+from gamepilot.testing.reporting import RUN_ID_PATTERN, new_run_id, utc_now_iso
 
 WEB_BUDGET = BudgetSpec(
     max_action_attempts=50,
@@ -62,6 +63,7 @@ class AgentWebRunManager:
     def __init__(self, db_factory: sessionmaker[Session] | None = None) -> None:
         self._db_factory = db_factory
         self._records: dict[str, dict[str, Any]] = {}
+        self._owners: dict[str, str] = {}
         self._start_lock = asyncio.Lock()
         self._task: asyncio.Task[None] | None = None
         self.skills = SkillStore()
@@ -87,15 +89,21 @@ class AgentWebRunManager:
             self._save(record)
         return record
 
-    def get(self, run_id: str) -> dict[str, Any] | None:
+    def get(self, run_id: str, *, visitor_id: str | None = None) -> dict[str, Any] | None:
+        if visitor_id is not None and self._owners.get(run_id) != visitor_id:
+            return None
         record = self._load(run_id)
         return _safe_view(record) if record is not None else None
 
-    def report(self, run_id: str) -> dict[str, Any] | None:
+    def report(self, run_id: str, *, visitor_id: str | None = None) -> dict[str, Any] | None:
+        if visitor_id is not None and self._owners.get(run_id) != visitor_id:
+            return None
         record = self._load(run_id)
         return record.get("reports") if record is not None else None
 
-    async def start(self, config: dict[str, Any]) -> dict[str, Any]:
+    async def start(
+        self, config: dict[str, Any], *, visitor_id: str | None = None
+    ) -> dict[str, Any]:
         async with self._start_lock:
             if config["provider_mode"] == "real" and public_preview_enabled():
                 raise ValueError(PREVIEW_ACCESS_MESSAGE)
@@ -147,9 +155,36 @@ class AgentWebRunManager:
                 "result": None,
                 "reports": None,
             }
+            if visitor_id is not None:
+                self._owners[run_id] = visitor_id
             self._save(record)
             self._task = asyncio.create_task(self._execute(record))
             return _safe_view(record)
+
+    async def clear_visitor(self, visitor_id: str) -> None:
+        """停止该访客的运行并删除其内存记录和独立报告目录。"""
+        async with self._start_lock:
+            owned = [run_id for run_id, owner in self._owners.items() if owner == visitor_id]
+            if self._task is not None and not self._task.done():
+                active = [
+                    run_id
+                    for run_id in owned
+                    if self._records.get(run_id, {}).get("status") in ("queued", "running")
+                ]
+                if active:
+                    self._task.cancel()
+                    await asyncio.gather(self._task, return_exceptions=True)
+            for run_id in owned:
+                if RUN_ID_PATTERN.fullmatch(run_id):
+                    root = WEB_REPORT_ROOT.resolve()
+                    target = (WEB_REPORT_ROOT / run_id).resolve()
+                    if target.parent == root:
+                        try:
+                            shutil.rmtree(target)
+                        except FileNotFoundError:
+                            pass
+                self._records.pop(run_id, None)
+                self._owners.pop(run_id, None)
 
     def _update(self, record: dict[str, Any], **changes: Any) -> None:
         record.update(changes)
