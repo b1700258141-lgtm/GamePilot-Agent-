@@ -42,6 +42,14 @@ from .web_runs import AgentWebRunManager, public_preview_enabled
 
 API_TITLE = "GamePilot"
 API_VERSION = "0.1.0"
+UI_ENTRY = "/ui/preview-20261027-skill/"
+
+
+class UncachedStaticFiles(StaticFiles):
+    async def get_response(self, path: str, scope: dict):
+        response = await super().get_response(path, scope)
+        response.headers["Cache-Control"] = "no-store"
+        return response
 
 
 def create_app(repository: SessionRepository | None = None) -> FastAPI:
@@ -103,12 +111,21 @@ def create_app(repository: SessionRepository | None = None) -> FastAPI:
     app.include_router(agent_test_router)
     app.include_router(preview_router)
 
-    # 本地手动测试页与 API 同源，无需额外前端服务或跨域配置。
-    app.mount("/ui", StaticFiles(directory=Path(__file__).parent / "web", html=True), name="ui")
+    # 新路径避开在线预览先前缓存的旧 HTML/JS；响应也禁止后续缓存。
+    web_dir = Path(__file__).parent / "web"
+    app.mount(
+        UI_ENTRY.rstrip("/"), UncachedStaticFiles(directory=web_dir, html=True), name="ui-current"
+    )
+
+    @app.get("/ui/", include_in_schema=False)
+    def legacy_ui() -> RedirectResponse:
+        return RedirectResponse(url=UI_ENTRY)
+
+    app.mount("/ui", UncachedStaticFiles(directory=web_dir, html=True), name="ui")
 
     @app.get("/", include_in_schema=False)
     def home() -> RedirectResponse:
-        return RedirectResponse(url="/ui/")
+        return RedirectResponse(url=UI_ENTRY)
 
     return app
 

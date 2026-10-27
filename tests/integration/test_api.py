@@ -13,7 +13,7 @@ import httpx
 import pytest
 
 from gamepilot.domain.combat import PLAYER_DAMAGE_RANGE, SLIME_DAMAGE_RANGE
-from gamepilot.main import create_app
+from gamepilot.main import UI_ENTRY, create_app
 from gamepilot.repositories.memory import InMemorySessionRepository
 
 
@@ -51,15 +51,21 @@ async def test_health_check(client: httpx.AsyncClient) -> None:
 async def test_local_battle_page_and_assets_are_served(client: httpx.AsyncClient) -> None:
     home = await client.get("/")
     assert home.status_code == 307
-    assert home.headers["location"] == "/ui/"
+    assert home.headers["location"] == UI_ENTRY
 
-    page = await client.get("/ui/")
+    legacy = await client.get("/ui/")
+    assert legacy.status_code == 307
+    assert legacy.headers["location"] == UI_ENTRY
+
+    page = await client.get(UI_ENTRY)
     assert page.status_code == 200
     assert "text/html" in page.headers["content-type"]
+    assert page.headers["cache-control"] == "no-store"
     assert "GamePilot · 战斗测试台" in page.text
-    assert (await client.get("/ui/app.css")).status_code == 200
-    assert (await client.get("/ui/visitor.js")).status_code == 200
-    assert (await client.get("/ui/app.js")).status_code == 200
+    for asset in ("app.css", "visitor.js", "app.js", "agent.js", "citadel.svg"):
+        response = await client.get(UI_ENTRY + asset)
+        assert response.status_code == 200
+        assert response.headers["cache-control"] == "no-store"
 
 
 @pytest.mark.anyio
