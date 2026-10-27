@@ -67,6 +67,7 @@ def _full_health_conditions(steps: Sequence[StepReport]) -> list[GoalCondition]:
         GoalCondition(
             condition_id=COND_REJECTED_AT_FULL_HP,
             met=bool(used),
+            evidence_step=used[0].index if used else None,
             detail=(
                 f"第 {used[0].index} 步：满血使用药水成功"
                 if used
@@ -76,6 +77,7 @@ def _full_health_conditions(steps: Sequence[StepReport]) -> list[GoalCondition]:
         GoalCondition(
             condition_id=COND_REJECTED_UNCHANGED,
             met=bool(checked),
+            evidence_step=checked[0].index if checked else None,
             detail=(
                 f"第 {checked[0].index} 步：实际回血、血量上限和药水消耗均通过"
                 if checked
@@ -104,6 +106,7 @@ def _healing_conditions(steps: Sequence[StepReport]) -> list[GoalCondition]:
         GoalCondition(
             condition_id=COND_POTION_FROM_INJURED,
             met=bool(healed),
+            evidence_step=healed[0].index if healed else None,
             detail=(
                 f"第 {healed[0].index} 步：在受伤快照（{healed[0].before.player.hp}"
                 f"/{healed[0].before.player.max_hp}）下使用药水并成功执行"
@@ -114,6 +117,7 @@ def _healing_conditions(steps: Sequence[StepReport]) -> list[GoalCondition]:
         GoalCondition(
             condition_id=COND_HEAL_AND_POTIONS_CHECKED,
             met=bool(checked),
+            evidence_step=checked[0].index if checked else None,
             detail=(
                 f"第 {checked[0].index} 步：{R_POTION_HEAL}、{R_POTION_CAP}、"
                 f"{R_POTION_DECREMENTS} 全部通过"
@@ -149,6 +153,7 @@ def _victory_conditions(steps: Sequence[StepReport]) -> list[GoalCondition]:
         GoalCondition(
             condition_id=COND_WON_OBSERVED,
             met=won_at is not None,
+            evidence_step=won_at,
             detail=(
                 f"第 {won_at} 步：观察到状态变为 won 且该步规则检查通过"
                 if won_at is not None
@@ -158,6 +163,7 @@ def _victory_conditions(steps: Sequence[StepReport]) -> list[GoalCondition]:
         GoalCondition(
             condition_id=COND_POST_VICTORY_REJECTED,
             met=bool(rejected_after_win),
+            evidence_step=rejected_after_win[0].index if rejected_after_win else None,
             detail=(
                 f"第 {rejected_after_win[0].index} 步：获胜后动作被 409 battle_not_active 拒绝，"
                 "且 GET 证明状态未变"
@@ -196,6 +202,7 @@ def _battle_end_conditions(steps: Sequence[StepReport]) -> list[GoalCondition]:
         GoalCondition(
             condition_id=COND_BATTLE_ENDED,
             met=ended is not None,
+            evidence_step=ended.index if ended else None,
             detail=(
                 f"第 {ended.index} 步：观察到战斗状态 {ended.after.status}"
                 if ended is not None and ended.after is not None
@@ -205,6 +212,7 @@ def _battle_end_conditions(steps: Sequence[StepReport]) -> list[GoalCondition]:
         GoalCondition(
             condition_id=COND_POST_BATTLE_REJECTED,
             met=rejected is not None,
+            evidence_step=rejected.index if rejected else None,
             detail=(
                 f"第 {rejected.index} 步：终态后操作被拒且状态未变"
                 if rejected

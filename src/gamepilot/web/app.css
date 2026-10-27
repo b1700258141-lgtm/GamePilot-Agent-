@@ -192,6 +192,13 @@ input::file-selector-button { min-height: 32px; margin-right: 8px; padding: 4px 
 .agent-run-metrics dt, .result-facts dt { color: var(--muted); font-size: 12px; }
 .agent-run-metrics dd, .result-facts dd { margin: 6px 0 0; font-size: 14px; overflow-wrap: anywhere; }
 #agent-model-count, #agent-action-count { font: 26px Georgia, serif; color: var(--primary); }
+.goal-coverage { margin-top: 18px; padding: 16px; border: 1px solid var(--line); border-radius: 3px; background: var(--surface-inset); }
+.goal-coverage h3 { margin: 0 0 12px; font-size: 15px; }
+.goal-coverage-list { display: grid; gap: 10px; margin: 0; padding: 0; list-style: none; }
+.goal-coverage-list li { display: grid; grid-template-columns: 64px minmax(0, 1fr); align-items: start; gap: 10px; font-size: 13px; line-height: 1.6; overflow-wrap: anywhere; }
+.goal-coverage-status { display: inline-block; padding: 2px 5px; border: 1px solid var(--line); border-radius: 3px; color: var(--muted); text-align: center; white-space: nowrap; }
+.goal-coverage-status.met { border-color: #6e8663; background: #dfead5; color: #2f5b38; }
+.goal-evidence-link { grid-column: 2; width: fit-content; color: var(--primary); text-decoration: underline; text-underline-offset: 2px; }
 .agent-timeline { display: grid; gap: 12px; margin: 20px 0 0; padding: 0 8px 0 0; list-style: none; max-height: 640px; overflow: auto; scrollbar-color: var(--metal) var(--surface-inset); }
 .agent-timeline li { padding: 16px; border: 1px solid var(--line); border-left: 3px solid var(--metal); border-radius: 3px; background: var(--surface-inset); }
 .agent-timeline li[data-kind="action"] { border-left-color: #52744b; }

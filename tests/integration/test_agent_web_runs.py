@@ -218,15 +218,16 @@ async def test_duplicate_real_start_is_rejected_without_second_task(
 
 
 @pytest.mark.anyio
+@pytest.mark.parametrize("goal_id", ["battle-end", "full-health", "healing", "victory"])
 async def test_offline_web_run_reports_normal_goal_and_invalid_profile(
-    tmp_path, monkeypatch
+    goal_id: str, tmp_path, monkeypatch
 ) -> None:
     monkeypatch.setattr("gamepilot.web_runs.WEB_REPORT_ROOT", tmp_path)
     app = create_app(InMemorySessionRepository())
     async with httpx.AsyncClient(
         transport=httpx.ASGITransport(app=app), base_url="http://test"
     ) as http:
-        payload = {"goal_id": "full-health", "seed": 42, "profile": "normal"}
+        payload = {"goal_id": goal_id, "seed": 42, "profile": "normal"}
         bad = await http.post("/api/v1/agent-test-runs", json={**payload, "profile": "unknown"})
         assert bad.status_code == 422
         started = await http.post("/api/v1/agent-test-runs", json=payload)
@@ -236,6 +237,15 @@ async def test_offline_web_run_reports_normal_goal_and_invalid_profile(
         assert result["status"] == "completed"
         assert result["result"]["verdict"] == "pass"
         assert result["result"]["goal_met"] is True
+        coverage = result["result"]["coverage"]
+        assert coverage["goal_id"] == goal_id
+        assert all(condition["met"] for condition in coverage["conditions"])
+        action_steps = {item["index"] for item in result["steps"] if item["kind"] == "action"}
+        assert all(
+            condition["evidence_step"] in action_steps for condition in coverage["conditions"]
+        )
+        assert result["steps"][-1]["kind"] == "coverage"
+        assert result["steps"][-1]["conditions"] == coverage["conditions"]
 
 
 @pytest.mark.anyio

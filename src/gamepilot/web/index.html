@@ -172,8 +172,17 @@
             <aside class="setup-panel card" aria-labelledby="agent-setup-heading">
               <p class="eyebrow">TRIAL CONFIGURATION</p>
               <h2 id="agent-setup-heading">设置本次测试</h2>
-              <p class="helper">选择战斗策略、种子和缺陷配置；规则判定器会独立检查每一步。</p>
+              <p class="helper">先选择测试目标，再设置战斗策略、种子和缺陷；规则判定器会独立检查每一步。</p>
               <form id="agent-form">
+                <label for="agent-goal">测试目标</label>
+                <select id="agent-goal" name="goal_id" aria-describedby="agent-goal-hint">
+                  <option value="battle-end">战斗至结束</option>
+                  <option value="full-health">满血使用药水</option>
+                  <option value="healing">受伤后治疗</option>
+                  <option value="victory">击败敌人并验证结束</option>
+                </select>
+                <p id="agent-goal-hint" class="helper field-helper">打到最后一场获胜或玩家阵亡，并验证终态后不能继续行动。</p>
+
                 <label for="agent-skill">战斗 skill</label>
                 <select id="agent-skill" name="skill_id">
                   <option value="injured-potion-then-attack">开局喝药、战技优先、伤害魔法循环</option>
@@ -223,12 +232,12 @@
             </aside>
 
             <div class="battle-column">
-              <div id="agent-feedback" class="feedback" role="status" aria-live="polite" aria-atomic="true">选择战斗 skill 后开始自动测试。</div>
+              <div id="agent-feedback" class="feedback" role="status" aria-live="polite" aria-atomic="true">选择测试目标和战斗 skill 后开始自动测试。</div>
               <section id="agent-empty-state" class="card trial-empty" aria-labelledby="trial-empty-heading">
                 <div class="trial-emblem" aria-hidden="true"><svg class="icon"><use href="#icon-rune"/></svg></div>
                 <p class="eyebrow">THE TRIAL JOURNAL</p>
                 <h2 id="trial-empty-heading">让每一步，都经得起检验</h2>
-                <p class="helper">设定战斗策略，开始一次可追溯的自动试炼。</p>
+                <p class="helper">设定测试目标和战斗策略，开始一次可追溯的自动试炼。</p>
                 <ol class="trial-stages">
                   <li><span>Ⅰ</span><h3>选择行动</h3><p>Agent 按策略读取战况<br />选择战技、魔法与补给</p></li>
                   <li><span>Ⅱ</span><h3>独立判定</h3><p>逐步检查游戏规则<br />记录异常与触发位置</p></li>
@@ -247,12 +256,20 @@
                   <div><dt>测试配置</dt><dd id="agent-run-config">—</dd></div>
                   <div><dt>运行 ID</dt><dd id="agent-run-id">—</dd></div>
                 </dl>
+                <section class="goal-coverage" aria-labelledby="agent-progress-goal-heading">
+                  <h3 id="agent-progress-goal-heading">目标覆盖进度</h3>
+                  <ul id="agent-progress-goal-list" class="goal-coverage-list"></ul>
+                </section>
               </section>
 
               <section id="agent-result-card" class="card agent-result-card" aria-labelledby="agent-result-heading" hidden>
                 <p class="eyebrow">最终判定</p>
                 <h2 id="agent-result-heading">—</h2>
                 <p id="agent-result-reason"></p>
+                <section id="agent-final-goal" class="goal-coverage" aria-labelledby="agent-final-goal-heading">
+                  <h3 id="agent-final-goal-heading">目标条件与步骤证据</h3>
+                  <ul id="agent-final-goal-list" class="goal-coverage-list"></ul>
+                </section>
                 <dl id="agent-result-facts" class="result-facts"></dl>
                 <div class="action-row">
                   <button id="agent-rerun" class="button button-secondary" type="button">相同配置再测</button>

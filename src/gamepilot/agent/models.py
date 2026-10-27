@@ -255,11 +255,12 @@ class DecisionRecord(AgentModel):
 
 
 class GoalCondition(AgentModel):
-    """覆盖条件的一项：稳定编号 + 是否满足 + 判定依据。"""
+    """覆盖条件的一项：稳定编号、判定依据及可定位的动作步骤。"""
 
     condition_id: str
     met: bool
     detail: str = ""
+    evidence_step: int | None = None
 
 
 class GoalCoverage(AgentModel):

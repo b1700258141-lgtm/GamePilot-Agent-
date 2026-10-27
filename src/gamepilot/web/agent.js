@@ -22,6 +22,24 @@ const goalNames = {
   healing: "受伤后治疗",
   victory: "击败敌人并验证结束",
 };
+const goalGuidance = {
+  "battle-end": {
+    hint: "打到最后一场获胜或玩家阵亡，并验证终态后不能继续行动。",
+    criteria: ["观察到最后一场获胜或玩家阵亡", "终态后操作被拒，且状态未变"],
+  },
+  "full-health": {
+    hint: "在满血时使用药水，检查实际回血、生命上限和药水消耗。",
+    criteria: ["满血时成功使用药水", "治疗量、生命上限和药水消耗检查通过"],
+  },
+  healing: {
+    hint: "先进入受伤状态再使用药水，检查治疗边界与药水消耗。",
+    criteria: ["受伤后成功使用药水", "治疗量、生命上限和药水消耗检查通过"],
+  },
+  victory: {
+    hint: "赢得最后一场战斗，并验证获胜后不能继续行动。",
+    criteria: ["最后一场获胜且该步规则通过", "获胜后操作被拒，且状态未变"],
+  },
+};
 const actionNames = {
   attack: "攻击", power_strike: "重击", cast_spark: "魔法飞弹",
   cast_flame: "火球", cast_meteor: "陨石", cast_heal: "治疗魔法",
@@ -131,6 +149,11 @@ function updateProviderFields() {
   agentFormError("");
 }
 
+function updateGoalHint() {
+  const goalId = agentEl("agent-goal").value;
+  agentEl("agent-goal-hint").textContent = goalGuidance[goalId]?.hint || "请选择测试目标。";
+}
+
 function formConfig() {
   const raw = agentEl("agent-seed").value.trim();
   if (raw && (!/^-?\d+$/.test(raw) || !Number.isSafeInteger(Number(raw)))) {
@@ -144,11 +167,13 @@ function formConfig() {
     throw new Error("请先确认本次真实模型调用的预算和费用边界。");
   }
   const skillId = agentEl("agent-skill").value;
+  const goalId = agentEl("agent-goal").value;
+  if (!goalGuidance[goalId]) throw new Error("请选择有效的测试目标。");
   if (providerMode === "offline" && skillId !== "injured-potion-then-attack") {
     throw new Error("自定义 skill 需要 deepseek-flash；离线替身只支持默认策略。");
   }
   return {
-    goal_id: "battle-end",
+    goal_id: goalId,
     skill_id: skillId,
     ...(raw ? { seed: Number(raw) } : {}),
     battle_count: Number(agentEl("agent-battle-count").value),
@@ -159,6 +184,8 @@ function formConfig() {
 }
 
 function fillForm(config) {
+  agentEl("agent-goal").value = goalGuidance[config.goal_id] ? config.goal_id : "battle-end";
+  updateGoalHint();
   agentEl("agent-skill").value = config.skill_id || "injured-potion-then-attack";
   agentEl("agent-seed").value = String(config.seed);
   agentEl("agent-battle-count").value = String(config.battle_count || 1);
@@ -190,7 +217,7 @@ function renderSkillChoices(selectedId = agentEl("agent-skill").value) {
 function updateSkillHint() {
   const skill = agentSkills.find((item) => item.skill_id === agentEl("agent-skill").value);
   agentEl("agent-skill-hint").textContent = skill?.built_in
-    ? "默认策略：开局满血喝药、半血以下补药；伤害动作优先重击，冷却时按陨石→火球→魔法飞弹循环，EP 不足时普通攻击；终态后再验证一次行动限制。"
+    ? "真实模型读取默认策略：开局满血喝药、半血以下补药；伤害动作优先重击，冷却时按陨石→火球→魔法飞弹循环，EP 不足时普通攻击；终态后再验证一次行动限制。离线替身按所选目标使用内置动作脚本。"
     : "已选自定义文本策略。只有真实模型会根据上传内容选择动作；所有动作仍受工具、规则和预算约束。";
 }
 
@@ -277,6 +304,7 @@ function renderTimeline(steps) {
     const [title, description, evidence] = timelineText(item);
     const li = document.createElement("li");
     li.dataset.kind = item.kind;
+    if (item.kind === "action") li.id = `agent-action-${item.index}`;
     if ((item.kind === "decision" && !item.accepted) ||
       (item.kind === "action" && (item.checks || []).some((check) => check.status === "fail"))) {
       li.className = "problem";
@@ -306,6 +334,41 @@ function addFact(label, value) {
   detail.textContent = value;
   box.append(term, detail);
   agentEl("agent-result-facts").append(box);
+}
+
+function latestCoverage(run) {
+  if (run.result?.coverage) return run.result.coverage;
+  return [...run.steps].reverse().find((item) => item.kind === "coverage") || null;
+}
+
+function renderGoalConditions(listId, goalId, coverage) {
+  const list = agentEl(listId);
+  list.replaceChildren();
+  const conditions = coverage?.conditions?.length
+    ? coverage.conditions
+    : (goalGuidance[goalId]?.criteria || []).map((detail) => ({ met: false, detail }));
+  for (const condition of conditions) {
+    const item = document.createElement("li");
+    const status = document.createElement("span");
+    status.className = `goal-coverage-status${condition.met ? " met" : ""}`;
+    status.textContent = condition.met ? "已满足" : "待完成";
+    const detail = document.createElement("span");
+    detail.textContent = condition.detail;
+    item.append(status, detail);
+    if (condition.met && Number.isInteger(condition.evidence_step)) {
+      const link = document.createElement("a");
+      link.className = "goal-evidence-link";
+      link.href = `#agent-action-${condition.evidence_step}`;
+      link.textContent = `查看第 ${condition.evidence_step} 步原始记录`;
+      link.addEventListener("click", () => {
+        const record = document.getElementById(`agent-action-${condition.evidence_step}`);
+        const raw = record?.querySelector("details");
+        if (raw) raw.open = true;
+      });
+      item.append(link);
+    }
+    list.append(item);
+  }
 }
 
 function resultReason(run) {
@@ -343,12 +406,15 @@ function renderResult(run) {
   card.dataset.verdict = run.status === "error" ? "execution_error" : run.result.verdict;
   agentEl("agent-result-facts").replaceChildren();
   if (run.status === "error") {
+    agentEl("agent-final-goal").hidden = true;
     agentEl("agent-result-heading").textContent = "执行错误";
     agentEl("agent-result-reason").textContent = run.message;
     agentEl("agent-report-link").hidden = true;
     return;
   }
   const result = run.result;
+  agentEl("agent-final-goal").hidden = false;
+  renderGoalConditions("agent-final-goal-list", run.config.goal_id, result.coverage);
   const name = verdictNames[result.verdict] || result.verdict;
   agentEl("agent-result-heading").textContent = result.verdict === "defect_detected"
     ? `${name}：${detectedFaults(run).map((fault) => defectNames[fault]).join("、")}` : name;
@@ -393,7 +459,7 @@ function renderComparison(run) {
     agentEl("agent-compare-text").textContent =
       `${faultLabel(previousAgentRun.config)}：${verdictNames[previousAgentRun.result.verdict]}；` +
       `${faultLabel(run.config)}：${verdictNames[run.result.verdict]}。` +
-      "两次运行使用相同种子和 skill，Agent 选择的动作可能不同。";
+      "两次运行使用相同目标、种子和 skill，Agent 选择的动作可能不同。";
   }
 }
 
@@ -407,8 +473,9 @@ function renderAgentRun(run) {
   status.className = `status-chip ${run.status === "error" ? "error" : run.status === "running" ? "running" : run.result?.verdict === "defect_detected" ? "detected" : ""}`;
   agentEl("agent-model-count").textContent = `${run.model_calls} / ${run.budget.max_model_calls}`;
   agentEl("agent-action-count").textContent = `${run.actions_attempted} / ${run.budget.max_action_attempts}`;
-  agentEl("agent-run-config").textContent = `${run.skill?.name || goalNames[run.config.goal_id]} · ${run.config.battle_count || 1} 场 · seed ${run.config.seed} · ${faultLabel(run.config)}`;
+  agentEl("agent-run-config").textContent = `${goalNames[run.config.goal_id] || run.config.goal_id} · ${run.skill?.name || "默认策略"} · ${run.config.battle_count || 1} 场 · seed ${run.config.seed} · ${faultLabel(run.config)}`;
   agentEl("agent-run-id").textContent = run.run_id;
+  renderGoalConditions("agent-progress-goal-list", run.config.goal_id, latestCoverage(run));
   agentFeedback(run.message, run.status === "error" ? "error" : run.status === "running" ? "busy" : "success");
   agentEl("agent-start").disabled = run.status === "queued" || run.status === "running";
   renderTimeline(run.steps);
@@ -464,6 +531,7 @@ for (const box of document.querySelectorAll(".agent-force-fault")) {
 agentEl("agent-skill").addEventListener("change", updateSkillHint);
 agentEl("agent-skill-upload").addEventListener("change", () => void uploadSkill());
 agentEl("agent-provider").addEventListener("change", updateProviderFields);
+agentEl("agent-goal").addEventListener("change", updateGoalHint);
 agentEl("agent-form").addEventListener("submit", (event) => {
   event.preventDefault();
   try {
@@ -514,11 +582,12 @@ agentEl("agent-switch-defect").addEventListener("click", () => {
   if (!currentAgentRun) return;
   rerunLegacyProfile = null;
   fillForm(currentAgentRun.config);
-  agentFeedback("已保留 skill 和种子。调整勾选后开始新测试；旧报告仍保留。", "busy");
+  agentFeedback("已保留目标、skill 和种子。调整勾选后开始新测试；旧报告仍保留。", "busy");
   document.querySelector(".agent-force-fault")?.focus();
 });
 
 async function initializeAgentPage() {
+  updateGoalHint();
   updateDefectHint();
   updateProviderFields();
   try {
