@@ -129,7 +129,7 @@ docker compose -f compose.local.yaml up --build
 
 首次构建会下载镜像和 Python 依赖，可能需要等待。终端保持打开，服务就绪后访问 [http://127.0.0.1:8000/](http://127.0.0.1:8000/)；接口文档在 [http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs)。进入“Agent 自动测试”，选择 1～6 场连战和“离线演练”，即可在不配置模型密钥的情况下体验完整流程。战斗和测试记录保存在本地 PostgreSQL 卷中，停止容器不会删除它们。
 
-这个本地地址只在运行项目的电脑上可用。其他人可直接打开 [GamePilot 在线预览](https://modelscope.cn/studios/Aieyr123/gamepilot-public-preview?mode=full&app_path=%2Fui%2F)，体验手动战斗和离线 Agent 测试；真实模型测试会提示申请权限。仓库中的公开预览模式已加入按标签页隔离、关闭后清理，以及访客自定义 skill 的上传和查看；自定义策略运行仍需申请真实模型权限。魔搭线上空间需重新部署后才会生效。更多本地启动细节见 [Docker 说明](docs/DOCKER.md)，在线预览的更新与托管边界见 [公开预览部署说明](docs/PUBLIC_PREVIEW.md)。
+这个本地地址只在运行项目的电脑上可用。其他人可直接打开 [GamePilot 在线预览](https://modelscope.cn/studios/Aieyr123/gamepilot-public-preview?mode=full&app_path=%2Fui%2Fpreview-20261027-skill%2F)，体验手动战斗和离线 Agent 测试；真实模型测试会提示申请权限。在线预览已支持按标签页隔离、关闭后清理，以及访客自定义 skill 的上传和查看；自定义策略运行仍需申请真实模型权限。更多本地启动细节见 [Docker 说明](docs/DOCKER.md)，在线预览的更新与托管边界见 [公开预览部署说明](docs/PUBLIC_PREVIEW.md)。
 
 ### 给开发者：本地运行 Python
 
